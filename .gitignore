@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+*/build/
+gradlew.bat
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+captures/
+.externalNativeBuild
+.cxx
+*.log
+
+# Local
+local.properties
+.DS_Store
+*.iml
+.idea/
+*.keystore
+!release.keystore
+
+# Temporary
+/tmp/
+*.swp
+*.swo
+*~
