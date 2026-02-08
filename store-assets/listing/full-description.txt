@@ -1,0 +1,51 @@
+TradeSketch Estimator: Fast, Accurate Material Takeoffs for Skilled Trades
+
+Make professional material estimates for drywall, concrete, paint, and gravel/mulch projects—completely offline, with no account required.
+
+FEATURES:
+• Model spaces with simple measurements (rooms, walls, slabs, yard beds)
+• Account for doors and windows automatically
+• Choose from preset templates or start from scratch
+• Instant calculations for drywall sheets, concrete yards, paint gallons, and more
+• Customize waste percentages, sheet sizes, and material parameters
+• Export estimates as PDF or CSV
+• Share estimates via text or email
+• No internet required—works anywhere
+
+BUILT FOR:
+• Contractors and estimators
+• Skilled trades (drywall, concrete, painting)
+• Remodelers and builders
+• Serious DIY enthusiasts
+• Anyone who needs fast, reliable quantity takeoffs
+
+TEMPLATES INCLUDED:
+• Bedroom (4 walls + ceiling with openings)
+• Garage (concrete slab)
+• Driveway (concrete slab)
+• Yard bed (gravel/mulch)
+
+ESTIMATES PROVIDED:
+• Drywall: sheets, screws, joint compound
+• Concrete: cubic yards (with optional bag equivalent)
+• Gravel/Mulch: cubic yards and tons
+• Paint: gallons based on coverage and coats
+
+PRIVACY & SECURITY:
+• 100% offline—no data collection
+• No account or sign-in required
+• No ads or tracking
+• All data stays on your device
+• Minimal permissions (export files only when you choose)
+
+ACCURACY & DISCLAIMERS:
+All estimates include industry-standard waste factors and are clearly labeled as "Estimate Only." Always verify quantities with actual site conditions, local building codes, and material suppliers before purchasing or starting work.
+
+PERFECT FOR QUICK ESTIMATES:
+Get a ballpark quantity in under 60 seconds using templates, or model complex spaces with precision. Whether you're bidding a job, planning a DIY project, or comparing quotes, TradeSketch Estimator gives you confidence in your numbers.
+
+NO HIDDEN COSTS:
+One-time purchase. No subscriptions. No in-app purchases. No surprises.
+
+START ESTIMATING TODAY:
+Download TradeSketch Estimator and take the guesswork out of material takeoffs.
