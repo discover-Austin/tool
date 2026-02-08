@@ -1,5 +1,11 @@
 package com.yourcompany.tradesketch.ui.screens
 
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -12,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.yourcompany.tradesketch.ui.viewmodel.ExportViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ExportScreen(
@@ -20,6 +27,49 @@ fun ExportScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // CSV export launcher
+    val csvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        outputStream.write(viewModel.getCSVContent().toByteArray())
+                    }
+                    viewModel.setLastAction("CSV exported successfully")
+                } catch (e: Exception) {
+                    viewModel.setError("Failed to export CSV: ${e.message}")
+                }
+            }
+        }
+    }
+    
+    // PDF export launcher
+    val pdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        uri?.let {
+            scope.launch {
+                try {
+                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
+                        val pdfDocument = createPdfDocument(
+                            viewModel.uiState.value.project?.name ?: "Project",
+                            viewModel.uiState.value.takeoffType,
+                            viewModel.uiState.value.textContent
+                        )
+                        pdfDocument.writeTo(outputStream)
+                        pdfDocument.close()
+                    }
+                    viewModel.setLastAction("PDF exported successfully")
+                } catch (e: Exception) {
+                    viewModel.setError("Failed to export PDF: ${e.message}")
+                }
+            }
+        }
+    }
     
     Column(
         modifier = modifier
@@ -70,14 +120,18 @@ fun ExportScreen(
             }
             
             OutlinedButton(
-                onClick = { /* TODO: CSV export with SAF */ },
+                onClick = { 
+                    csvLauncher.launch(viewModel.getCSVFileName())
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Export as CSV")
             }
             
             OutlinedButton(
-                onClick = { /* TODO: PDF export */ },
+                onClick = { 
+                    pdfLauncher.launch(viewModel.getPdfFileName())
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Export as PDF")
@@ -124,4 +178,43 @@ fun ExportScreen(
             }
         }
     }
+}
+
+/**
+ * Creates a PDF document with the estimate details
+ */
+private fun createPdfDocument(projectName: String, takeoffType: String, content: String): PdfDocument {
+    val document = PdfDocument()
+    val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create() // A4 size
+    val page = document.startPage(pageInfo)
+    
+    val canvas = page.canvas
+    val paint = Paint()
+    
+    // Title
+    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    paint.textSize = 20f
+    canvas.drawText("TradeSketch Estimator", 40f, 50f, paint)
+    
+    // Project info
+    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+    paint.textSize = 14f
+    var yPos = 80f
+    
+    canvas.drawText("Project: $projectName", 40f, yPos, paint)
+    yPos += 20f
+    canvas.drawText("Takeoff Type: $takeoffType", 40f, yPos, paint)
+    yPos += 40f
+    
+    // Content
+    paint.textSize = 12f
+    val lines = content.split("\n")
+    for (line in lines) {
+        if (yPos > 800f) break // Prevent overflow for now
+        canvas.drawText(line, 40f, yPos, paint)
+        yPos += 15f
+    }
+    
+    document.finishPage(page)
+    return document
 }

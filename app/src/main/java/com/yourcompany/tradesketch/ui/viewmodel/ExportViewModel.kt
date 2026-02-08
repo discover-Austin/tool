@@ -79,6 +79,20 @@ class ExportViewModel @Inject constructor(
         return "${projectName}_${takeoffType}_${System.currentTimeMillis()}.csv"
     }
     
+    fun getPdfFileName(): String {
+        val projectName = _uiState.value.project?.name?.replace("[^a-zA-Z0-9]".toRegex(), "_") ?: "estimate"
+        val takeoffType = _uiState.value.takeoffType.replace(" ", "_")
+        return "${projectName}_${takeoffType}_${System.currentTimeMillis()}.pdf"
+    }
+    
+    fun setLastAction(message: String) {
+        _uiState.update { it.copy(lastAction = message, error = null) }
+    }
+    
+    fun setError(message: String) {
+        _uiState.update { it.copy(error = message, lastAction = null) }
+    }
+    
     fun clearLastAction() {
         _uiState.update { it.copy(lastAction = null, error = null) }
     }

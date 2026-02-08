@@ -3,6 +3,7 @@ package com.yourcompany.tradesketch.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -10,11 +11,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.yourcompany.tradesketch.domain.model.Geometry
+import com.yourcompany.tradesketch.domain.model.Millimeters
+import com.yourcompany.tradesketch.domain.model.Space
 import com.yourcompany.tradesketch.ui.viewmodel.ProjectDetailViewModel
 import com.yourcompany.tradesketch.utils.Formatters
+import java.util.UUID
 
 @Composable
 fun ProjectDetailScreen(
@@ -23,6 +28,17 @@ fun ProjectDetailScreen(
     viewModel: ProjectDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showAddSpaceDialog by remember { mutableStateOf(false) }
+    
+    if (showAddSpaceDialog) {
+        AddSpaceDialog(
+            onDismiss = { showAddSpaceDialog = false },
+            onAddSpace = { space ->
+                viewModel.addSpace(space)
+                showAddSpaceDialog = false
+            }
+        )
+    }
     
     Box(modifier = modifier) {
         when {
@@ -50,7 +66,8 @@ fun ProjectDetailScreen(
             uiState.project != null -> {
                 ProjectContent(
                     project = uiState.project!!,
-                    onDeleteSpace = { viewModel.deleteSpace(it) }
+                    onDeleteSpace = { viewModel.deleteSpace(it) },
+                    onAddSpaceClick = { showAddSpaceDialog = true }
                 )
             }
         }
@@ -60,7 +77,8 @@ fun ProjectDetailScreen(
 @Composable
 private fun ProjectContent(
     project: com.yourcompany.tradesketch.domain.model.Project,
-    onDeleteSpace: (String) -> Unit
+    onDeleteSpace: (String) -> Unit,
+    onAddSpaceClick: () -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -113,7 +131,7 @@ private fun ProjectContent(
         
         item {
             OutlinedButton(
-                onClick = { /* TODO: Add space dialog */ },
+                onClick = onAddSpaceClick,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
@@ -189,4 +207,156 @@ private fun SpaceCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddSpaceDialog(
+    onDismiss: () -> Unit,
+    onAddSpace: (Space) -> Unit
+) {
+    var spaceName by remember { mutableStateOf("") }
+    var spaceType by remember { mutableStateOf("Wall") }
+    var length by remember { mutableStateOf("") }
+    var width by remember { mutableStateOf("") }
+    var height by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    
+    val spaceTypes = listOf("Wall", "Room", "Slab")
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Space") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = spaceName,
+                    onValueChange = { spaceName = it },
+                    label = { Text("Space Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = spaceType,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Type") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        spaceTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type) },
+                                onClick = {
+                                    spaceType = type
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                OutlinedTextField(
+                    value = length,
+                    onValueChange = { length = it },
+                    label = { Text("Length (feet)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                if (spaceType != "Wall") {
+                    OutlinedTextField(
+                        value = width,
+                        onValueChange = { width = it },
+                        label = { Text("Width (feet)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                
+                if (spaceType == "Wall" || spaceType == "Room") {
+                    OutlinedTextField(
+                        value = height,
+                        onValueChange = { height = it },
+                        label = { Text("Height (feet)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val lengthValue = length.toDoubleOrNull() ?: 0.0
+                    val widthValue = width.toDoubleOrNull() ?: 0.0
+                    val heightValue = height.toDoubleOrNull() ?: 0.0
+                    
+                    if (spaceName.isNotBlank() && lengthValue > 0) {
+                        val geometry = when (spaceType) {
+                            "Wall" -> {
+                                if (heightValue > 0) {
+                                    Geometry.Wall(
+                                        length = Millimeters.fromFeet(lengthValue),
+                                        height = Millimeters.fromFeet(heightValue)
+                                    )
+                                } else null
+                            }
+                            "Room" -> {
+                                if (widthValue > 0) {
+                                    Geometry.Rect(
+                                        length = Millimeters.fromFeet(lengthValue),
+                                        width = Millimeters.fromFeet(widthValue)
+                                    )
+                                } else null
+                            }
+                            "Slab" -> {
+                                if (widthValue > 0) {
+                                    Geometry.Slab(
+                                        length = Millimeters.fromFeet(lengthValue),
+                                        width = Millimeters.fromFeet(widthValue),
+                                        thickness = Millimeters.fromInches(4.0) // Default 4" thickness
+                                    )
+                                } else null
+                            }
+                            else -> null
+                        }
+                        
+                        geometry?.let {
+                            val space = Space(
+                                id = UUID.randomUUID().toString(),
+                                name = spaceName,
+                                geometry = it,
+                                openings = emptyList()
+                            )
+                            onAddSpace(space)
+                        }
+                    }
+                }
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

@@ -1,5 +1,6 @@
 package com.yourcompany.tradesketch.utils
 
+import com.yourcompany.tradesketch.domain.model.Money
 import com.yourcompany.tradesketch.domain.model.Project
 import com.yourcompany.tradesketch.domain.model.TakeoffResult
 
