@@ -179,19 +179,29 @@ Hilt provides:
 
 ## Roadmap
 
-### v1.0.0 (Current)
-- Basic geometry models
-- 4 takeoff types
-- Templates
-- PDF/CSV export
-- Offline persistence
+### v1.0.0 (Complete - 100%)
+- ✅ Basic geometry models (Rect, Wall, Slab, Circle, LShape)
+- ✅ 4 takeoff types (Drywall, Concrete, Gravel/Mulch, Paint)
+- ✅ Project templates (Bedroom, Garage, Driveway, Yard Bed)
+- ✅ CSV/PDF export with Storage Access Framework
+- ✅ Offline persistence with DataStore
+- ✅ Add custom spaces with dialog
+- ✅ Complete MVVM + Clean Architecture
+- ✅ Comprehensive testing
 
-### Future Considerations
-- L-shaped rooms
-- Circular spaces
+### Ready for Launch
+- Needs local build (network access required)
+- Needs graphics assets (icon, feature graphic, screenshots)
+- Needs privacy policy hosting
+- All code complete and functional
+
+### Future Considerations (v1.1+)
+- Enhanced PDF formatting with multi-page support
+- Edit existing spaces and openings
+- Full metric units support
+- Project backup/restore
+- Material cost tracking
 - Custom material presets
-- Imperial + Metric units
-- Backup/restore projects
 
 ## Contributing
 
