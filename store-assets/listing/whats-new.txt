@@ -1,0 +1,11 @@
+Initial release of TradeSketch Estimator
+
+Features:
+• Model rooms, walls, slabs, and yard beds
+• Calculate drywall, concrete, paint, and gravel/mulch quantities
+• Use pre-built templates for common projects
+• Export estimates as PDF or CSV
+• 100% offline with no data collection
+• No account required
+
+This is the first public release. We welcome your feedback!
