@@ -223,7 +223,7 @@ limitations under the License.
 
 ## Support
 
-- **Email:** support@tradesketch.app
+- **Email:** built.to.cell@gmail.com
 - **Privacy Policy:** See `store-assets/legal/privacy-policy.html`
 - **Issues:** GitHub Issues (for bug reports and feature requests)
 
