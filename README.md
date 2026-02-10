@@ -37,7 +37,7 @@ TradeSketch Estimator is a privacy-first, offline Android app for calculating ma
 ## Project Structure
 
 ```
-app/src/main/java/com/yourcompany/tradesketch/
+app/src/main/java/com/tradesketch/estimator/
 ├── ui/
 │   ├── screens/          # Composable screens
 │   ├── components/       # Reusable UI components
@@ -223,7 +223,7 @@ limitations under the License.
 
 ## Support
 
-- **Email:** support@tradesketch.example.com
+- **Email:** built.to.cell@gmail.com
 - **Privacy Policy:** See `store-assets/legal/privacy-policy.html`
 - **Issues:** GitHub Issues (for bug reports and feature requests)
 

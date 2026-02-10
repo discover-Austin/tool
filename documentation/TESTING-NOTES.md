@@ -8,7 +8,7 @@ TradeSketch Estimator uses a combination of automated unit tests and manual test
 
 ### Unit Tests
 
-Located in: `app/src/test/java/com/yourcompany/tradesketch/`
+Located in: `app/src/test/java/com/tradesketch/estimator/`
 
 #### Domain Logic Tests (`domain/calc/TakeoffCalculatorTest.kt`)
 
