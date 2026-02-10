@@ -1,23 +1,40 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("kotlin-kapt")
 }
 
 android {
-    namespace = "com.yourcompany.tradesketch"
-    compileSdk = 34
+    namespace = "com.tradesketch.estimator"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.yourcompany.tradesketch"
+        applicationId = "com.tradesketch.estimator"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystoreFilePath = System.getenv("KEYSTORE_FILE")
+                ?: project.findProperty("KEYSTORE_FILE") as String?
+            if (keystoreFilePath != null) {
+                storeFile = file(keystoreFilePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                    ?: project.findProperty("KEYSTORE_PASSWORD") as String?
+                keyAlias = System.getenv("KEY_ALIAS")
+                    ?: project.findProperty("KEY_ALIAS") as String?
+                keyPassword = System.getenv("KEY_PASSWORD")
+                    ?: project.findProperty("KEY_PASSWORD") as String?
+            }
         }
     }
 
@@ -29,6 +46,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releaseSigningConfig = signingConfigs.findByName("release")
+            if (releaseSigningConfig?.storeFile != null) {
+                signingConfig = releaseSigningConfig
+            }
         }
         debug {
             isMinifyEnabled = false
@@ -37,10 +58,6 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     kotlinOptions {
@@ -77,7 +94,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    
+
     implementation("com.google.code.gson:gson:2.10.1")
 
     testImplementation("junit:junit:4.13.2")

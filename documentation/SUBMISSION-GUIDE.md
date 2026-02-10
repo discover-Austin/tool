@@ -143,7 +143,7 @@ Complete the following tasks (Dashboard will show progress):
 - Contractors
 - Tools
 
-**Email:** support@tradesketch.example.com (use your real email)
+**Email:** support@tradesketch.app (use your real email)
 
 #### Privacy Policy
 
@@ -263,7 +263,7 @@ If you have tablet-optimized layouts, add screenshots
 - Professional
 
 **Contact details:**
-- Email: support@tradesketch.example.com (required)
+- Email: support@tradesketch.app (required)
 - Phone: (optional)
 - Website: https://yoursite.com (optional)
 
@@ -394,12 +394,12 @@ Copy from `store-assets/listing/whats-new.txt`
 
 **Response Template (Positive):**
 ```
-Thank you for your support! We're glad TradeSketch Estimator helps with your estimates. If you have any suggestions, please email support@tradesketch.example.com.
+Thank you for your support! We're glad TradeSketch Estimator helps with your estimates. If you have any suggestions, please email support@tradesketch.app.
 ```
 
 **Response Template (Negative):**
 ```
-We're sorry you're experiencing issues. Please email us at support@tradesketch.example.com with details so we can help. We're committed to making TradeSketch Estimator better.
+We're sorry you're experiencing issues. Please email us at support@tradesketch.app with details so we can help. We're committed to making TradeSketch Estimator better.
 ```
 
 ### 3. Updates

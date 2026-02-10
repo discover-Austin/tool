@@ -96,7 +96,7 @@ TradeSketch Estimator is an **87.5% complete** Android application designed for 
 ### ✅ Project Structure (100%)
 
 ```
-app/src/main/java/com/yourcompany/tradesketch/
+app/src/main/java/com/tradesketch/estimator/
 ├── domain/          ← Business logic (complete)
 │   ├── model/       ← Data models (complete)
 │   └── calc/        ← Calculators (complete)
