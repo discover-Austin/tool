@@ -1,7 +1,7 @@
 DATA SAFETY FORM ANSWERS FOR GOOGLE PLAY CONSOLE
 
-Last Updated: February 8, 2026
-App: TradeSketch Estimator v1.0.0
+Last Updated: February 12, 2026
+App: TradeSketch Estimator v1.0.1
 
 ================================================================================
 SECTION 1: DATA COLLECTION AND SECURITY
