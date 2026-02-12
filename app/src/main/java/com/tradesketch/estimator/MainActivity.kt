@@ -5,10 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,7 +33,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             TradeSketchTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    TradeSketchApp()
+                    TradeSketchRoot()
                 }
             }
         }
@@ -40,12 +41,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun TradeSketchApp() {
+private fun TradeSketchRoot() {
     val navController = rememberNavController()
     AppNavHost(navController = navController)
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier
@@ -59,6 +61,9 @@ private fun AppNavHost(
             ProjectsScreen(
                 onNavigateToProject = { projectId ->
                     navController.navigate("${Route.ProjectDetail.route}/$projectId")
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Route.Settings.route)
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -74,12 +79,33 @@ private fun AppNavHost(
             )
         }
         composable(Route.Settings.route) {
-            SettingsScreen(modifier = Modifier.fillMaxSize())
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("App Settings") },
+                        navigationIcon = {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back"
+                                )
+                            }
+                        }
+                    )
+                }
+            ) { padding ->
+                SettingsScreen(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                )
+            }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ProjectDetailWithTabs(
     projectId: String,
     onNavigateBack: () -> Unit
@@ -87,8 +113,31 @@ private fun ProjectDetailWithTabs(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val selectedTab = DetailTab.entries.find { it.route == currentRoute } ?: DetailTab.MODEL
     
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Project Workspace")
+                        Text(
+                            text = "Step ${selectedTab.step} of 4 - ${selectedTab.subtitle}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        },
         bottomBar = {
             NavigationBar {
                 DetailTab.entries.forEach { tab ->
@@ -125,17 +174,134 @@ private fun ProjectDetailWithTabs(
             composable(DetailTab.MODEL.route) {
                 ProjectDetailScreen(
                     projectId = projectId,
+                    onOpenBlueprint = {
+                        navController.navigate(DetailTab.BLUEPRINT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenTakeoff = {
+                        navController.navigate(DetailTab.TAKEOFF.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenExport = {
+                        navController.navigate(DetailTab.EXPORT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            composable(DetailTab.BLUEPRINT.route) {
+                BlueprintScreen(
+                    projectId = projectId,
+                    onOpenModel = {
+                        navController.navigate(DetailTab.MODEL.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenTakeoff = {
+                        navController.navigate(DetailTab.TAKEOFF.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenExport = {
+                        navController.navigate(DetailTab.EXPORT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             composable(DetailTab.TAKEOFF.route) {
                 TakeoffScreen(
                     projectId = projectId,
+                    onOpenModel = {
+                        navController.navigate(DetailTab.MODEL.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenBlueprint = {
+                        navController.navigate(DetailTab.BLUEPRINT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenExport = {
+                        navController.navigate(DetailTab.EXPORT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             composable(DetailTab.EXPORT.route) {
-                ExportScreen(modifier = Modifier.fillMaxSize())
+                ExportScreen(
+                    projectId = projectId,
+                    onOpenModel = {
+                        navController.navigate(DetailTab.MODEL.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenBlueprint = {
+                        navController.navigate(DetailTab.BLUEPRINT.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenTakeoff = {
+                        navController.navigate(DetailTab.TAKEOFF.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
@@ -150,9 +316,12 @@ private sealed class Route(val route: String) {
 private enum class DetailTab(
     val route: String,
     val label: String,
+    val step: Int,
+    val subtitle: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    MODEL("tab_model", "Model", Icons.Filled.Architecture),
-    TAKEOFF("tab_takeoff", "Takeoff", Icons.Filled.Assessment),
-    EXPORT("tab_export", "Export", Icons.Filled.Description)
+    MODEL("tab_model", "Model", 1, "Define spaces and project structure", Icons.Filled.Architecture),
+    BLUEPRINT("tab_blueprint", "Blueprint", 2, "Build layout in dedicated 3D studio", Icons.Filled.AutoFixHigh),
+    TAKEOFF("tab_takeoff", "Takeoff", 3, "Tune quantities by trade", Icons.Filled.Assessment),
+    EXPORT("tab_export", "Export", 4, "Share professional outputs", Icons.Filled.Description)
 }

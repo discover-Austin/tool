@@ -25,6 +25,16 @@ class SettingsDataStore @Inject constructor(
         private val DEFAULT_MUD_GALLONS_PER_100_SQFT = doublePreferencesKey("default_mud_gallons_per_100_sqft")
         private val DEFAULT_COVERAGE_PER_GALLON = doublePreferencesKey("default_coverage_per_gallon")
         private val DEFAULT_COATS_OF_PAINT = intPreferencesKey("default_coats_of_paint")
+        private val DRYWALL_SHEET_UNIT_COST = doublePreferencesKey("drywall_sheet_unit_cost")
+        private val DRYWALL_SCREW_UNIT_COST = doublePreferencesKey("drywall_screw_unit_cost")
+        private val DRYWALL_MUD_UNIT_COST = doublePreferencesKey("drywall_mud_unit_cost")
+        private val CONCRETE_YARD_UNIT_COST = doublePreferencesKey("concrete_yard_unit_cost")
+        private val GRAVEL_YARD_UNIT_COST = doublePreferencesKey("gravel_yard_unit_cost")
+        private val GRAVEL_TON_UNIT_COST = doublePreferencesKey("gravel_ton_unit_cost")
+        private val PAINT_GALLON_UNIT_COST = doublePreferencesKey("paint_gallon_unit_cost")
+        private val LABOR_PERCENT = doublePreferencesKey("labor_percent")
+        private val MARKUP_PERCENT = doublePreferencesKey("markup_percent")
+        private val TAX_PERCENT = doublePreferencesKey("tax_percent")
     }
     
     val settings: Flow<Settings> = context.settingsDataStore.data
@@ -36,7 +46,17 @@ class SettingsDataStore @Inject constructor(
                 defaultScrewsPerSheet = preferences[DEFAULT_SCREWS_PER_SHEET] ?: 32,
                 defaultMudGallonsPer100SqFt = preferences[DEFAULT_MUD_GALLONS_PER_100_SQFT] ?: 0.5,
                 defaultCoveragePerGallon = preferences[DEFAULT_COVERAGE_PER_GALLON] ?: 350.0,
-                defaultCoatsOfPaint = preferences[DEFAULT_COATS_OF_PAINT] ?: 2
+                defaultCoatsOfPaint = preferences[DEFAULT_COATS_OF_PAINT] ?: 2,
+                drywallSheetUnitCost = preferences[DRYWALL_SHEET_UNIT_COST] ?: 17.5,
+                drywallScrewUnitCost = preferences[DRYWALL_SCREW_UNIT_COST] ?: 0.01,
+                drywallMudUnitCost = preferences[DRYWALL_MUD_UNIT_COST] ?: 9.5,
+                concreteYardUnitCost = preferences[CONCRETE_YARD_UNIT_COST] ?: 165.0,
+                gravelYardUnitCost = preferences[GRAVEL_YARD_UNIT_COST] ?: 52.0,
+                gravelTonUnitCost = preferences[GRAVEL_TON_UNIT_COST] ?: 36.0,
+                paintGallonUnitCost = preferences[PAINT_GALLON_UNIT_COST] ?: 38.0,
+                laborPercent = preferences[LABOR_PERCENT] ?: 20.0,
+                markupPercent = preferences[MARKUP_PERCENT] ?: 15.0,
+                taxPercent = preferences[TAX_PERCENT] ?: 8.0
             )
         }
     
@@ -49,6 +69,16 @@ class SettingsDataStore @Inject constructor(
             preferences[DEFAULT_MUD_GALLONS_PER_100_SQFT] = settings.defaultMudGallonsPer100SqFt
             preferences[DEFAULT_COVERAGE_PER_GALLON] = settings.defaultCoveragePerGallon
             preferences[DEFAULT_COATS_OF_PAINT] = settings.defaultCoatsOfPaint
+            preferences[DRYWALL_SHEET_UNIT_COST] = settings.drywallSheetUnitCost
+            preferences[DRYWALL_SCREW_UNIT_COST] = settings.drywallScrewUnitCost
+            preferences[DRYWALL_MUD_UNIT_COST] = settings.drywallMudUnitCost
+            preferences[CONCRETE_YARD_UNIT_COST] = settings.concreteYardUnitCost
+            preferences[GRAVEL_YARD_UNIT_COST] = settings.gravelYardUnitCost
+            preferences[GRAVEL_TON_UNIT_COST] = settings.gravelTonUnitCost
+            preferences[PAINT_GALLON_UNIT_COST] = settings.paintGallonUnitCost
+            preferences[LABOR_PERCENT] = settings.laborPercent
+            preferences[MARKUP_PERCENT] = settings.markupPercent
+            preferences[TAX_PERCENT] = settings.taxPercent
         }
     }
     

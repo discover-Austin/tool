@@ -2,7 +2,6 @@
 .gradle/
 build/
 */build/
-gradlew.bat
 
 # Android
 *.apk

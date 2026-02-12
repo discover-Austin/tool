@@ -99,8 +99,8 @@ Users can request deletion: NOT APPLICABLE
 SECTION 4: PRIVACY POLICY
 ================================================================================
 
-Privacy policy URL: https://tradesketch.app/privacy-policy.html
-Privacy policy available in-app: YES (accessible via Settings/About screen)
+Privacy policy URL: https://tradesketch-privacy.vercel.app
+Privacy policy available in-app: NO (store listing URL only)
 
 ================================================================================
 SECTION 5: ADDITIONAL CONTEXT

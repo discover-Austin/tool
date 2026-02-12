@@ -83,6 +83,10 @@ Once you have the 512×512 master, generate adaptive icons:
 **Format:** PNG (recommended) or JPEG  
 **Count:** 6 required
 
+**Current Repo Path:**
+
+- `store-assets/screenshots/`
+
 **Capture Method:**
 
 **Option A: Real Device**
@@ -98,7 +102,7 @@ adb shell am broadcast -a com.android.systemui.demo -e command notifications -e 
 
 # Capture
 adb shell screencap -p /sdcard/screenshot.png
-adb pull /sdcard/screenshot.png 01_templates.png
+adb pull /sdcard/screenshot.png 01_projects.png
 ```
 
 **Option B: Emulator**
@@ -108,36 +112,36 @@ adb pull /sdcard/screenshot.png 01_templates.png
 
 **Required Screens:**
 
-1. **01_templates.png** - Projects list
+1. **01_projects.png** - Projects list
    - Show template cards (Bedroom, Garage, Driveway, Yard Bed)
    - Empty state or 1-2 recent projects
    - Clean, uncluttered
 
-2. **02_model_spaces.png** - Model tab
+2. **02_spaces.png** - Model/workspace tab
    - List of spaces with dimensions
    - "Add Space" button visible
    - Shows space types (Wall, Slab, etc.)
 
-3. **03_space_editor.png** - Editing a space
+3. **03_editor.png** - Editing a space
    - Dimension input fields
    - Openings section (doors/windows)
    - Live area preview
    - Save/Cancel buttons
 
-4. **04_drywall_takeoff.png** - Drywall results
+4. **04_drywall.png** - Drywall results
    - Preset selector showing "Drywall" selected
    - Parameter cards (waste%, sheet size)
    - Results card with totals
    - Item list (sheets, screws, compound)
    - Clear quantities and units
 
-5. **05_concrete_takeoff.png** - Concrete results
+5. **05_concrete.png** - Concrete results
    - Preset selector showing "Concrete" selected
    - Parameters (thickness, waste%)
    - Cubic yards calculation
    - Optional bag equivalent
 
-6. **06_export_options.png** - Export screen
+6. **06_export.png** - Export screen
    - Copy, Share, CSV, PDF buttons
    - Preview of summary text
    - Disclaimer visible
@@ -266,7 +270,7 @@ View at actual size to ensure recognizability.
 
 Once assets are created:
 1. Place in `store-assets/graphics/` directory
-2. Place screenshots in `store-assets/screenshots/phone/`
+2. Place screenshots in `store-assets/screenshots/`
 3. Verify dimensions with Play Console requirements
 4. Upload to Play Console during submission
 

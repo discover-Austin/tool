@@ -138,6 +138,6 @@ Write-Host "    - Data Safety form" -ForegroundColor White
 Write-Host "    - Upload the .aab bundle" -ForegroundColor White
 Write-Host "    - Submit for review" -ForegroundColor White
 Write-Host "" -ForegroundColor Cyan
-Write-Host "  See PLAY-STORE-LAUNCH-GUIDE.md Phases 10-14 for details." -ForegroundColor DarkGray
+Write-Host "  See documentation\\SUBMISSION-GUIDE.md for the full release checklist." -ForegroundColor DarkGray
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""

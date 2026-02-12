@@ -1,6 +1,7 @@
 package com.tradesketch.estimator.domain.calc
 
 import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Opening
 import com.tradesketch.estimator.domain.model.Space
@@ -170,5 +171,42 @@ class TakeoffCalculatorTest {
             wastePercent = -5.0
         )
         assertTrue(paint.items.first().quantity >= 0.0)
+    }
+
+    @Test
+    fun `pricing inputs produce grand total and breakdown`() {
+        val wall = Space(
+            id = "wall-priced",
+            name = "Wall",
+            geometry = Geometry.Wall(
+                length = Millimeters.fromFeet(12.0),
+                height = Millimeters.fromFeet(8.0)
+            )
+        )
+
+        val result = TakeoffCalculator.drywallTakeoff(
+            walls = listOf(wall),
+            sheetAreaSqFt = 32.0,
+            wastePercent = 10.0,
+            screwsPerSheet = 32,
+            mudGallonsPer100SqFt = 0.5,
+            costing = CostingInputs(
+                unitCostByLineName = mapOf(
+                    "Drywall sheets" to 18.0,
+                    "Drywall screws" to 0.01,
+                    "Joint compound" to 10.0
+                ),
+                laborPercent = 20.0,
+                markupPercent = 10.0,
+                taxPercent = 8.0
+            )
+        )
+
+        assertTrue(result.items.all { it.unitCost != null })
+        assertTrue((result.materialSubtotal ?: 0.0) > 0.0)
+        assertTrue((result.laborCost ?: 0.0) > 0.0)
+        assertTrue((result.markupCost ?: 0.0) > 0.0)
+        assertTrue((result.taxCost ?: 0.0) > 0.0)
+        assertTrue((result.totalCost ?: 0.0) > (result.materialSubtotal ?: 0.0))
     }
 }

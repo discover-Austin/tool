@@ -83,6 +83,48 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
+
+    fun updatePricingDefaults(
+        drywallSheetCost: Double? = null,
+        drywallScrewCost: Double? = null,
+        drywallMudCost: Double? = null,
+        concreteYardCost: Double? = null,
+        gravelYardCost: Double? = null,
+        gravelTonCost: Double? = null,
+        paintGallonCost: Double? = null
+    ) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    drywallSheetUnitCost = drywallSheetCost ?: current.drywallSheetUnitCost,
+                    drywallScrewUnitCost = drywallScrewCost ?: current.drywallScrewUnitCost,
+                    drywallMudUnitCost = drywallMudCost ?: current.drywallMudUnitCost,
+                    concreteYardUnitCost = concreteYardCost ?: current.concreteYardUnitCost,
+                    gravelYardUnitCost = gravelYardCost ?: current.gravelYardUnitCost,
+                    gravelTonUnitCost = gravelTonCost ?: current.gravelTonUnitCost,
+                    paintGallonUnitCost = paintGallonCost ?: current.paintGallonUnitCost
+                )
+            )
+        }
+    }
+
+    fun updateBusinessDefaults(
+        laborPercent: Double? = null,
+        markupPercent: Double? = null,
+        taxPercent: Double? = null
+    ) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    laborPercent = laborPercent ?: current.laborPercent,
+                    markupPercent = markupPercent ?: current.markupPercent,
+                    taxPercent = taxPercent ?: current.taxPercent
+                )
+            )
+        }
+    }
     
     fun resetToDefaults() {
         viewModelScope.launch {

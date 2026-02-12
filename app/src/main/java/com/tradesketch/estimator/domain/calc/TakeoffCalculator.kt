@@ -1,6 +1,7 @@
 package com.tradesketch.estimator.domain.calc
 
 import com.tradesketch.estimator.domain.model.Space
+import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.areaSqFt
@@ -13,7 +14,8 @@ object TakeoffCalculator {
         sheetAreaSqFt: Double,
         wastePercent: Double,
         screwsPerSheet: Int,
-        mudGallonsPer100SqFt: Double
+        mudGallonsPer100SqFt: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val wallArea = walls.sumOf { it.geometry.areaSqFt() - it.openingsAreaSqFt() }.coerceAtLeast(0.0)
         val adjustedArea = applyWaste(wallArea, wastePercent)
@@ -29,13 +31,14 @@ object TakeoffCalculator {
             TakeoffLine("Drywall screws", screws, "screws"),
             TakeoffLine("Joint compound", mud, "gallons")
         )
-        return TakeoffResult(items = items, totalCost = null)
+        return finalizeResult(items, costing)
     }
 
     fun concreteTakeoff(
         slabSpaces: List<Space>,
         thicknessFeet: Double,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val areaSqFt = slabSpaces.sumOf { it.geometry.areaSqFt() }.coerceAtLeast(0.0)
         val thickness = thicknessFeet.coerceAtLeast(0.0)
@@ -45,14 +48,15 @@ object TakeoffCalculator {
         val items = listOf(
             TakeoffLine("Concrete volume", yards, "cubic yards")
         )
-        return TakeoffResult(items = items, totalCost = null)
+        return finalizeResult(items, costing)
     }
 
     fun gravelMulchTakeoff(
         spaces: List<Space>,
         depthFeet: Double,
         densityTonsPerYard: Double,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val areaSqFt = spaces.sumOf { it.geometry.areaSqFt() }.coerceAtLeast(0.0)
         val depth = depthFeet.coerceAtLeast(0.0)
@@ -65,14 +69,15 @@ object TakeoffCalculator {
             TakeoffLine("Material volume", yards, "cubic yards"),
             TakeoffLine("Material weight", tons, "tons")
         )
-        return TakeoffResult(items = items, totalCost = null)
+        return finalizeResult(items, costing)
     }
 
     fun paintTakeoff(
         spaces: List<Space>,
         coverageSqFtPerGallon: Double,
         coats: Int,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val areaSqFt = spaces.sumOf { it.geometry.areaSqFt() }.coerceAtLeast(0.0)
         val coatsSafe = coats.coerceAtLeast(0)
@@ -82,11 +87,43 @@ object TakeoffCalculator {
         val items = listOf(
             TakeoffLine("Paint", gallons, "gallons")
         )
-        return TakeoffResult(items = items, totalCost = null)
+        return finalizeResult(items, costing)
     }
 
     private fun applyWaste(value: Double, wastePercent: Double): Double {
         val waste = wastePercent.coerceAtLeast(0.0)
         return value * (1 + waste / 100.0)
+    }
+
+    private fun finalizeResult(
+        items: List<TakeoffLine>,
+        costing: CostingInputs
+    ): TakeoffResult {
+        val pricedItems = items.map { item ->
+            val unitCost = costing.unitCostByLineName[item.name]?.coerceAtLeast(0.0)
+            item.copy(unitCost = unitCost)
+        }
+
+        val hasCosting = pricedItems.any { it.unitCost != null }
+        if (!hasCosting) {
+            return TakeoffResult(items = pricedItems, totalCost = null)
+        }
+
+        val materialSubtotal = pricedItems.sumOf { it.extendedCost ?: 0.0 }
+        val laborCost = materialSubtotal * (costing.laborPercent.coerceAtLeast(0.0) / 100.0)
+        val markupBase = materialSubtotal + laborCost
+        val markupCost = markupBase * (costing.markupPercent.coerceAtLeast(0.0) / 100.0)
+        val taxableSubtotal = markupBase + markupCost
+        val taxCost = taxableSubtotal * (costing.taxPercent.coerceAtLeast(0.0) / 100.0)
+        val grandTotal = taxableSubtotal + taxCost
+
+        return TakeoffResult(
+            items = pricedItems,
+            totalCost = grandTotal,
+            materialSubtotal = materialSubtotal,
+            laborCost = laborCost,
+            markupCost = markupCost,
+            taxCost = taxCost
+        )
     }
 }

@@ -295,17 +295,16 @@ Google Play requires a live, publicly accessible URL for your privacy policy.
 ```
 
 This script:
-1. Installs the GitHub CLI if missing (via `winget`)
-2. Logs you into GitHub (opens a browser)
-3. Creates a public repo called `tradesketch-privacy`
-4. Pushes `privacy-policy.html` as `index.html`
-5. Enables GitHub Pages
-6. Waits for the page to go live
-7. Saves the URL to `store-assets\PRIVACY_POLICY_URL.txt`
+1. Checks the Vercel CLI is installed
+2. Verifies you're logged in to Vercel
+3. Creates/uses project `tradesketch-privacy`
+4. Deploys `privacy-policy.html` as a static `index.html`
+5. Verifies the production URL is reachable
+6. Saves the URL to `store-assets\PRIVACY_POLICY_URL.txt`
 
 Your privacy policy will be at:
 ```
-https://YOUR-GITHUB-USERNAME.github.io/tradesketch-privacy/
+https://tradesketch-privacy.vercel.app
 ```
 
 **Save this URL.** You'll paste it into Play Console in Phases 9 and 12.
@@ -518,7 +517,7 @@ Click **"Save"**.
 3. **"Does your app collect or share any of the required user data types?"** — select **No**
 4. Enter your privacy policy URL (the one from Phase 6):
    ```
-   https://YOUR-GITHUB-USERNAME.github.io/tradesketch-privacy/
+   https://tradesketch-privacy.vercel.app
    ```
 5. Click **"Save"**, then **"Submit"**
 
@@ -567,7 +566,7 @@ Verify all sections show green checkmarks in the left sidebar:
 - [ ] Content rating (questionnaire submitted)
 - [ ] Pricing (price set)
 - [ ] Data safety (form submitted)
-- [ ] Target audience: select **"Not designed for children"** or **18+**
+- [ ] Target audience: select **"Not designed for children"** (no under-18 age gate in app)
 - [ ] News app: **"No"**
 - [ ] Financial features: **"No"**
 
@@ -584,7 +583,7 @@ Verify all sections show green checkmarks in the left sidebar:
 
 | Rejection Reason | Fix |
 |-----------------|-----|
-| Privacy policy URL doesn't load | Check your GitHub Pages is live |
+| Privacy policy URL doesn't load | Check that `https://tradesketch-privacy.vercel.app` opens publicly |
 | Screenshots show broken features | Retake with working app |
 | App crashes on launch | Test release build more carefully |
 | Misleading metadata | Review description for accuracy |
@@ -727,6 +726,6 @@ Run from PowerShell in the project root:
 | `.\scripts\02-generate-keystore.ps1` | Creates keystore, backs up, writes config |
 | `.\scripts\03-build-release.ps1` | Runs tests, lint, builds signed .aab |
 | `.\scripts\04-capture-screenshots.ps1` | Walks you through 6 screenshots via ADB |
-| `.\scripts\05-deploy-privacy-policy.ps1` | Deploys privacy policy to GitHub Pages |
+| `.\scripts\05-deploy-privacy-policy.ps1` | Deploys privacy policy to Vercel |
 | `.\scripts\06-copy-store-listing.ps1` | Copies each listing field to clipboard |
 | `.\scripts\07-bump-version.ps1` | Increments version for app updates |
