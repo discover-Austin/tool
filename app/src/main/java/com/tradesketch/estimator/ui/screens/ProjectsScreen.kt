@@ -53,9 +53,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
@@ -110,10 +112,13 @@ fun ProjectsScreen(
                 ProjectsContent(
                     projects = visibleProjects,
                     allProjects = uiState.projects,
+                    settings = uiState.settings,
                     searchQuery = searchQuery,
                     onSearchChange = { searchQuery = it },
                     sortMode = sortMode,
                     onSortModeChange = { sortMode = it },
+                    onSelectPrimaryTrade = { viewModel.updatePrimaryTrade(it) },
+                    onToggleSimplifiedHome = { viewModel.updateSimplifiedHome(it) },
                     onOpenProject = {
                         haptics.tap()
                         onNavigateToProject(it)
@@ -150,6 +155,16 @@ fun ProjectsScreen(
         )
     }
 
+    if (!uiState.settings.hasCompletedTradeOnboarding) {
+        TradeFocusOnboardingDialog(
+            initialTrade = uiState.settings.primaryTrade,
+            onComplete = { selectedTrade ->
+                haptics.confirm()
+                viewModel.completeTradeOnboarding(selectedTrade)
+            }
+        )
+    }
+
     pendingDelete?.let { project ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -179,16 +194,22 @@ fun ProjectsScreen(
 private fun ProjectsContent(
     projects: List<Project>,
     allProjects: List<Project>,
+    settings: Settings,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     sortMode: ProjectSortMode,
     onSortModeChange: (ProjectSortMode) -> Unit,
+    onSelectPrimaryTrade: (PrimaryTrade) -> Unit,
+    onToggleSimplifiedHome: (Boolean) -> Unit,
     onOpenProject: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onDeleteProject: (Project) -> Unit,
     onCreateFromTemplate: (ProjectTemplate) -> Unit,
     onCreateBlank: () -> Unit
 ) {
+    var showAllTemplates by rememberSaveable(settings.primaryTrade, settings.simplifiedHome) {
+        mutableStateOf(!settings.simplifiedHome)
+    }
     val totalSpaces = allProjects.sumOf { it.spaces.size }
     val totalArea = allProjects.sumOf { project -> project.spaces.sumOf { it.geometry.areaSqFt() } }
     val modeledProjects = allProjects.count { it.spaces.isNotEmpty() }
@@ -212,6 +233,14 @@ private fun ProjectsContent(
             complete = takeoffReadyProjects > 0
         )
     )
+    val allTemplates = ProjectTemplate.entries.filter { it != ProjectTemplate.BLANK }
+    val focusedTemplates = templatesForPrimaryTrade(settings.primaryTrade)
+    val quickTemplate = focusedTemplates.firstOrNull() ?: ProjectTemplate.BEDROOM
+    val templatesToShow = if (settings.simplifiedHome && !showAllTemplates) {
+        focusedTemplates
+    } else {
+        allTemplates
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -243,13 +272,21 @@ private fun ProjectsContent(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Project Command Center",
+                                    text = if (settings.simplifiedHome) {
+                                        "${settings.primaryTrade.displayLabel()} Focus Mode"
+                                    } else {
+                                        "Project Command Center"
+                                    },
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Build faster quotes with clean model, takeoff, and export flow.",
+                                    text = if (settings.simplifiedHome) {
+                                        "Start with the right template and keep your flow focused."
+                                    } else {
+                                        "Build faster quotes with clean model, takeoff, and export flow."
+                                    },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
                                 )
@@ -284,6 +321,36 @@ private fun ProjectsContent(
                                 onTone = MaterialTheme.colorScheme.onPrimary
                             )
                         }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PrimaryTrade.entries.forEach { trade ->
+                                FilterChip(
+                                    selected = settings.primaryTrade == trade,
+                                    onClick = {
+                                        onSelectPrimaryTrade(trade)
+                                        showAllTemplates = false
+                                    },
+                                    label = { Text(trade.displayLabel()) }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { onToggleSimplifiedHome(!settings.simplifiedHome) }
+                        ) {
+                            Text(
+                                if (settings.simplifiedHome) {
+                                    "Show Advanced Home"
+                                } else {
+                                    "Use Simplified Home"
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -304,39 +371,68 @@ private fun ProjectsContent(
                         Text("New Blank")
                     }
                     OutlinedButton(
-                        onClick = { onCreateFromTemplate(ProjectTemplate.BEDROOM) },
+                        onClick = { onCreateFromTemplate(quickTemplate) },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Quick Bedroom")
+                        Text("Quick ${quickTemplate.displayName()}")
                     }
                 }
             }
         }
 
         item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.animateContentSize()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Workspace Flow",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        workspaceFlow.forEach { step ->
-                            WorkspaceFlowPill(
-                                step = step,
-                                modifier = Modifier.width(150.dp)
-                            )
+            if (settings.simplifiedHome) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.animateContentSize()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Quick Start Flow",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "1) Start with a ${quickTemplate.displayName()} template",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "2) Add/edit spaces in Model and Blueprint",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "3) Run ${settings.primaryTrade.displayLabel()} takeoff first",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.animateContentSize()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Workspace Flow",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            workspaceFlow.forEach { step ->
+                                WorkspaceFlowPill(
+                                    step = step,
+                                    modifier = Modifier.width(150.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -374,35 +470,37 @@ private fun ProjectsContent(
         }
 
         item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+            if (!settings.simplifiedHome) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                     )
+                ) {
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        ProjectSortMode.entries.forEach { mode ->
-                            FilterChip(
-                                selected = sortMode == mode,
-                                onClick = { onSortModeChange(mode) },
-                                label = { Text(mode.label) }
-                            )
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ProjectSortMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = sortMode == mode,
+                                    onClick = { onSortModeChange(mode) },
+                                    label = { Text(mode.label) }
+                                )
+                            }
                         }
                     }
                 }
@@ -450,19 +548,38 @@ private fun ProjectsContent(
         item {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Template Library",
+                text = if (settings.simplifiedHome) "Focused Templates" else "Template Library",
                 style = MaterialTheme.typography.titleMedium
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Use these as polished starting points and adjust in the 3D builder.",
+                text = if (settings.simplifiedHome) {
+                    "Showing templates for ${settings.primaryTrade.displayLabel()} work."
+                } else {
+                    "Use these as polished starting points and adjust in the 3D builder."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        val templates = ProjectTemplate.entries.filter { it != ProjectTemplate.BLANK }
-        items(templates, key = { it.name }) { template ->
+        if (settings.simplifiedHome && focusedTemplates.size < allTemplates.size) {
+            item {
+                OutlinedButton(
+                    onClick = { showAllTemplates = !showAllTemplates }
+                ) {
+                    Text(
+                        if (showAllTemplates) {
+                            "Show Focused Templates Only"
+                        } else {
+                            "Show All Templates"
+                        }
+                    )
+                }
+            }
+        }
+
+        items(templatesToShow, key = { it.name }) { template ->
             TemplateCard(
                 template = template,
                 onClick = { onCreateFromTemplate(template) }
@@ -735,6 +852,46 @@ private fun NewProjectDialog(
     )
 }
 
+@Composable
+private fun TradeFocusOnboardingDialog(
+    initialTrade: PrimaryTrade,
+    onComplete: (PrimaryTrade) -> Unit
+) {
+    var selectedTrade by rememberSaveable { mutableStateOf(initialTrade) }
+
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Choose Your Primary Trade") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "We'll simplify your home screen and templates for this trade. You can change it anytime in Settings.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PrimaryTrade.entries.forEach { trade ->
+                        FilterChip(
+                            selected = selectedTrade == trade,
+                            onClick = { selectedTrade = trade },
+                            label = { Text(trade.displayLabel()) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onComplete(selectedTrade) }) {
+                Text("Continue")
+            }
+        }
+    )
+}
+
 private enum class ProjectSortMode(
     val label: String,
     val comparator: Comparator<Project>
@@ -776,4 +933,22 @@ private fun projectLaneTags(project: Project): List<String> {
     if (hasConcrete) tags += "Concrete"
     if (hasRooms) tags += "Rooms"
     return tags
+}
+
+private fun PrimaryTrade.displayLabel(): String = when (this) {
+    PrimaryTrade.DRYWALL -> "Drywall"
+    PrimaryTrade.CONCRETE -> "Concrete"
+    PrimaryTrade.PAINT -> "Paint"
+    PrimaryTrade.GRAVEL_MULCH -> "Gravel/Mulch"
+    PrimaryTrade.MULTI -> "Multi-Trade"
+}
+
+private fun templatesForPrimaryTrade(primaryTrade: PrimaryTrade): List<ProjectTemplate> {
+    return when (primaryTrade) {
+        PrimaryTrade.DRYWALL -> listOf(ProjectTemplate.BEDROOM)
+        PrimaryTrade.CONCRETE -> listOf(ProjectTemplate.GARAGE, ProjectTemplate.DRIVEWAY)
+        PrimaryTrade.PAINT -> listOf(ProjectTemplate.BEDROOM)
+        PrimaryTrade.GRAVEL_MULCH -> listOf(ProjectTemplate.YARD_BED)
+        PrimaryTrade.MULTI -> ProjectTemplate.entries.filter { it != ProjectTemplate.BLANK }
+    }
 }

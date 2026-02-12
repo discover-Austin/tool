@@ -11,13 +11,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
@@ -140,6 +144,58 @@ fun SettingsScreen(
                         onCheckedChange = {
                             haptics.tap()
                             viewModel.updateUseMetric(it)
+                        }
+                    )
+                }
+            }
+        }
+
+        item {
+            SettingsSectionCard(
+                title = "Workflow Focus",
+                subtitle = "Controls how much appears on first open."
+            ) {
+                Text(
+                    text = "Primary Trade",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PrimaryTrade.entries.forEach { trade ->
+                        FilterChip(
+                            selected = uiState.settings.primaryTrade == trade,
+                            onClick = {
+                                haptics.tap()
+                                viewModel.updatePrimaryTrade(trade)
+                            },
+                            label = { Text(trade.displayLabel()) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Simplified Home Mode", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "Show only focused templates and guided actions first.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.settings.simplifiedHome,
+                        onCheckedChange = {
+                            haptics.tap()
+                            viewModel.updateSimplifiedHome(it)
                         }
                     )
                 }
@@ -304,7 +360,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "TradeSketch Estimator v1.0.0",
+                        text = "TradeSketch Estimator v1.0.1",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -437,4 +493,12 @@ private fun BufferedIntField(
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+private fun PrimaryTrade.displayLabel(): String = when (this) {
+    PrimaryTrade.DRYWALL -> "Drywall"
+    PrimaryTrade.CONCRETE -> "Concrete"
+    PrimaryTrade.PAINT -> "Paint"
+    PrimaryTrade.GRAVEL_MULCH -> "Gravel/Mulch"
+    PrimaryTrade.MULTI -> "Multi-Trade"
 }

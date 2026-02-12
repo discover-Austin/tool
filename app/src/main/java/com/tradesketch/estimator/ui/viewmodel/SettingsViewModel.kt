@@ -2,6 +2,7 @@ package com.tradesketch.estimator.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
@@ -56,6 +57,25 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = _uiState.value.settings
             saveSettingsUseCase(current.copy(useMetric = useMetric))
+        }
+    }
+
+    fun updatePrimaryTrade(primaryTrade: PrimaryTrade) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    primaryTrade = primaryTrade,
+                    hasCompletedTradeOnboarding = true
+                )
+            )
+        }
+    }
+
+    fun updateSimplifiedHome(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(current.copy(simplifiedHome = enabled))
         }
     }
     

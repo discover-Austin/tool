@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.domain.model.openingsAreaSqFt
@@ -64,6 +65,21 @@ fun TakeoffScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val haptics = rememberAppHaptics()
+    val focusedType = defaultTakeoffTypeForTrade(uiState.settings.primaryTrade)
+    var showAllTradeScopes by rememberSaveable(
+        projectId,
+        uiState.settings.primaryTrade.name,
+        uiState.settings.simplifiedHome
+    ) { mutableStateOf(false) }
+    val availableTypes = if (
+        uiState.settings.simplifiedHome &&
+        focusedType != null &&
+        !showAllTradeScopes
+    ) {
+        listOf(focusedType)
+    } else {
+        TakeoffType.entries.toList()
+    }
     val flowSteps = listOf(
         TakeoffFlowStep(
             label = "Choose Trade",
@@ -230,12 +246,31 @@ fun TakeoffScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Clear separation by trade. Choose one workflow below.",
+                            text = if (uiState.settings.simplifiedHome && focusedType != null && !showAllTradeScopes) {
+                                "Focused on ${uiState.settings.primaryTrade.displayLabel()} scope. Expand when you need more."
+                            } else {
+                                "Clear separation by trade. Choose one workflow below."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+                        if (uiState.settings.simplifiedHome && focusedType != null) {
+                            OutlinedButton(
+                                onClick = { showAllTradeScopes = !showAllTradeScopes }
+                            ) {
+                                Text(
+                                    if (showAllTradeScopes) {
+                                        "Show Focused Trade Only"
+                                    } else {
+                                        "Show All Trades"
+                                    }
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
                         TradeScopeGrid(
+                            availableTypes = availableTypes,
                             selectedType = uiState.selectedType,
                             onSelect = { type ->
                                 haptics.tap()
@@ -246,10 +281,10 @@ fun TakeoffScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
+                            .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            TakeoffType.entries.forEach { type ->
+                            availableTypes.forEach { type ->
                                 FilterChip(
                                     selected = uiState.selectedType == type,
                                     onClick = {
@@ -873,31 +908,34 @@ private data class TakeoffFlowStep(
 
 @Composable
 private fun TradeScopeGrid(
+    availableTypes: List<TakeoffType>,
     selectedType: TakeoffType?,
     onSelect: (TakeoffType) -> Unit
 ) {
-    val options = listOf(
-        TradeScopeInfo(
-            type = TakeoffType.DRYWALL,
-            title = "Drywall",
-            subtitle = "Sheets, screws, mud"
-        ),
-        TradeScopeInfo(
-            type = TakeoffType.CONCRETE,
-            title = "Concrete",
-            subtitle = "Slab yards + cost stack"
-        ),
-        TradeScopeInfo(
-            type = TakeoffType.GRAVEL_MULCH,
-            title = "Gravel / Mulch",
-            subtitle = "Yards + tons"
-        ),
-        TradeScopeInfo(
-            type = TakeoffType.PAINT,
-            title = "Paint",
-            subtitle = "Coverage + coats"
-        )
-    )
+    val options = availableTypes.map { type ->
+        when (type) {
+            TakeoffType.DRYWALL -> TradeScopeInfo(
+                type = type,
+                title = "Drywall",
+                subtitle = "Sheets, screws, mud"
+            )
+            TakeoffType.CONCRETE -> TradeScopeInfo(
+                type = type,
+                title = "Concrete",
+                subtitle = "Slab yards + cost stack"
+            )
+            TakeoffType.GRAVEL_MULCH -> TradeScopeInfo(
+                type = type,
+                title = "Gravel / Mulch",
+                subtitle = "Yards + tons"
+            )
+            TakeoffType.PAINT -> TradeScopeInfo(
+                type = type,
+                title = "Paint",
+                subtitle = "Coverage + coats"
+            )
+        }
+    }
 
     options.chunked(2).forEach { rowOptions ->
         Row(
@@ -945,6 +983,24 @@ private val TakeoffType.displayLabel: String
         TakeoffType.GRAVEL_MULCH -> "Gravel/Mulch"
         TakeoffType.PAINT -> "Paint"
     }
+
+private fun PrimaryTrade.displayLabel(): String = when (this) {
+    PrimaryTrade.DRYWALL -> "Drywall"
+    PrimaryTrade.CONCRETE -> "Concrete"
+    PrimaryTrade.PAINT -> "Paint"
+    PrimaryTrade.GRAVEL_MULCH -> "Gravel/Mulch"
+    PrimaryTrade.MULTI -> "Multi-Trade"
+}
+
+private fun defaultTakeoffTypeForTrade(primaryTrade: PrimaryTrade): TakeoffType? {
+    return when (primaryTrade) {
+        PrimaryTrade.DRYWALL -> TakeoffType.DRYWALL
+        PrimaryTrade.CONCRETE -> TakeoffType.CONCRETE
+        PrimaryTrade.PAINT -> TakeoffType.PAINT
+        PrimaryTrade.GRAVEL_MULCH -> TakeoffType.GRAVEL_MULCH
+        PrimaryTrade.MULTI -> null
+    }
+}
 
 private data class TradeScopeInfo(
     val type: TakeoffType,
