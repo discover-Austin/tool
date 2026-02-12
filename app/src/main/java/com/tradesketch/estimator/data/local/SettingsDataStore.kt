@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Settings
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +19,9 @@ class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
+        private val PRIMARY_TRADE = stringPreferencesKey("primary_trade")
+        private val SIMPLIFIED_HOME = booleanPreferencesKey("simplified_home")
+        private val HAS_COMPLETED_TRADE_ONBOARDING = booleanPreferencesKey("has_completed_trade_onboarding")
         private val DEFAULT_WASTE_PERCENT = doublePreferencesKey("default_waste_percent")
         private val USE_METRIC = booleanPreferencesKey("use_metric")
         private val DEFAULT_DRYWALL_SHEET_AREA = doublePreferencesKey("default_drywall_sheet_area")
@@ -39,7 +43,14 @@ class SettingsDataStore @Inject constructor(
     
     val settings: Flow<Settings> = context.settingsDataStore.data
         .map { preferences ->
+            val storedTrade = preferences[PRIMARY_TRADE]
+            val primaryTrade = storedTrade
+                ?.let { raw -> runCatching { PrimaryTrade.valueOf(raw) }.getOrNull() }
+                ?: PrimaryTrade.DRYWALL
             Settings(
+                primaryTrade = primaryTrade,
+                simplifiedHome = preferences[SIMPLIFIED_HOME] ?: true,
+                hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING] ?: false,
                 defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: 10.0,
                 useMetric = preferences[USE_METRIC] ?: false,
                 defaultDrywallSheetArea = preferences[DEFAULT_DRYWALL_SHEET_AREA] ?: 32.0,
@@ -62,6 +73,9 @@ class SettingsDataStore @Inject constructor(
     
     suspend fun saveSettings(settings: Settings) {
         context.settingsDataStore.edit { preferences ->
+            preferences[PRIMARY_TRADE] = settings.primaryTrade.name
+            preferences[SIMPLIFIED_HOME] = settings.simplifiedHome
+            preferences[HAS_COMPLETED_TRADE_ONBOARDING] = settings.hasCompletedTradeOnboarding
             preferences[DEFAULT_WASTE_PERCENT] = settings.defaultWastePercent
             preferences[USE_METRIC] = settings.useMetric
             preferences[DEFAULT_DRYWALL_SHEET_AREA] = settings.defaultDrywallSheetArea

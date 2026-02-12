@@ -2,11 +2,15 @@ package com.tradesketch.estimator.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.usecase.CreateProjectFromTemplateUseCase
 import com.tradesketch.estimator.domain.usecase.DeleteProjectUseCase
+import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.GetProjectsUseCase
+import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -20,7 +24,9 @@ import javax.inject.Inject
 @HiltViewModel
 class ProjectsViewModel @Inject constructor(
     private val getProjectsUseCase: GetProjectsUseCase,
+    private val getSettingsUseCase: GetSettingsUseCase,
     private val saveProjectUseCase: SaveProjectUseCase,
+    private val saveSettingsUseCase: SaveSettingsUseCase,
     private val deleteProjectUseCase: DeleteProjectUseCase,
     private val createFromTemplateUseCase: CreateProjectFromTemplateUseCase
 ) : ViewModel() {
@@ -34,19 +40,57 @@ class ProjectsViewModel @Inject constructor(
     
     private fun loadProjects() {
         viewModelScope.launch {
-            getProjectsUseCase()
+            combine(
+                getProjectsUseCase(),
+                getSettingsUseCase()
+            ) { projects, settings ->
+                projects to settings
+            }
                 .catch { error ->
                     _uiState.update { it.copy(error = error.message ?: "Failed to load projects") }
                 }
-                .collect { projects ->
+                .collect { (projects, settings) ->
                     _uiState.update { 
                         it.copy(
                             projects = projects.sortedByDescending { p -> p.updatedAt },
+                            settings = settings,
                             isLoading = false,
                             error = null
                         )
                     }
                 }
+        }
+    }
+
+    fun completeTradeOnboarding(primaryTrade: PrimaryTrade) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    primaryTrade = primaryTrade,
+                    simplifiedHome = true,
+                    hasCompletedTradeOnboarding = true
+                )
+            )
+        }
+    }
+
+    fun updatePrimaryTrade(primaryTrade: PrimaryTrade) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    primaryTrade = primaryTrade,
+                    hasCompletedTradeOnboarding = true
+                )
+            )
+        }
+    }
+
+    fun updateSimplifiedHome(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(current.copy(simplifiedHome = enabled))
         }
     }
     
@@ -89,6 +133,7 @@ class ProjectsViewModel @Inject constructor(
 
 data class ProjectsUiState(
     val projects: List<Project> = emptyList(),
+    val settings: Settings = Settings.DEFAULT,
     val isLoading: Boolean = true,
     val error: String? = null
 )

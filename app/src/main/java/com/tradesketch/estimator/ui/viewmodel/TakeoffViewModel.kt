@@ -59,6 +59,7 @@ class TakeoffViewModel @Inject constructor(
                         it.copy(
                             project = project,
                             settings = settings,
+                            selectedType = it.selectedType ?: defaultTakeoffTypeForTrade(settings.primaryTrade),
                             drywallParams = if (alreadyInitializedForProject) {
                                 it.drywallParams
                             } else {
@@ -378,5 +379,15 @@ data class PricingParams(
                 taxPercent = settings.taxPercent
             )
         }
+    }
+}
+
+private fun defaultTakeoffTypeForTrade(primaryTrade: PrimaryTrade): TakeoffType? {
+    return when (primaryTrade) {
+        PrimaryTrade.DRYWALL -> TakeoffType.DRYWALL
+        PrimaryTrade.CONCRETE -> TakeoffType.CONCRETE
+        PrimaryTrade.PAINT -> TakeoffType.PAINT
+        PrimaryTrade.GRAVEL_MULCH -> TakeoffType.GRAVEL_MULCH
+        PrimaryTrade.MULTI -> null
     }
 }

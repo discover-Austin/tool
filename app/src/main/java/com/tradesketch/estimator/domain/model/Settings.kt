@@ -1,10 +1,21 @@
 package com.tradesketch.estimator.domain.model
 
+enum class PrimaryTrade {
+    DRYWALL,
+    CONCRETE,
+    PAINT,
+    GRAVEL_MULCH,
+    MULTI
+}
+
 /**
  * Application settings model.
  * Stores user preferences for the app.
  */
 data class Settings(
+    val primaryTrade: PrimaryTrade = PrimaryTrade.DRYWALL,
+    val simplifiedHome: Boolean = true,
+    val hasCompletedTradeOnboarding: Boolean = false,
     val defaultWastePercent: Double = 10.0,
     val useMetric: Boolean = false,
     val defaultDrywallSheetArea: Double = 32.0, // 4'×8' = 32 sq ft
