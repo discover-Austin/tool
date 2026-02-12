@@ -81,8 +81,8 @@ while ($true) {
         "5" { & "$scriptDir\05-deploy-privacy-policy.ps1"; Read-Host "`n  Press ENTER to return to menu" }
         "6" { & "$scriptDir\06-copy-store-listing.ps1"; Read-Host "`n  Press ENTER to return to menu" }
         "7" { & "$scriptDir\07-bump-version.ps1"; Read-Host "`n  Press ENTER to return to menu" }
-        "G" { & notepad.exe (Join-Path $projectRoot "PLAY-STORE-LAUNCH-GUIDE.md") }
-        "g" { & notepad.exe (Join-Path $projectRoot "PLAY-STORE-LAUNCH-GUIDE.md") }
+        "G" { & notepad.exe (Join-Path $projectRoot "documentation\\SUBMISSION-GUIDE.md") }
+        "g" { & notepad.exe (Join-Path $projectRoot "documentation\\SUBMISSION-GUIDE.md") }
         "P" { Start-Process "https://play.google.com/console/" }
         "p" { Start-Process "https://play.google.com/console/" }
         "Q" { Write-Host "  Good luck with the launch!"; exit 0 }

@@ -27,15 +27,27 @@ object ExportFormatter {
             result.items.forEach { item ->
                 appendLine("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
                 item.unitCost?.let { cost ->
-                    appendLine("  @ ${Formatters.formatMoney(Money(cost.toLong()))} each")
+                    appendLine("  @ ${Formatters.formatMoney(cost)} each")
                 }
                 item.extendedCost?.let { ext ->
-                    appendLine("  Total: ${Formatters.formatMoney(Money(ext.toLong()))}")
+                    appendLine("  Total: ${Formatters.formatMoney(ext)}")
                 }
             }
             appendLine()
+            result.materialSubtotal?.let { subtotal ->
+                appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
+            }
+            result.laborCost?.let { labor ->
+                appendLine("Labor: ${Formatters.formatMoney(labor)}")
+            }
+            result.markupCost?.let { markup ->
+                appendLine("Markup: ${Formatters.formatMoney(markup)}")
+            }
+            result.taxCost?.let { tax ->
+                appendLine("Tax: ${Formatters.formatMoney(tax)}")
+            }
             result.totalCost?.let { total ->
-                appendLine("TOTAL COST: ${Formatters.formatMoney(Money(total.toLong()))}")
+                appendLine("TOTAL COST: ${Formatters.formatMoney(total)}")
                 appendLine()
             }
             appendLine("-" .repeat(50))
@@ -53,13 +65,25 @@ object ExportFormatter {
             appendLine()
             appendLine("Item,Quantity,Unit,Unit Cost,Extended Cost")
             result.items.forEach { item ->
-                val unitCost = item.unitCost?.let { Formatters.formatMoney(Money(it.toLong())) } ?: ""
-                val extCost = item.extendedCost?.let { Formatters.formatMoney(Money(it.toLong())) } ?: ""
+                val unitCost = item.unitCost?.let { Formatters.formatMoney(it) } ?: ""
+                val extCost = item.extendedCost?.let { Formatters.formatMoney(it) } ?: ""
                 appendLine("\"${item.name}\",${item.quantity},\"${item.unit}\",\"$unitCost\",\"$extCost\"")
+            }
+            result.materialSubtotal?.let { subtotal ->
+                appendLine("Materials,,,,\"${Formatters.formatMoney(subtotal)}\"")
+            }
+            result.laborCost?.let { labor ->
+                appendLine("Labor,,,,\"${Formatters.formatMoney(labor)}\"")
+            }
+            result.markupCost?.let { markup ->
+                appendLine("Markup,,,,\"${Formatters.formatMoney(markup)}\"")
+            }
+            result.taxCost?.let { tax ->
+                appendLine("Tax,,,,\"${Formatters.formatMoney(tax)}\"")
             }
             result.totalCost?.let { total ->
                 appendLine()
-                appendLine("TOTAL,,,,\"${Formatters.formatMoney(Money(total.toLong()))}\"")
+                appendLine("TOTAL,,,,\"${Formatters.formatMoney(total)}\"")
             }
             appendLine()
             appendLine("\"$DISCLAIMER\"")
@@ -75,12 +99,24 @@ object ExportFormatter {
             result.items.forEach { item ->
                 append("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
                 item.extendedCost?.let { ext ->
-                    append(" (${Formatters.formatMoney(Money(ext.toLong()))})")
+                    append(" (${Formatters.formatMoney(ext)})")
                 }
                 appendLine()
             }
+            result.materialSubtotal?.let { subtotal ->
+                appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
+            }
+            result.laborCost?.let { labor ->
+                appendLine("Labor: ${Formatters.formatMoney(labor)}")
+            }
+            result.markupCost?.let { markup ->
+                appendLine("Markup: ${Formatters.formatMoney(markup)}")
+            }
+            result.taxCost?.let { tax ->
+                appendLine("Tax: ${Formatters.formatMoney(tax)}")
+            }
             result.totalCost?.let { total ->
-                appendLine("Total: ${Formatters.formatMoney(Money(total.toLong()))}")
+                appendLine("Total: ${Formatters.formatMoney(total)}")
             }
         }
     }

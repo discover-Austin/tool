@@ -8,6 +8,7 @@ import com.tradesketch.estimator.data.repository.SettingsRepository
 import com.tradesketch.estimator.domain.model.*
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,20 +22,30 @@ class TakeoffViewModel @Inject constructor(
     private val repository: ProjectRepository,
     private val settingsRepository: SettingsRepository,
     private val calculateTakeoffUseCase: CalculateTakeoffUseCase,
-    savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-    
-    private val projectId: String = checkNotNull(savedStateHandle["projectId"])
-    
+
+    private var currentProjectId: String? = savedStateHandle["projectId"]
+    private var projectObserverJob: Job? = null
+
     private val _uiState = MutableStateFlow(TakeoffUiState())
     val uiState: StateFlow<TakeoffUiState> = _uiState.asStateFlow()
-    
+
     init {
-        loadProjectAndSettings()
+        currentProjectId?.let { observeProjectAndSettings(it) }
     }
-    
-    private fun loadProjectAndSettings() {
-        viewModelScope.launch {
+
+    fun setProjectId(projectId: String) {
+        if (currentProjectId == projectId && projectObserverJob != null) return
+        currentProjectId = projectId
+        savedStateHandle["projectId"] = projectId
+        observeProjectAndSettings(projectId)
+    }
+
+    private fun observeProjectAndSettings(projectId: String) {
+        projectObserverJob?.cancel()
+        _uiState.update { it.copy(isLoading = true, error = null) }
+        projectObserverJob = viewModelScope.launch {
             combine(
                 repository.getProjects().map { it.find { p -> p.id == projectId } },
                 settingsRepository.getSettings()
@@ -42,17 +53,63 @@ class TakeoffViewModel @Inject constructor(
                 Pair(project, settings)
             }.collect { (project, settings) ->
                 if (project != null) {
+                    val alreadyInitializedForProject =
+                        !_uiState.value.isLoading && _uiState.value.project?.id == project.id
                     _uiState.update {
                         it.copy(
                             project = project,
                             settings = settings,
-                            isLoading = false
+                            drywallParams = if (alreadyInitializedForProject) {
+                                it.drywallParams
+                            } else {
+                                DrywallParams(
+                                    sheetAreaSqFt = settings.defaultDrywallSheetArea,
+                                    wastePercent = settings.defaultWastePercent,
+                                    screwsPerSheet = settings.defaultScrewsPerSheet,
+                                    mudGallonsPer100SqFt = settings.defaultMudGallonsPer100SqFt
+                                )
+                            },
+                            concreteParams = if (alreadyInitializedForProject) {
+                                it.concreteParams
+                            } else {
+                                ConcreteParams(
+                                    thicknessFeet = 0.33,
+                                    wastePercent = settings.defaultWastePercent
+                                )
+                            },
+                            gravelParams = if (alreadyInitializedForProject) {
+                                it.gravelParams
+                            } else {
+                                GravelParams(
+                                    depthFeet = 0.25,
+                                    densityTonsPerYard = 1.4,
+                                    wastePercent = settings.defaultWastePercent
+                                )
+                            },
+                            paintParams = if (alreadyInitializedForProject) {
+                                it.paintParams
+                            } else {
+                                PaintParams(
+                                    coverageSqFtPerGallon = settings.defaultCoveragePerGallon,
+                                    coats = settings.defaultCoatsOfPaint,
+                                    wastePercent = settings.defaultWastePercent
+                                )
+                            },
+                            pricingParams = if (alreadyInitializedForProject) {
+                                it.pricingParams
+                            } else {
+                                PricingParams.fromSettings(settings)
+                            },
+                            isLoading = false,
+                            error = null
                         )
                     }
                     // Auto-calculate if type is selected
                     if (_uiState.value.selectedType != null) {
                         calculate()
                     }
+                } else {
+                    _uiState.update { it.copy(isLoading = false, error = "Project not found") }
                 }
             }
         }
@@ -131,11 +188,44 @@ class TakeoffViewModel @Inject constructor(
         }
         calculate()
     }
+
+    fun updatePricingParams(
+        drywallSheetCost: Double? = null,
+        drywallScrewCost: Double? = null,
+        drywallMudCost: Double? = null,
+        concreteYardCost: Double? = null,
+        gravelYardCost: Double? = null,
+        gravelTonCost: Double? = null,
+        paintGallonCost: Double? = null,
+        laborPercent: Double? = null,
+        markupPercent: Double? = null,
+        taxPercent: Double? = null
+    ) {
+        val current = _uiState.value.pricingParams
+        _uiState.update {
+            it.copy(
+                pricingParams = current.copy(
+                    drywallSheetCost = drywallSheetCost ?: current.drywallSheetCost,
+                    drywallScrewCost = drywallScrewCost ?: current.drywallScrewCost,
+                    drywallMudCost = drywallMudCost ?: current.drywallMudCost,
+                    concreteYardCost = concreteYardCost ?: current.concreteYardCost,
+                    gravelYardCost = gravelYardCost ?: current.gravelYardCost,
+                    gravelTonCost = gravelTonCost ?: current.gravelTonCost,
+                    paintGallonCost = paintGallonCost ?: current.paintGallonCost,
+                    laborPercent = laborPercent ?: current.laborPercent,
+                    markupPercent = markupPercent ?: current.markupPercent,
+                    taxPercent = taxPercent ?: current.taxPercent
+                )
+            )
+        }
+        calculate()
+    }
     
     private fun calculate() {
         val state = _uiState.value
         val project = state.project ?: return
         val type = state.selectedType ?: return
+        val pricing = state.pricingParams
         
         try {
             val result = when (type) {
@@ -146,7 +236,17 @@ class TakeoffViewModel @Inject constructor(
                         state.drywallParams.sheetAreaSqFt,
                         state.drywallParams.wastePercent,
                         state.drywallParams.screwsPerSheet,
-                        state.drywallParams.mudGallonsPer100SqFt
+                        state.drywallParams.mudGallonsPer100SqFt,
+                        CostingInputs(
+                            unitCostByLineName = mapOf(
+                                "Drywall sheets" to pricing.drywallSheetCost,
+                                "Drywall screws" to pricing.drywallScrewCost,
+                                "Joint compound" to pricing.drywallMudCost
+                            ),
+                            laborPercent = pricing.laborPercent,
+                            markupPercent = pricing.markupPercent,
+                            taxPercent = pricing.taxPercent
+                        )
                     )
                 }
                 TakeoffType.CONCRETE -> {
@@ -154,7 +254,15 @@ class TakeoffViewModel @Inject constructor(
                     calculateTakeoffUseCase.calculateConcrete(
                         slabs,
                         state.concreteParams.thicknessFeet,
-                        state.concreteParams.wastePercent
+                        state.concreteParams.wastePercent,
+                        CostingInputs(
+                            unitCostByLineName = mapOf(
+                                "Concrete volume" to pricing.concreteYardCost
+                            ),
+                            laborPercent = pricing.laborPercent,
+                            markupPercent = pricing.markupPercent,
+                            taxPercent = pricing.taxPercent
+                        )
                     )
                 }
                 TakeoffType.GRAVEL_MULCH -> {
@@ -162,7 +270,16 @@ class TakeoffViewModel @Inject constructor(
                         project.spaces,
                         state.gravelParams.depthFeet,
                         state.gravelParams.densityTonsPerYard,
-                        state.gravelParams.wastePercent
+                        state.gravelParams.wastePercent,
+                        CostingInputs(
+                            unitCostByLineName = mapOf(
+                                "Material volume" to pricing.gravelYardCost,
+                                "Material weight" to pricing.gravelTonCost
+                            ),
+                            laborPercent = pricing.laborPercent,
+                            markupPercent = pricing.markupPercent,
+                            taxPercent = pricing.taxPercent
+                        )
                     )
                 }
                 TakeoffType.PAINT -> {
@@ -173,7 +290,15 @@ class TakeoffViewModel @Inject constructor(
                         paintableSpaces,
                         state.paintParams.coverageSqFtPerGallon,
                         state.paintParams.coats,
-                        state.paintParams.wastePercent
+                        state.paintParams.wastePercent,
+                        CostingInputs(
+                            unitCostByLineName = mapOf(
+                                "Paint" to pricing.paintGallonCost
+                            ),
+                            laborPercent = pricing.laborPercent,
+                            markupPercent = pricing.markupPercent,
+                            taxPercent = pricing.taxPercent
+                        )
                     )
                 }
             }
@@ -192,6 +317,7 @@ data class TakeoffUiState(
     val concreteParams: ConcreteParams = ConcreteParams(),
     val gravelParams: GravelParams = GravelParams(),
     val paintParams: PaintParams = PaintParams(),
+    val pricingParams: PricingParams = PricingParams(),
     val result: TakeoffResult? = null,
     val isLoading: Boolean = true,
     val error: String? = null
@@ -224,3 +350,33 @@ data class PaintParams(
     val coats: Int = 2,
     val wastePercent: Double = 5.0
 )
+
+data class PricingParams(
+    val drywallSheetCost: Double = 17.5,
+    val drywallScrewCost: Double = 0.01,
+    val drywallMudCost: Double = 9.5,
+    val concreteYardCost: Double = 165.0,
+    val gravelYardCost: Double = 52.0,
+    val gravelTonCost: Double = 36.0,
+    val paintGallonCost: Double = 38.0,
+    val laborPercent: Double = 20.0,
+    val markupPercent: Double = 15.0,
+    val taxPercent: Double = 8.0
+) {
+    companion object {
+        fun fromSettings(settings: Settings): PricingParams {
+            return PricingParams(
+                drywallSheetCost = settings.drywallSheetUnitCost,
+                drywallScrewCost = settings.drywallScrewUnitCost,
+                drywallMudCost = settings.drywallMudUnitCost,
+                concreteYardCost = settings.concreteYardUnitCost,
+                gravelYardCost = settings.gravelYardUnitCost,
+                gravelTonCost = settings.gravelTonUnitCost,
+                paintGallonCost = settings.paintGallonUnitCost,
+                laborPercent = settings.laborPercent,
+                markupPercent = settings.markupPercent,
+                taxPercent = settings.taxPercent
+            )
+        }
+    }
+}

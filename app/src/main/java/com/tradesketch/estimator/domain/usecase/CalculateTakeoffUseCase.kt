@@ -12,36 +12,40 @@ class CalculateTakeoffUseCase @Inject constructor(
         sheetAreaSqFt: Double,
         wastePercent: Double,
         screwsPerSheet: Int,
-        mudGallonsPer100SqFt: Double
+        mudGallonsPer100SqFt: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         return calculator.drywallTakeoff(
-            walls, sheetAreaSqFt, wastePercent, screwsPerSheet, mudGallonsPer100SqFt
+            walls, sheetAreaSqFt, wastePercent, screwsPerSheet, mudGallonsPer100SqFt, costing
         )
     }
     
     fun calculateConcrete(
         slabSpaces: List<Space>,
         thicknessFeet: Double,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
-        return calculator.concreteTakeoff(slabSpaces, thicknessFeet, wastePercent)
+        return calculator.concreteTakeoff(slabSpaces, thicknessFeet, wastePercent, costing)
     }
     
     fun calculateGravelMulch(
         spaces: List<Space>,
         depthFeet: Double,
         densityTonsPerYard: Double,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
-        return calculator.gravelMulchTakeoff(spaces, depthFeet, densityTonsPerYard, wastePercent)
+        return calculator.gravelMulchTakeoff(spaces, depthFeet, densityTonsPerYard, wastePercent, costing)
     }
     
     fun calculatePaint(
         spaces: List<Space>,
         coverageSqFtPerGallon: Double,
         coats: Int,
-        wastePercent: Double
+        wastePercent: Double,
+        costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
-        return calculator.paintTakeoff(spaces, coverageSqFtPerGallon, coats, wastePercent)
+        return calculator.paintTakeoff(spaces, coverageSqFtPerGallon, coats, wastePercent, costing)
     }
 }

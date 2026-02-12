@@ -83,11 +83,24 @@ private data class SpaceJson(
     val id: String,
     val name: String,
     val geometry: GeometryJson,
-    val openings: List<OpeningJson>
+    val openings: List<OpeningJson> = emptyList(),
+    val transform: SpaceTransformJson? = null
 ) {
-    fun toSpace() = Space(id, name, geometry.toGeometry(), openings.map { it.toOpening() })
+    fun toSpace() = Space(
+        id = id,
+        name = name,
+        geometry = geometry.toGeometry(),
+        openings = openings.map { it.toOpening() },
+        transform = transform?.toSpaceTransform() ?: SpaceTransform()
+    )
     companion object {
-        fun fromSpace(s: Space) = SpaceJson(s.id, s.name, GeometryJson.fromGeometry(s.geometry), s.openings.map { OpeningJson.fromOpening(it) })
+        fun fromSpace(s: Space) = SpaceJson(
+            id = s.id,
+            name = s.name,
+            geometry = GeometryJson.fromGeometry(s.geometry),
+            openings = s.openings.map { OpeningJson.fromOpening(it) },
+            transform = SpaceTransformJson.fromTransform(s.transform)
+        )
     }
 }
 
@@ -132,5 +145,31 @@ private data class OpeningJson(val width: Long, val height: Long, val count: Int
     fun toOpening() = Opening(Millimeters(width), Millimeters(height), count)
     companion object {
         fun fromOpening(o: Opening) = OpeningJson(o.width.value, o.height.value, o.count)
+    }
+}
+
+private data class SpaceTransformJson(
+    val xFeet: Double,
+    val yFeet: Double,
+    val zFeet: Double,
+    val yawDegrees: Double,
+    val colorHex: Long
+) {
+    fun toSpaceTransform() = SpaceTransform(
+        xFeet = xFeet,
+        yFeet = yFeet,
+        zFeet = zFeet,
+        yawDegrees = yawDegrees,
+        colorHex = colorHex
+    )
+
+    companion object {
+        fun fromTransform(transform: SpaceTransform) = SpaceTransformJson(
+            xFeet = transform.xFeet,
+            yFeet = transform.yFeet,
+            zFeet = transform.zFeet,
+            yawDegrees = transform.yawDegrees,
+            colorHex = transform.colorHex
+        )
     }
 }

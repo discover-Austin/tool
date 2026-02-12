@@ -95,7 +95,7 @@ quantities. It contains:
 - No media content
 - No user-generated content
 - No social features
-- No external links (except in-app privacy policy)
+- No external links
 
 The app is purely functional and educational, suitable for professional 
 contractors and DIY users of all ages.

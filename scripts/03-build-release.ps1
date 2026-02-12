@@ -34,23 +34,52 @@ Write-Host ""
 
 Write-Host "[1/4] Checking signing configuration..." -ForegroundColor Yellow
 
-$hasEnvVars = $env:KEYSTORE_FILE -and (Test-Path $env:KEYSTORE_FILE)
 $localProps = Join-Path $projectRoot "local.properties"
-$hasLocalProps = $false
-if (Test-Path $localProps) {
-    $propsContent = Get-Content $localProps -Raw
-    $hasLocalProps = $propsContent -match "KEYSTORE_FILE"
+$requiredSigningKeys = @("KEYSTORE_FILE", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD")
+$signingValues = @{}
+
+foreach ($key in $requiredSigningKeys) {
+    if (-not [string]::IsNullOrWhiteSpace((Get-Item -Path "Env:$key" -ErrorAction SilentlyContinue).Value)) {
+        $signingValues[$key] = (Get-Item -Path "Env:$key").Value
+    }
 }
 
-if ($hasEnvVars) {
-    Write-Host "  PASS: Signing config found via environment variables." -ForegroundColor Green
-} elseif ($hasLocalProps) {
-    Write-Host "  PASS: Signing config found in local.properties." -ForegroundColor Green
-} else {
+if (Test-Path $localProps) {
+    Get-Content $localProps | ForEach-Object {
+        if ($_ -match "^\s*([^#=]+)\s*=\s*(.*)\s*$") {
+            $k = $Matches[1].Trim()
+            $v = $Matches[2].Trim()
+            if ($requiredSigningKeys -contains $k -and -not $signingValues.ContainsKey($k)) {
+                $signingValues[$k] = $v
+            }
+        }
+    }
+}
+
+$missingKeys = $requiredSigningKeys | Where-Object { -not $signingValues.ContainsKey($_) -or [string]::IsNullOrWhiteSpace($signingValues[$_]) }
+if ($missingKeys.Count -gt 0) {
     Write-Host "  FAIL: No signing config found!" -ForegroundColor Red
+    Write-Host "  Missing: $($missingKeys -join ', ')" -ForegroundColor Red
     Write-Host "  Run .\02-generate-keystore.ps1 first." -ForegroundColor Red
     exit 1
 }
+
+# Normalize local.properties-style escaped Windows paths.
+$keystorePath = $signingValues["KEYSTORE_FILE"] -replace "\\\\:", ":" -replace "\\\\", "\"
+if (-not [System.IO.Path]::IsPathRooted($keystorePath)) {
+    $keystorePath = Join-Path $projectRoot $keystorePath
+}
+if (-not (Test-Path $keystorePath)) {
+    Write-Host "  FAIL: Keystore file not found: $keystorePath" -ForegroundColor Red
+    exit 1
+}
+
+$env:KEYSTORE_FILE = $keystorePath
+$env:KEYSTORE_PASSWORD = $signingValues["KEYSTORE_PASSWORD"]
+$env:KEY_ALIAS = $signingValues["KEY_ALIAS"]
+$env:KEY_PASSWORD = $signingValues["KEY_PASSWORD"]
+
+Write-Host "  PASS: Signing config loaded and exported for Gradle." -ForegroundColor Green
 
 # ── 2. RUN TESTS ─────────────────────────────────────────────────────────────
 
@@ -108,7 +137,7 @@ try {
 
 Write-Host ""
 Write-Host "[4/4] Building release App Bundle (.aab)..." -ForegroundColor Yellow
-Write-Host "  This compiles Kotlin, shrinks with R8, and signs the bundle." -ForegroundColor DarkGray
+Write-Host "  This compiles Kotlin and signs the bundle (release minify settings are controlled in build.gradle.kts)." -ForegroundColor DarkGray
 Write-Host "  May take 2-5 minutes..." -ForegroundColor DarkGray
 Write-Host ""
 
@@ -139,6 +168,14 @@ try {
 
 Write-Host ""
 if (Test-Path $aabOutput) {
+    # Validate signature so we never ship an unsigned release bundle by mistake.
+    & jarsigner -verify $aabOutput 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  FAIL: Bundle exists but signature verification failed." -ForegroundColor Red
+        Write-Host "  Check KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD in local.properties." -ForegroundColor Red
+        exit 1
+    }
+
     $fileSize = (Get-Item $aabOutput).Length
     $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
     Write-Host "================================================================" -ForegroundColor Cyan
@@ -146,6 +183,7 @@ if (Test-Path $aabOutput) {
     Write-Host "" -ForegroundColor Cyan
     Write-Host "  Bundle:  $aabOutput" -ForegroundColor White
     Write-Host "  Size:    $fileSizeMB MB" -ForegroundColor White
+    Write-Host "  Signing: Verified (jarsigner)" -ForegroundColor White
     Write-Host "" -ForegroundColor Cyan
     Write-Host "  This is the file you upload to Google Play Console." -ForegroundColor White
     Write-Host "" -ForegroundColor Cyan

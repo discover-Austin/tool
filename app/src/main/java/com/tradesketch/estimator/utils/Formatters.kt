@@ -30,6 +30,13 @@ object Formatters {
     fun formatMoney(money: Money): String {
         return currencyFormat.format(money.toDollars())
     }
+
+    /**
+     * Format dollars as USD currency.
+     */
+    fun formatMoney(amount: Double): String {
+        return currencyFormat.format(amount.coerceAtLeast(0.0))
+    }
     
     /**
      * Format money from cents.

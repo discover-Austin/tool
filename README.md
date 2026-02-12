@@ -95,7 +95,18 @@ app/src/main/java/com/tradesketch/estimator/
 
 # Build release AAB (requires signing configuration)
 ./gradlew bundleRelease
+
+# Run desktop app (Compose Desktop)
+./gradlew :desktop:run
 ```
+
+### Desktop App
+
+A Compose Desktop version is included in `desktop/` and reuses the existing domain and calculator logic from `app/src/main/java/com/tradesketch/estimator/domain`.
+
+- Desktop docs: `desktop/README.md`
+- Run: `./gradlew :desktop:run`
+- Package installer: `./gradlew :desktop:packageDistributionForCurrentOS`
 
 ### Release Build
 
