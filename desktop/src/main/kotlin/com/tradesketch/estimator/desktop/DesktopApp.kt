@@ -61,8 +61,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerMoveFilter
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.domain.model.Geometry
@@ -70,16 +72,21 @@ import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.areaSqFt
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.model.openingsAreaSqFt
 import com.tradesketch.estimator.domain.model.volumeCuFt
+import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Formatters
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.io.File
+import javax.swing.JFileChooser
 
 private enum class ExportViewMode(val label: String) {
     SUMMARY("Summary"),
     REPORT("Full Report"),
-    CSV("CSV")
+    CSV("CSV"),
+    JSON("JSON")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,16 +97,22 @@ fun TradeSketchDesktopApp() {
     var editingSpace by remember { mutableStateOf<Space?>(null) }
     var exportViewMode by remember { mutableStateOf(ExportViewMode.SUMMARY) }
     var showWelcomeDetail by remember { mutableStateOf(false) }
+    var ritualProjectName by remember { mutableStateOf("My First Project") }
+    var ritualType by remember { mutableStateOf(DesktopTakeoffType.DRYWALL) }
 
     MaterialTheme {
         if (state.settings.firstRun) {
             DesktopWelcomeScreen(
                 showDetail = showWelcomeDetail,
                 onToggleDetail = { showWelcomeDetail = it },
-                onBegin = {
-                    state.completeWelcomeOnboarding()
+                projectName = ritualProjectName,
+                onProjectNameChange = { ritualProjectName = it },
+                selectedType = ritualType,
+                onSelectType = { ritualType = it },
+                onBegin = { name, type ->
+                    state.completeOnboardingRitual(projectName = name, type = type)
                     showWelcomeDetail = false
-                    state.activeTab = WorkspaceTab.PROJECTS
+                    state.activeTab = WorkspaceTab.BLUEPRINT
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -125,33 +138,15 @@ fun TradeSketchDesktopApp() {
                     Column(modifier = Modifier.fillMaxSize()) {
                         WorkspaceHeader(state = state)
                         when (state.activeTab) {
-                            WorkspaceTab.PROJECTS -> ProjectsSidebar(
+                            WorkspaceTab.BLUEPRINT -> DesktopBlueprintTab(
                                 state = state,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            WorkspaceTab.BLUEPRINT -> ModelTab(
-                                state = state,
-                                onAddSpace = {
-                                    editingSpace = null
-                                    showSpaceEditor = true
-                                },
-                                onEditSpace = {
-                                    editingSpace = it
-                                    showSpaceEditor = true
-                                }
+                                openAddonsByDefault = false
                             )
                             WorkspaceTab.MATERIALS -> TakeoffTab(state = state)
                             WorkspaceTab.QUANTITIES -> TakeoffTab(state = state)
-                            WorkspaceTab.ADDONS -> ModelTab(
+                            WorkspaceTab.ADDONS -> DesktopBlueprintTab(
                                 state = state,
-                                onAddSpace = {
-                                    editingSpace = null
-                                    showSpaceEditor = true
-                                },
-                                onEditSpace = {
-                                    editingSpace = it
-                                    showSpaceEditor = true
-                                }
+                                openAddonsByDefault = true
                             )
                             WorkspaceTab.REVIEW -> ModelTab(
                                 state = state,
@@ -169,7 +164,7 @@ fun TradeSketchDesktopApp() {
                                 exportViewMode = exportViewMode,
                                 onExportViewModeChange = { exportViewMode = it }
                             )
-                            WorkspaceTab.SETTINGS -> SettingsTab(state = state)
+                            WorkspaceTab.SETTINGS_ABOUT -> SettingsTab(state = state)
                         }
                     }
                 }
@@ -197,7 +192,11 @@ fun TradeSketchDesktopApp() {
 private fun DesktopWelcomeScreen(
     showDetail: Boolean,
     onToggleDetail: (Boolean) -> Unit,
-    onBegin: () -> Unit,
+    projectName: String,
+    onProjectNameChange: (String) -> Unit,
+    selectedType: DesktopTakeoffType,
+    onSelectType: (DesktopTakeoffType) -> Unit,
+    onBegin: (String, DesktopTakeoffType) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -261,11 +260,27 @@ private fun DesktopWelcomeScreen(
                             text = "Start with project naming, choose what you are estimating, then draft geometry that drives quantities.",
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        OutlinedTextField(
+                            value = projectName,
+                            onValueChange = onProjectNameChange,
+                            label = { Text("Project name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DesktopTakeoffType.entries.forEach { type ->
+                                FilterChip(
+                                    selected = selectedType == type,
+                                    onClick = { onSelectType(type) },
+                                    label = { Text(type.label) }
+                                )
+                            }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { onToggleDetail(false) }) {
                                 Text("Back")
                             }
-                            Button(onClick = onBegin) {
+                            Button(onClick = { onBegin(projectName, selectedType) }) {
                                 Text("Open Workspace")
                             }
                         }
@@ -277,19 +292,40 @@ private fun DesktopWelcomeScreen(
 }
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 private fun DesktopWorkspaceRail(
     activeTab: WorkspaceTab,
     onSelectTab: (WorkspaceTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var hoverLabel by remember { mutableStateOf<String?>(null) }
     NavigationRail(
         modifier = modifier.width(60.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+        header = {
+            hoverLabel?.let { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(6.dp)
+                )
+            }
+        }
     ) {
         WorkspaceTab.entries.forEach { tab ->
             NavigationRailItem(
                 selected = activeTab == tab,
                 onClick = { onSelectTab(tab) },
+                modifier = Modifier.pointerMoveFilter(
+                    onEnter = {
+                        hoverLabel = tab.label
+                        false
+                    },
+                    onExit = {
+                        hoverLabel = null
+                        false
+                    }
+                ),
                 icon = {
                     Icon(
                         imageVector = tab.icon(),
@@ -865,6 +901,7 @@ private fun ExportTab(
         ExportViewMode.SUMMARY -> state.exportSummary()
         ExportViewMode.REPORT -> state.exportTextReport()
         ExportViewMode.CSV -> state.exportCsv()
+        ExportViewMode.JSON -> state.exportJson()
     }
 
     Column(
@@ -893,6 +930,36 @@ private fun ExportTab(
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy Full Report")
+            }
+            OutlinedButton(
+                onClick = {
+                    saveWithDesktopChooser(
+                        suggestedName = "tradesketch_export.${if (exportViewMode == ExportViewMode.JSON) "json" else if (exportViewMode == ExportViewMode.CSV) "csv" else "txt"}",
+                        bytes = content.toByteArray()
+                    )
+                }
+            ) {
+                Icon(Icons.Default.FileDownload, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Save File")
+            }
+            OutlinedButton(
+                onClick = {
+                    val pdfBytes = buildSimplePdfBytes(
+                        project = project,
+                        takeoff = takeoff,
+                        title = "${project.name} ${state.selectedTakeoffType.label} Export",
+                        body = state.exportTextReport()
+                    )
+                    saveWithDesktopChooser(
+                        suggestedName = "tradesketch_export.pdf",
+                        bytes = pdfBytes
+                    )
+                }
+            ) {
+                Icon(Icons.Default.FileDownload, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Save PDF")
             }
         }
 
@@ -1035,17 +1102,173 @@ private fun describeGeometry(geometry: Geometry): String {
 }
 
 private fun WorkspaceTab.icon() = when (this) {
-    WorkspaceTab.PROJECTS -> Icons.Default.FolderOpen
     WorkspaceTab.BLUEPRINT -> Icons.Default.AutoFixHigh
     WorkspaceTab.MATERIALS -> Icons.Default.Assessment
     WorkspaceTab.QUANTITIES -> Icons.Default.Straighten
     WorkspaceTab.ADDONS -> Icons.Default.Add
     WorkspaceTab.REVIEW -> Icons.Default.Description
     WorkspaceTab.EXPORT -> Icons.Default.Share
-    WorkspaceTab.SETTINGS -> Icons.Default.Tune
+    WorkspaceTab.SETTINGS_ABOUT -> Icons.Default.Tune
 }
 
 private fun copyToClipboard(value: String) {
     val selection = StringSelection(value)
     Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+}
+
+private fun saveWithDesktopChooser(
+    suggestedName: String,
+    bytes: ByteArray
+) {
+    val chooser = JFileChooser().apply {
+        selectedFile = File(suggestedName)
+    }
+    val result = chooser.showSaveDialog(null)
+    if (result == JFileChooser.APPROVE_OPTION) {
+        runCatching {
+            chooser.selectedFile.writeBytes(bytes)
+        }
+    }
+}
+
+private fun buildSimplePdfBytes(
+    project: Project,
+    takeoff: com.tradesketch.estimator.domain.model.TakeoffResult,
+    title: String,
+    body: String
+): ByteArray {
+    val blueprint = project.authoritativeBlueprint()
+    val stream = buildString {
+        fun drawText(x: Float, y: Float, size: Int, text: String) {
+            append("BT /F1 $size Tf ${x.toPdf()} ${y.toPdf()} Td (${sanitizePdfText(text)}) Tj ET\n")
+        }
+
+        drawText(50f, 770f, 14, title)
+        drawText(50f, 752f, 10, "Project: ${project.name}")
+        drawText(50f, 738f, 10, "Generated: ${Formatters.formatDate(System.currentTimeMillis())}")
+
+        // Blueprint snapshot frame.
+        append("0.6 w 50 450 512 250 re S\n")
+        drawText(55f, 690f, 10, "Blueprint Snapshot")
+
+        if (blueprint.walls.isNotEmpty()) {
+            val minX = blueprint.walls.minOf { minOf(it.start.x, it.end.x) }
+            val maxX = blueprint.walls.maxOf { maxOf(it.start.x, it.end.x) }
+            val minY = blueprint.walls.minOf { minOf(it.start.y, it.end.y) }
+            val maxY = blueprint.walls.maxOf { maxOf(it.start.y, it.end.y) }
+            val spanX = (maxX - minX).toDouble().coerceAtLeast(1.0)
+            val spanY = (maxY - minY).toDouble().coerceAtLeast(1.0)
+            val boxLeft = 62.0
+            val boxBottom = 462.0
+            val boxWidth = 488.0
+            val boxHeight = 224.0
+            val scale = minOf(boxWidth / spanX, boxHeight / spanY)
+
+            fun mapX(value: Long): Double = boxLeft + ((value - minX) * scale)
+            fun mapY(value: Long): Double = boxBottom + ((value - minY) * scale)
+
+            append("0.3 0.5 0.8 RG 1.2 w\n")
+            blueprint.walls.forEach { wall ->
+                val x1 = mapX(wall.start.x)
+                val y1 = mapY(wall.start.y)
+                val x2 = mapX(wall.end.x)
+                val y2 = mapY(wall.end.y)
+                append("${x1.toPdf()} ${y1.toPdf()} m ${x2.toPdf()} ${y2.toPdf()} l S\n")
+            }
+            append("0 0 0 RG\n")
+        }
+
+        drawText(50f, 428f, 11, "Itemized Materials")
+        var itemY = 412f
+        takeoff.items.forEach { item ->
+            val line = "${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}"
+            wrapPdfText(line, maxChars = 88).forEach { wrapped ->
+                if (itemY < 122f) return@forEach
+                drawText(55f, itemY, 10, wrapped)
+                itemY -= 12f
+            }
+            if (itemY < 122f) return@forEach
+        }
+
+        var summaryY = itemY - 6f
+        takeoff.totalCost?.let { total ->
+            drawText(55f, summaryY, 10, "Total: ${Formatters.formatMoney(total)}")
+            summaryY -= 12f
+        }
+        takeoff.materialSubtotal?.let { subtotal ->
+            drawText(55f, summaryY, 10, "Materials: ${Formatters.formatMoney(subtotal)}")
+            summaryY -= 12f
+        }
+
+        // Disclaimer block.
+        val disclaimerStart = summaryY.coerceAtLeast(70f)
+        drawText(50f, disclaimerStart, 9, "Disclaimer")
+        var disclaimerY = disclaimerStart - 12f
+        wrapPdfText(ExportFormatter.getDisclaimer(), maxChars = 102).forEach { wrapped ->
+            if (disclaimerY < 40f) return@forEach
+            drawText(50f, disclaimerY, 8, wrapped)
+            disclaimerY -= 10f
+        }
+
+        // Keep a short text payload from the full report for traceability.
+        var traceY = disclaimerY - 6f
+        body.lines().take(2).forEach { line ->
+            if (traceY < 24f) return@forEach
+            drawText(50f, traceY, 7, line)
+            traceY -= 9f
+        }
+    }
+
+    val objects = mutableListOf<String>()
+    objects += "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj"
+    objects += "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj"
+    objects += "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >> endobj"
+    objects += "4 0 obj << /Length ${stream.toByteArray().size} >> stream\n$stream\nendstream endobj"
+    objects += "5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj"
+
+    val builder = StringBuilder()
+    builder.append("%PDF-1.4\n")
+    val offsets = mutableListOf(0)
+    objects.forEach { obj ->
+        offsets += builder.toString().toByteArray().size
+        builder.append(obj).append('\n')
+    }
+    val xrefOffset = builder.toString().toByteArray().size
+    builder.append("xref\n0 ${objects.size + 1}\n")
+    builder.append("0000000000 65535 f \n")
+    offsets.drop(1).forEach { offset ->
+        builder.append(offset.toString().padStart(10, '0')).append(" 00000 n \n")
+    }
+    builder.append("trailer << /Size ${objects.size + 1} /Root 1 0 R >>\n")
+    builder.append("startxref\n$xrefOffset\n%%EOF")
+    return builder.toString().toByteArray()
+}
+
+private fun Double.toPdf(): String = "%.2f".format(this)
+
+private fun Float.toPdf(): String = "%.2f".format(this)
+
+private fun wrapPdfText(text: String, maxChars: Int): List<String> {
+    if (text.length <= maxChars) return listOf(text)
+    val words = text.split(Regex("\\s+"))
+    val lines = mutableListOf<String>()
+    var current = ""
+    words.forEach { word ->
+        val candidate = if (current.isBlank()) word else "$current $word"
+        if (candidate.length <= maxChars) {
+            current = candidate
+        } else {
+            if (current.isNotBlank()) lines += current
+            current = word
+        }
+    }
+    if (current.isNotBlank()) lines += current
+    return lines
+}
+
+private fun sanitizePdfText(value: String): String {
+    return value
+        .replace("\\", "\\\\")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
 }

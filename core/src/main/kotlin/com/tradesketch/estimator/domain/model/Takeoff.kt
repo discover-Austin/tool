@@ -20,11 +20,21 @@ data class CostingInputs(
     }
 }
 
+data class TakeoffTrace(
+    val metric: String,
+    val value: Double,
+    val unit: String,
+    val roomId: String? = null,
+    val wallId: String? = null,
+    val openingId: String? = null
+)
+
 data class TakeoffResult(
     val items: List<TakeoffLine>,
     val totalCost: Double?,
     val materialSubtotal: Double? = null,
     val laborCost: Double? = null,
     val markupCost: Double? = null,
-    val taxCost: Double? = null
+    val taxCost: Double? = null,
+    val traces: List<TakeoffTrace> = emptyList()
 )

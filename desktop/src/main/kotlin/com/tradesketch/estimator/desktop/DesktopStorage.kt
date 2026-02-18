@@ -18,6 +18,7 @@ import com.tradesketch.estimator.domain.model.ConcreteSessionParams
 import com.tradesketch.estimator.domain.model.GravelSessionParams
 import com.tradesketch.estimator.domain.model.PaintSessionParams
 import com.tradesketch.estimator.domain.model.PricingSessionParams
+import com.tradesketch.estimator.domain.model.BlueprintDocument
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -95,6 +96,7 @@ private data class ProjectJson(
     val name: String,
     val spaces: List<SpaceJson>,
     val takeoffSession: ProjectTakeoffSessionJson? = null,
+    val blueprintDocument: BlueprintDocument? = null,
     val createdAt: Long,
     val updatedAt: Long
 ) {
@@ -103,6 +105,8 @@ private data class ProjectJson(
         name = name,
         spaces = spaces.map { it.toSpace() },
         takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
+        blueprintDocument = blueprintDocument
+            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces.map { it.toSpace() }),
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -113,6 +117,7 @@ private data class ProjectJson(
             name = project.name,
             spaces = project.spaces.map { SpaceJson.fromSpace(it) },
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(project.takeoffSession),
+            blueprintDocument = project.blueprintDocument,
             createdAt = project.createdAt,
             updatedAt = project.updatedAt
         )

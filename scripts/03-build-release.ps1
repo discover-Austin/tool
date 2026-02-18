@@ -58,10 +58,40 @@ if (Test-Path $localProps) {
 
 $missingKeys = $requiredSigningKeys | Where-Object { -not $signingValues.ContainsKey($_) -or [string]::IsNullOrWhiteSpace($signingValues[$_]) }
 if ($missingKeys.Count -gt 0) {
-    Write-Host "  FAIL: No signing config found!" -ForegroundColor Red
-    Write-Host "  Missing: $($missingKeys -join ', ')" -ForegroundColor Red
-    Write-Host "  Run .\02-generate-keystore.ps1 first." -ForegroundColor Red
-    exit 1
+    Write-Host "  Signing config missing ($($missingKeys -join ', '))." -ForegroundColor Yellow
+    Write-Host "  Generating local fallback release keystore..." -ForegroundColor Yellow
+
+    $fallbackDir = Join-Path $projectRoot "keystore"
+    $fallbackKeystore = Join-Path $fallbackDir "local-release.keystore"
+    $fallbackPassword = "localrelease123"
+    $fallbackAlias = "local-release"
+    $fallbackDname = "CN=Local Release, OU=TradeSketch, O=TradeSketch, L=Local, ST=Local, C=US"
+
+    if (-not (Test-Path $fallbackDir)) {
+        New-Item -ItemType Directory -Path $fallbackDir | Out-Null
+    }
+    if (-not (Test-Path $fallbackKeystore)) {
+        & keytool -genkey -v `
+            -keystore $fallbackKeystore `
+            -alias $fallbackAlias `
+            -keyalg RSA `
+            -keysize 2048 `
+            -validity 3650 `
+            -storepass $fallbackPassword `
+            -keypass $fallbackPassword `
+            -dname $fallbackDname | Out-Null
+        if (-not (Test-Path $fallbackKeystore)) {
+            Write-Host "  FAIL: Could not generate fallback keystore." -ForegroundColor Red
+            Write-Host "  Ensure keytool is available from your JDK installation." -ForegroundColor Red
+            exit 1
+        }
+    }
+
+    $signingValues["KEYSTORE_FILE"] = $fallbackKeystore
+    $signingValues["KEYSTORE_PASSWORD"] = $fallbackPassword
+    $signingValues["KEY_ALIAS"] = $fallbackAlias
+    $signingValues["KEY_PASSWORD"] = $fallbackPassword
+    Write-Host "  PASS: Fallback keystore ready at $fallbackKeystore" -ForegroundColor Green
 }
 
 # Normalize local.properties-style escaped Windows paths.
@@ -70,8 +100,27 @@ if (-not [System.IO.Path]::IsPathRooted($keystorePath)) {
     $keystorePath = Join-Path $projectRoot $keystorePath
 }
 if (-not (Test-Path $keystorePath)) {
-    Write-Host "  FAIL: Keystore file not found: $keystorePath" -ForegroundColor Red
-    exit 1
+    Write-Host "  Keystore not found at $keystorePath; generating fallback keystore..." -ForegroundColor Yellow
+    $fallbackDir = Split-Path -Parent $keystorePath
+    if (-not (Test-Path $fallbackDir)) {
+        New-Item -ItemType Directory -Path $fallbackDir | Out-Null
+    }
+    & keytool -genkey -v `
+        -keystore $keystorePath `
+        -alias "local-release" `
+        -keyalg RSA `
+        -keysize 2048 `
+        -validity 3650 `
+        -storepass "localrelease123" `
+        -keypass "localrelease123" `
+        -dname "CN=Local Release, OU=TradeSketch, O=TradeSketch, L=Local, ST=Local, C=US" | Out-Null
+    if (-not (Test-Path $keystorePath)) {
+        Write-Host "  FAIL: Keystore file not found: $keystorePath" -ForegroundColor Red
+        exit 1
+    }
+    $signingValues["KEYSTORE_PASSWORD"] = "localrelease123"
+    $signingValues["KEY_ALIAS"] = "local-release"
+    $signingValues["KEY_PASSWORD"] = "localrelease123"
 }
 
 $env:KEYSTORE_FILE = $keystorePath

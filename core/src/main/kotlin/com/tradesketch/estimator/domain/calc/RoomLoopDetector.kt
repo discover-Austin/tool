@@ -1,8 +1,10 @@
 package com.tradesketch.estimator.domain.calc
 
+import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 object RoomLoopDetector {
@@ -94,7 +96,11 @@ object RoomLoopDetector {
             }
             if (orderedNodes.size < 3) return@forEach
 
-            val polygon = orderedNodes.map { nodeCentroids[it] }
+            var polygon = orderedNodes.map { nodeCentroids[it] }
+            if (polygonSignedArea(polygon) < 0.0) {
+                // Keep a consistent winding direction for deterministic area/perimeter math.
+                polygon = polygon.reversed()
+            }
             val cyclePairs = orderedNodes.zip(orderedNodes.drop(1) + orderedNodes.first())
             val wallIds = cyclePairs.mapNotNull { (a, b) ->
                 edgeIds[a to b]?.firstOrNull()
@@ -103,10 +109,56 @@ object RoomLoopDetector {
                 id = "room-auto-$roomIndex",
                 name = "Room $roomIndex",
                 polygon = polygon,
-                wallSegmentIds = wallIds
+                wallSegmentIds = wallIds,
+                wallLoopRef = wallIds
             )
             roomIndex += 1
         }
         return rooms
+    }
+
+    fun detectRooms(document: BlueprintDocument, snapThresholdMm: Long = 25L): List<Room> {
+        return detectRooms(walls = document.walls, snapThresholdMm = snapThresholdMm)
+    }
+
+    fun detectAndMerge(document: BlueprintDocument, snapThresholdMm: Long = 25L): BlueprintDocument {
+        val detected = detectRooms(document, snapThresholdMm)
+        if (detected.isEmpty()) return document
+        val merged = mergeUniqueRooms(document.rooms, detected)
+        return document.copy(rooms = merged)
+    }
+
+    private fun mergeUniqueRooms(existing: List<Room>, detected: List<Room>): List<Room> {
+        if (existing.isEmpty()) return detected
+        val merged = existing.toMutableList()
+        detected.forEach { candidate ->
+            val duplicate = existing.any { known ->
+                sameLoop(known.polygon, candidate.polygon)
+            }
+            if (!duplicate) {
+                merged += candidate
+            }
+        }
+        return merged
+    }
+
+    private fun sameLoop(a: List<PointMm>, b: List<PointMm>): Boolean {
+        if (a.size != b.size || a.isEmpty()) return false
+        val normalizedA = a.sortedWith(compareBy<PointMm> { it.x }.thenBy { it.y })
+        val normalizedB = b.sortedWith(compareBy<PointMm> { it.x }.thenBy { it.y })
+        return normalizedA.zip(normalizedB).all { (left, right) ->
+            abs(left.x - right.x) <= 2L && abs(left.y - right.y) <= 2L
+        }
+    }
+
+    private fun polygonSignedArea(points: List<PointMm>): Double {
+        if (points.size < 3) return 0.0
+        var area = 0.0
+        points.indices.forEach { i ->
+            val a = points[i]
+            val b = points[(i + 1) % points.size]
+            area += (a.x.toDouble() * b.y.toDouble()) - (b.x.toDouble() * a.y.toDouble())
+        }
+        return area / 2.0
     }
 }

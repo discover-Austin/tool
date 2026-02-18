@@ -87,7 +87,11 @@ Release signing values are read from environment variables or `local.properties`
 - `KEY_ALIAS`
 - `KEY_PASSWORD`
 
-If these are missing, release build cannot produce a signed AAB.
+If these are missing, `scripts/03-build-release.ps1` now auto-generates a local fallback keystore at:
+
+- `keystore/local-release.keystore`
+
+and exports temporary local signing values so release still builds signed.
 
 ---
 

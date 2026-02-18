@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.ui.viewmodel
 
+import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.ConcreteSessionParams
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.DrywallSessionParams
@@ -12,6 +13,7 @@ import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffScope
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 
 internal object TakeoffLineItemNames {
@@ -160,13 +162,15 @@ internal fun CalculateTakeoffUseCase.calculateForType(
     type: TakeoffType,
     inputs: TakeoffCalculationInputs
 ): TakeoffResult {
+    val blueprint = project.authoritativeBlueprint()
     return when (type) {
-        TakeoffType.DRYWALL -> calculateDrywall(
-            walls = project.drywallSpaces(inputs.drywall.includeCeilings),
+        TakeoffType.DRYWALL -> BlueprintTakeoffCalculator.drywallTakeoff(
+            document = blueprint,
             sheetAreaSqFt = inputs.drywall.sheetAreaSqFt,
             wastePercent = inputs.drywall.wastePercent,
             screwsPerSheet = inputs.drywall.screwsPerSheet,
             mudGallonsPer100SqFt = inputs.drywall.mudGallonsPer100SqFt,
+            includeCeilings = inputs.drywall.includeCeilings,
             costing = inputs.pricing.toCostingInputs(
                 unitCostByLineName = mapOf(
                     TakeoffLineItemNames.DRYWALL_SHEETS to inputs.pricing.drywallSheetCost,
@@ -175,8 +179,8 @@ internal fun CalculateTakeoffUseCase.calculateForType(
                 )
             )
         )
-        TakeoffType.CONCRETE -> calculateConcrete(
-            slabSpaces = project.concreteSpaces(),
+        TakeoffType.CONCRETE -> BlueprintTakeoffCalculator.concreteTakeoff(
+            document = blueprint,
             thicknessFeet = inputs.concrete.thicknessFeet,
             wastePercent = inputs.concrete.wastePercent,
             costing = inputs.pricing.toCostingInputs(
@@ -185,8 +189,8 @@ internal fun CalculateTakeoffUseCase.calculateForType(
                 )
             )
         )
-        TakeoffType.GRAVEL_MULCH -> calculateGravelMulch(
-            spaces = project.spaces,
+        TakeoffType.GRAVEL_MULCH -> BlueprintTakeoffCalculator.gravelMulchTakeoff(
+            document = blueprint,
             depthFeet = inputs.gravel.depthFeet,
             densityTonsPerYard = inputs.gravel.densityTonsPerYard,
             wastePercent = inputs.gravel.wastePercent,
@@ -197,8 +201,8 @@ internal fun CalculateTakeoffUseCase.calculateForType(
                 )
             )
         )
-        TakeoffType.PAINT -> calculatePaint(
-            spaces = project.paintableSpaces(),
+        TakeoffType.PAINT -> BlueprintTakeoffCalculator.paintTakeoff(
+            document = blueprint,
             coverageSqFtPerGallon = inputs.paint.coverageSqFtPerGallon,
             coats = inputs.paint.coats,
             wastePercent = inputs.paint.wastePercent,

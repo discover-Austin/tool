@@ -20,3 +20,11 @@ fun areaSqFt(length: Millimeters, width: Millimeters): Double {
 fun volumeCuFt(length: Millimeters, width: Millimeters, height: Millimeters): Double {
     return areaSqFt(length, width) * height.toFeet()
 }
+
+fun feetToMillimetersLong(feet: Double): Long = Millimeters.fromFeet(feet).value
+
+fun inchesToMillimetersLong(inches: Double): Long = Millimeters.fromInches(inches).value
+
+fun millimetersLongToFeet(mm: Long): Double = Millimeters(mm).toFeet()
+
+fun millimetersLongToInches(mm: Long): Double = Millimeters(mm).toInches()

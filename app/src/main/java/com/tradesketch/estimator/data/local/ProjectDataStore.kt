@@ -72,7 +72,8 @@ private data class ProjectJson(
     val spaces: List<SpaceJson>,
     val createdAt: Long,
     val updatedAt: Long,
-    val takeoffSession: ProjectTakeoffSessionJson? = null
+    val takeoffSession: ProjectTakeoffSessionJson? = null,
+    val blueprintDocument: BlueprintDocument? = null
 ) {
     fun toProject() = Project(
         id = id,
@@ -80,7 +81,9 @@ private data class ProjectJson(
         spaces = spaces.map { it.toSpace() },
         createdAt = createdAt,
         updatedAt = updatedAt,
-        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession()
+        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
+        blueprintDocument = blueprintDocument
+            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces.map { it.toSpace() })
     )
 
     companion object {
@@ -90,7 +93,8 @@ private data class ProjectJson(
             spaces = p.spaces.map { SpaceJson.fromSpace(it) },
             createdAt = p.createdAt,
             updatedAt = p.updatedAt,
-            takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession)
+            takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession),
+            blueprintDocument = p.blueprintDocument
         )
     }
 }
