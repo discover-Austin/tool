@@ -312,10 +312,6 @@ fun Space.toWallSegmentOrNull(): WallSegment? {
     )
 }
 
-fun Project.wallSegments(): List<WallSegment> {
-    return spaces.mapNotNull { it.toWallSegmentOrNull() }
-}
-
 fun Project.authoritativeBlueprint(): BlueprintDocument {
     val current = blueprintDocument
     if (current.projectId == id) {
@@ -324,7 +320,7 @@ fun Project.authoritativeBlueprint(): BlueprintDocument {
     if (current.walls.isNotEmpty() || current.rooms.isNotEmpty() || current.openings.isNotEmpty()) {
         return current.copy(projectId = id)
     }
-    return BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces)
+    return BlueprintDocument.empty(projectId = id)
 }
 
 fun BlueprintDocument.toLegacySpaces(): List<Space> {
@@ -405,4 +401,42 @@ fun List<PointMm>.boundsOrNull(): Pair<PointMm, PointMm>? {
         maxY = max(maxY, point.y)
     }
     return PointMm(minX, minY) to PointMm(maxX, maxY)
+}
+
+/**
+ * Helper functions for migrating from Space-based to BlueprintDocument-based code.
+ */
+fun BlueprintDocument.allElementIds(): Set<String> {
+    return (walls.map { it.id } + rooms.map { it.id } + openings.map { it.id }).toSet()
+}
+
+fun BlueprintDocument.getElementById(id: String): Any? {
+    return walls.find { it.id == id }
+        ?: rooms.find { it.id == id }
+        ?: openings.find { it.id == id }
+}
+
+fun BlueprintDocument.totalWallAreaSqFt(): Double {
+    val openingAreas = openingAreaByWallId()
+    return walls.sumOf { wall ->
+        val wallArea = wall.lengthFeet() * Millimeters(wall.heightMm).toFeet()
+        val openingArea = openingAreas[wall.id] ?: 0.0
+        (wallArea - openingArea).coerceAtLeast(0.0)
+    }
+}
+
+fun BlueprintDocument.totalRoomAreaSqFt(): Double {
+    return rooms.sumOf { it.areaSqFt() }
+}
+
+fun BlueprintDocument.totalAreaSqFt(): Double {
+    return totalWallAreaSqFt() + totalRoomAreaSqFt()
+}
+
+fun BlueprintDocument.totalOpeningCount(): Int {
+    return openings.size
+}
+
+fun BlueprintDocument.elementCount(): Int {
+    return walls.size + rooms.size
 }
