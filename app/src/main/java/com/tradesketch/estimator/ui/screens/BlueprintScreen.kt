@@ -2,6 +2,8 @@ package com.tradesketch.estimator.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +67,7 @@ import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
+import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -122,6 +125,12 @@ fun BlueprintScreen(
     var customWidthFeet by remember { mutableStateOf("3.0") }
     var customHeightFeet by remember { mutableStateOf("7.0") }
     var customSillFeet by remember { mutableStateOf("0.0") }
+    
+    // Drag-drop state for add-ons
+    var draggedPreset by remember { mutableStateOf<OpeningPreset?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var dragGhostWallId by remember { mutableStateOf<String?>(null) }
+    var dragGhostT by remember { mutableStateOf(0.0) }
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
     if (uiState.isLoading || uiState.document == null) {
@@ -146,6 +155,8 @@ fun BlueprintScreen(
             pan = pan,
             drawingStart = drawingStart,
             drawingPreview = drawingPreview,
+            selectedWallId = uiState.selectedWallId,
+            selectedOpeningId = uiState.selectedOpeningId,
             onPanScaleChange = { updatedPan, updatedScale ->
                 pan = updatedPan
                 scale = updatedScale.coerceIn(0.2f, 7.5f)
@@ -213,16 +224,13 @@ fun BlueprintScreen(
                     BlueprintDraftTool.PLACE_WINDOW -> {
                         val basePreset = selectedPreset ?: if (tool == BlueprintDraftTool.PLACE_DOOR) doorPreset else windowPreset
                         val preset = basePreset.copy(
-                            widthMm = customWidthFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            widthMm = DimensionParser.parseLengthToMillimeters(customWidthFeet)
                                 ?.coerceAtLeast(1L)
                                 ?: basePreset.widthMm,
-                            heightMm = customHeightFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            heightMm = DimensionParser.parseLengthToMillimeters(customHeightFeet)
                                 ?.coerceAtLeast(1L)
                                 ?: basePreset.heightMm,
-                            sillMm = customSillFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            sillMm = DimensionParser.parseLengthToMillimeters(customSillFeet)
                                 ?.coerceAtLeast(0L)
                                 ?: basePreset.sillMm
                         )
@@ -243,6 +251,35 @@ fun BlueprintScreen(
                                     openingId = UUID.randomUUID().toString()
                                 )
                             )
+                        }
+                    }
+                    BlueprintDraftTool.SELECT -> {
+                        // Find nearest wall or opening
+                        val nearestWall = doc.walls
+                            .map { it to BlueprintSnapMath.pointToWallDistanceMm(tap, it) }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= Millimeters.fromFeet(1.0).value }
+                            ?.first
+                        
+                        val nearestOpening = doc.openings
+                            .mapNotNull { opening ->
+                                val wall = doc.walls.find { it.id == opening.wallId } ?: return@mapNotNull null
+                                val openingCenter = pointOnWall(wall, opening.t)
+                                val distance = BlueprintSnapMath.distanceMillimeters(tap, openingCenter)
+                                opening to distance
+                            }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= Millimeters.fromFeet(2.0).value }
+                            ?.first
+                        
+                        when {
+                            nearestOpening != null -> viewModel.selectOpening(nearestOpening.id)
+                            nearestWall != null -> viewModel.selectWall(nearestWall.id)
+                            else -> {
+                                viewModel.selectWall(null)
+                                viewModel.selectOpening(null)
+                                viewModel.selectRoom(null)
+                            }
                         }
                     }
                     else -> Unit
@@ -290,6 +327,10 @@ fun BlueprintScreen(
                 selectedPreset = it
                 tool = if (it.type == OpeningType.DOOR) BlueprintDraftTool.PLACE_DOOR else BlueprintDraftTool.PLACE_WINDOW
             },
+            onStartDrag = { preset ->
+                draggedPreset = preset
+                tool = BlueprintDraftTool.PAN // Switch to PAN to avoid conflicts
+            },
             customWidthFeet = customWidthFeet,
             customHeightFeet = customHeightFeet,
             customSillFeet = customSillFeet,
@@ -298,6 +339,18 @@ fun BlueprintScreen(
             onCustomSillChange = { customSillFeet = it },
             modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp)
         )
+
+        // Selection Panel - show when an item is selected
+        if (uiState.selectedWallId != null || uiState.selectedOpeningId != null) {
+            SelectionPanel(
+                selectedWall = uiState.selectedWallId?.let { id -> doc.walls.find { it.id == id } },
+                selectedOpening = uiState.selectedOpeningId?.let { id -> doc.openings.find { it.id == id } },
+                onDeleteWall = viewModel::deleteSelectedWall,
+                onDeleteOpening = viewModel::deleteSelectedOpening,
+                onDeselect = { viewModel.selectWall(null); viewModel.selectOpening(null) },
+                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+            )
+        }
 
         Toolbar(
             tool = tool,
@@ -326,6 +379,8 @@ private fun BlueprintCanvas(
     pan: Offset,
     drawingStart: PointMm?,
     drawingPreview: PointMm?,
+    selectedWallId: String?,
+    selectedOpeningId: String?,
     onPanScaleChange: (Offset, Float) -> Unit,
     onLivePointerWorld: (PointMm) -> Unit,
     onTapWorld: (PointMm) -> Unit
@@ -373,24 +428,29 @@ private fun BlueprintCanvas(
         drawLine(Color(0xFF2C5072), worldToScreen(PointMm(-70_000, 0)), worldToScreen(PointMm(70_000, 0)), strokeWidth = 1.4f)
         drawLine(Color(0xFF2C5072), worldToScreen(PointMm(0, -70_000)), worldToScreen(PointMm(0, 70_000)), strokeWidth = 1.4f)
         document.walls.forEach { wall ->
-            drawLine(Color(0xFFA2D6FF), worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = 3f, cap = StrokeCap.Round)
+            val isSelected = wall.id == selectedWallId
+            val color = if (isSelected) Color(0xFFFFD700) else Color(0xFFA2D6FF)
+            val strokeWidth = if (isSelected) 5f else 3f
+            drawLine(color, worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = strokeWidth, cap = StrokeCap.Round)
         }
         document.openings.forEach { opening ->
             val wall = document.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
             val center = pointOnWall(wall, opening.t)
             val c = worldToScreen(center)
             val w = opening.widthMm * (basePxPerMm * scale)
+            val isSelected = opening.id == selectedOpeningId
+            val color = if (isSelected) Color(0xFFFFD700) else if (opening.type == OpeningType.DOOR) Color(0xFFE7BE73) else Color(0xFFC5F5FF)
             if (opening.type == OpeningType.DOOR) {
-                drawArc(Color(0xFFE7BE73), -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = 2f))
+                drawArc(color, -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = if (isSelected) 3f else 2f))
             } else {
-                drawLine(Color(0xFFC5F5FF), Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = 3f)
+                drawLine(color, Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = if (isSelected) 4f else 3f)
                 drawPath(
                     path = Path().apply {
                         moveTo(c.x - w / 6f, c.y - 6f)
                         lineTo(c.x + w / 6f, c.y + 6f)
                     },
-                    color = Color(0xFFC5F5FF),
-                    style = Stroke(width = 2f)
+                    color = color,
+                    style = Stroke(width = if (isSelected) 3f else 2f)
                 )
             }
         }
@@ -433,13 +493,52 @@ private fun DrawingInputPanel(
     if (drawingStart == null || drawingPreview == null) return
     val lengthFt = Millimeters(BlueprintSnapMath.distanceMillimeters(drawingStart, drawingPreview)).toFeet()
     val angle = Math.toDegrees(atan2((drawingPreview.y - drawingStart.y).toDouble(), (drawingPreview.x - drawingStart.x).toDouble()))
+    
+    // Parse input to show feedback
+    val parsedLengthMm = DimensionParser.parseLengthToMillimeters(lengthInputFeet)
+    val parsedAngle = DimensionParser.parseAngleDegrees(angleInputDegrees)
+    val lengthValid = lengthInputFeet.isBlank() || parsedLengthMm != null
+    val angleValid = angleInputDegrees.isBlank() || parsedAngle != null
+    
     Card(modifier = modifier.widthIn(max = 620.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Live: ${"%.2f".format(lengthFt)} ft @ ${"%.1f".format(angle)}°", fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(lengthInputFeet, onLengthChange, label = { Text("Length (ft)") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(angleInputDegrees, onAngleChange, label = { Text("Angle (deg)") }, singleLine = true, modifier = Modifier.weight(1f))
-                Button(onClick = onLock) { Text("Lock") }
+                Column(Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = lengthInputFeet,
+                        onValueChange = onLengthChange,
+                        label = { Text("Length") },
+                        singleLine = true,
+                        isError = !lengthValid,
+                        supportingText = {
+                            if (lengthValid && parsedLengthMm != null) {
+                                Text("= ${"%.2f".format(Millimeters(parsedLengthMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                            } else if (lengthValid) {
+                                Text("12' 6\", 12.5ft, 3800mm, 3.8m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = angleInputDegrees,
+                        onValueChange = onAngleChange,
+                        label = { Text("Angle") },
+                        singleLine = true,
+                        isError = !angleValid,
+                        supportingText = {
+                            if (angleValid && parsedAngle != null) {
+                                Text("= ${"%.1f".format(parsedAngle)}°", style = MaterialTheme.typography.bodySmall)
+                            } else if (angleValid) {
+                                Text("45, 45°, 45deg", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Button(onClick = onLock, enabled = lengthValid && angleValid) { Text("Lock") }
             }
         }
     }
@@ -481,6 +580,7 @@ private fun AddonsDrawer(
     selectedPreset: OpeningPreset?,
     onToggle: () -> Unit,
     onSelectPreset: (OpeningPreset) -> Unit,
+    onStartDrag: (OpeningPreset) -> Unit,
     customWidthFeet: String,
     customHeightFeet: String,
     customSillFeet: String,
@@ -499,27 +599,42 @@ private fun AddonsDrawer(
                     Button(onClick = onToggle) { Text("Hide") }
                 }
                 Text("Choose preset, set size, then tap or drag onto a wall.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                AddonPresetCard(doorPreset, selectedPreset == doorPreset, { Icon(Icons.Filled.DoorFront, contentDescription = null) }) { onSelectPreset(doorPreset) }
-                AddonPresetCard(windowPreset, selectedPreset == windowPreset, { Icon(Icons.Filled.Window, contentDescription = null) }) { onSelectPreset(windowPreset) }
+                AddonPresetCard(
+                    preset = doorPreset,
+                    selected = selectedPreset == doorPreset,
+                    icon = { Icon(Icons.Filled.DoorFront, contentDescription = null) },
+                    onClick = { onSelectPreset(doorPreset) },
+                    onStartDrag = { onStartDrag(doorPreset) }
+                )
+                AddonPresetCard(
+                    preset = windowPreset,
+                    selected = selectedPreset == windowPreset,
+                    icon = { Icon(Icons.Filled.Window, contentDescription = null) },
+                    onClick = { onSelectPreset(windowPreset) },
+                    onStartDrag = { onStartDrag(windowPreset) }
+                )
                 OutlinedTextField(
                     value = customWidthFeet,
                     onValueChange = onCustomWidthChange,
-                    label = { Text("Width ft") },
+                    label = { Text("Width") },
                     singleLine = true,
+                    supportingText = { Text("3', 3.5ft, 900mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = customHeightFeet,
                     onValueChange = onCustomHeightChange,
-                    label = { Text("Height ft") },
+                    label = { Text("Height") },
                     singleLine = true,
+                    supportingText = { Text("7', 7ft, 2100mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = customSillFeet,
                     onValueChange = onCustomSillChange,
-                    label = { Text("Sill ft") },
+                    label = { Text("Sill") },
                     singleLine = true,
+                    supportingText = { Text("0', 3ft, 900mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -528,13 +643,64 @@ private fun AddonsDrawer(
 }
 
 @Composable
-private fun AddonPresetCard(preset: OpeningPreset, selected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+private fun AddonPresetCard(
+    preset: OpeningPreset,
+    selected: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    onStartDrag: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.pointerInput(Unit) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { onStartDrag() },
+                onDrag = { _, _ -> /* Drag handled at screen level */ },
+                onDragEnd = { /* End handled at screen level */ },
+                onDragCancel = { /* Cancel handled at screen level */ }
+            )
+        }
+    ) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
             Column {
                 Text(preset.name)
                 Text(if (preset.type == OpeningType.DOOR) "Door swing arc" else "Window break", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionPanel(
+    selectedWall: WallSegment?,
+    selectedOpening: BlueprintOpening?,
+    onDeleteWall: () -> Unit,
+    onDeleteOpening: () -> Unit,
+    onDeselect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Selection", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Button(onClick = onDeselect, modifier = Modifier.padding(0.dp)) { Text("×") }
+            }
+            
+            when {
+                selectedWall != null -> {
+                    Text("Wall", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text("Length: ${"%.2f".format(Millimeters(selectedWall.lengthMillimeters()).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Text("Height: ${"%.2f".format(selectedWall.height.toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onDeleteWall, modifier = Modifier.fillMaxWidth()) { Text("Delete Wall") }
+                }
+                selectedOpening != null -> {
+                    Text("${selectedOpening.type.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text("Width: ${"%.2f".format(Millimeters(selectedOpening.widthMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Text("Height: ${"%.2f".format(Millimeters(selectedOpening.heightMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onDeleteOpening, modifier = Modifier.fillMaxWidth()) { Text("Delete Opening") }
+                }
             }
         }
     }
@@ -567,8 +733,11 @@ private fun applyLengthAngleOverride(start: PointMm, fallbackEnd: PointMm, lengt
     val dy = (fallbackEnd.y - start.y).toDouble()
     val fallbackLength = hypot(dx, dy)
     val fallbackAngle = Math.toDegrees(atan2(dy, dx))
-    val lengthMm = lengthInputFeet.toDoubleOrNull()?.let { Millimeters.fromFeet(it).value.toDouble() }?.coerceAtLeast(1.0) ?: fallbackLength
-    val angleDeg = angleInputDegrees.toDoubleOrNull() ?: fallbackAngle
+    
+    // Use DimensionParser to support multiple formats: "12' 6\"", "12.5ft", "3800mm", "3.8m"
+    val lengthMm = DimensionParser.parseLengthToMillimeters(lengthInputFeet)?.toDouble()?.coerceAtLeast(1.0) ?: fallbackLength
+    val angleDeg = DimensionParser.parseAngleDegrees(angleInputDegrees) ?: fallbackAngle
+    
     val rad = Math.toRadians(angleDeg)
     return PointMm(start.x + (cos(rad) * lengthMm).roundToLong(), start.y + (sin(rad) * lengthMm).roundToLong())
 }
