@@ -4,13 +4,11 @@ import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.ConcreteSessionParams
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.DrywallSessionParams
-import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.GravelSessionParams
 import com.tradesketch.estimator.domain.model.PaintSessionParams
 import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
@@ -124,29 +122,6 @@ internal fun TakeoffType.toTakeoffScope(): TakeoffScope {
         TakeoffType.GRAVEL_MULCH -> TakeoffScope.GRAVEL_MULCH
         TakeoffType.PAINT -> TakeoffScope.PAINT
     }
-}
-
-internal fun Project.drywallSpaces(includeCeilings: Boolean): List<Space> {
-    return spaces.filter { space ->
-        when (space.geometry) {
-            is Geometry.Wall -> true
-            is Geometry.Rect -> includeCeilings
-            else -> false
-        }
-    }
-}
-
-internal fun Project.concreteSpaces(): List<Space> {
-    val slabs = spaces.filter { it.geometry is Geometry.Slab }
-    if (slabs.isNotEmpty()) return slabs
-    // Blueprint-first fallback: if no explicit slab objects exist, use room footprints.
-    return spaces.filter { it.geometry is Geometry.Rect || it.geometry is Geometry.LShape }
-}
-
-internal fun Project.paintableSpaces(): List<Space> {
-    val explicitlyTagged = spaces.filter { "paint" in it.tags }
-    if (explicitlyTagged.isNotEmpty()) return explicitlyTagged
-    return spaces.filter { it.geometry is Geometry.Wall || it.geometry is Geometry.Rect }
 }
 
 internal data class TakeoffCalculationInputs(

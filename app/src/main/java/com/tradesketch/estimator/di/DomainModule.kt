@@ -1,6 +1,5 @@
 package com.tradesketch.estimator.di
 
-import com.tradesketch.estimator.domain.calc.TakeoffCalculator
 import com.tradesketch.estimator.domain.usecase.*
 import com.tradesketch.estimator.data.repository.ProjectRepository
 import com.tradesketch.estimator.data.repository.SettingsRepository
@@ -8,7 +7,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
 
 /**
  * Hilt module providing domain layer dependencies.
@@ -17,12 +15,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DomainModule {
-    
-    @Provides
-    @Singleton
-    fun provideTakeoffCalculator(): TakeoffCalculator {
-        return TakeoffCalculator
-    }
     
     @Provides
     fun provideGetProjectsUseCase(
@@ -46,10 +38,8 @@ object DomainModule {
     }
     
     @Provides
-    fun provideCalculateTakeoffUseCase(
-        calculator: TakeoffCalculator
-    ): CalculateTakeoffUseCase {
-        return CalculateTakeoffUseCase(calculator)
+    fun provideCalculateTakeoffUseCase(): CalculateTakeoffUseCase {
+        return CalculateTakeoffUseCase()
     }
     
     @Provides
