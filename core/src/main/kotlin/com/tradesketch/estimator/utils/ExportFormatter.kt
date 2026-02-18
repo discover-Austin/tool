@@ -106,8 +106,79 @@ object ExportFormatter {
                 appendLine("TOTAL,,,,\"${Formatters.formatMoney(total)}\"")
             }
             appendLine()
+            appendLine("Trace Metric,Value,Unit,Room ID,Wall ID,Opening ID")
+            result.traces.forEach { trace ->
+                appendLine(
+                    "\"${trace.metric}\",${trace.value},\"${trace.unit}\"," +
+                        "\"${trace.roomId.orEmpty()}\",\"${trace.wallId.orEmpty()}\",\"${trace.openingId.orEmpty()}\""
+                )
+            }
+            appendLine()
             appendLine("\"$DISCLAIMER\"")
         }
+    }
+
+    fun formatAsJson(
+        project: Project,
+        settings: Settings,
+        takeoffType: String,
+        result: TakeoffResult
+    ): String {
+        val company = buildBusinessHeader(settings)
+        val itemsJson = result.items.joinToString(separator = ",\n") { item ->
+            """
+            {
+              "name": "${escapeJson(item.name)}",
+              "quantity": ${item.quantity},
+              "unit": "${escapeJson(item.unit)}",
+              "unitCost": ${item.unitCost ?: "null"},
+              "extendedCost": ${item.extendedCost ?: "null"}
+            }
+            """.trimIndent()
+        }
+        val tracesJson = result.traces.joinToString(separator = ",\n") { trace ->
+            """
+            {
+              "metric": "${escapeJson(trace.metric)}",
+              "value": ${trace.value},
+              "unit": "${escapeJson(trace.unit)}",
+              "roomId": ${trace.roomId?.let { "\"${escapeJson(it)}\"" } ?: "null"},
+              "wallId": ${trace.wallId?.let { "\"${escapeJson(it)}\"" } ?: "null"},
+              "openingId": ${trace.openingId?.let { "\"${escapeJson(it)}\"" } ?: "null"}
+            }
+            """.trimIndent()
+        }
+        return """
+        {
+          "project": {
+            "id": "${escapeJson(project.id)}",
+            "name": "${escapeJson(project.name)}"
+          },
+          "company": {
+            "name": "${escapeJson(company.name)}",
+            "phone": "${escapeJson(settings.businessPhone)}",
+            "email": "${escapeJson(settings.businessEmail)}",
+            "address": "${escapeJson(settings.businessAddress)}",
+            "license": "${escapeJson(settings.businessLicense)}"
+          },
+          "takeoffType": "${escapeJson(takeoffType)}",
+          "generatedAt": "${escapeJson(Formatters.formatDate(System.currentTimeMillis()))}",
+          "items": [
+            $itemsJson
+          ],
+          "totals": {
+            "materials": ${result.materialSubtotal ?: "null"},
+            "labor": ${result.laborCost ?: "null"},
+            "markup": ${result.markupCost ?: "null"},
+            "tax": ${result.taxCost ?: "null"},
+            "total": ${result.totalCost ?: "null"}
+          },
+          "traceability": [
+            $tracesJson
+          ],
+          "disclaimer": "${escapeJson(DISCLAIMER)}"
+        }
+        """.trimIndent()
     }
     
     /**
@@ -176,4 +247,11 @@ object ExportFormatter {
         val name: String,
         val contactLines: List<String>
     )
+
+    private fun escapeJson(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+    }
 }

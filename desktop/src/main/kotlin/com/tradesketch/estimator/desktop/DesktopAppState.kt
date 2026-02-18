@@ -3,14 +3,19 @@ package com.tradesketch.estimator.desktop
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.calc.TakeoffCalculator
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.PrimaryTrade
+import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
+import com.tradesketch.estimator.domain.model.toLegacySpaces
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Validators
 import java.util.UUID
@@ -47,19 +52,21 @@ data class PaintParams(
 )
 
 enum class WorkspaceTab(val label: String) {
-    PROJECTS("Projects"),
     BLUEPRINT("Blueprint"),
     MATERIALS("Materials"),
     QUANTITIES("Quantities"),
     ADDONS("Add-ons"),
     REVIEW("Review"),
     EXPORT("Export"),
-    SETTINGS("Settings")
+    SETTINGS_ABOUT("Settings/About")
 }
 
 class DesktopAppState(
     private val storage: DesktopStorage = DesktopStorage()
 ) {
+    private val blueprintUndo = ArrayDeque<BlueprintDocument>()
+    private val blueprintRedo = ArrayDeque<BlueprintDocument>()
+
     var projects by mutableStateOf<List<Project>>(emptyList())
         private set
 
@@ -72,7 +79,7 @@ class DesktopAppState(
     var selectedTakeoffType by mutableStateOf(DesktopTakeoffType.DRYWALL)
         private set
 
-    var activeTab by mutableStateOf(WorkspaceTab.PROJECTS)
+    var activeTab by mutableStateOf(WorkspaceTab.BLUEPRINT)
 
     var drywallParams by mutableStateOf(DrywallParams())
         private set
@@ -98,6 +105,12 @@ class DesktopAppState(
     val currentTakeoffResult: TakeoffResult?
         get() = calculateTakeoff()
 
+    val canUndoBlueprint: Boolean
+        get() = blueprintUndo.isNotEmpty()
+
+    val canRedoBlueprint: Boolean
+        get() = blueprintRedo.isNotEmpty()
+
     init {
         reloadFromDisk()
     }
@@ -114,6 +127,8 @@ class DesktopAppState(
     fun selectProject(projectId: String) {
         if (projects.any { it.id == projectId }) {
             selectedProjectId = projectId
+            blueprintUndo.clear()
+            blueprintRedo.clear()
             errorMessage = null
         }
     }
@@ -200,6 +215,41 @@ class DesktopAppState(
         persistProjects("Space deleted")
     }
 
+    fun updateBlueprintDocument(updated: BlueprintDocument, trackHistory: Boolean = true) {
+        val project = selectedProject ?: return
+        if (trackHistory) {
+            blueprintUndo.addLast(project.authoritativeBlueprint())
+            if (blueprintUndo.size > 120) {
+                blueprintUndo.removeFirst()
+            }
+            blueprintRedo.clear()
+        }
+        updateSelectedProject {
+            it.copy(
+                blueprintDocument = updated.copy(projectId = it.id),
+                spaces = updated.toLegacySpaces(),
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+        persistProjects("Blueprint updated")
+    }
+
+    fun undoBlueprint() {
+        val project = selectedProject ?: return
+        if (blueprintUndo.isEmpty()) return
+        val previous = blueprintUndo.removeLast()
+        blueprintRedo.addLast(project.authoritativeBlueprint())
+        updateBlueprintDocument(previous, trackHistory = false)
+    }
+
+    fun redoBlueprint() {
+        val project = selectedProject ?: return
+        if (blueprintRedo.isEmpty()) return
+        val next = blueprintRedo.removeLast()
+        blueprintUndo.addLast(project.authoritativeBlueprint())
+        updateBlueprintDocument(next, trackHistory = false)
+    }
+
     fun selectTakeoffType(type: DesktopTakeoffType) {
         selectedTakeoffType = type
         errorMessage = null
@@ -263,12 +313,29 @@ class DesktopAppState(
         persistSettings("Settings reset")
     }
 
-    fun completeWelcomeOnboarding() {
-        if (!settings.firstRun) return
+    fun completeOnboardingRitual(projectName: String, type: DesktopTakeoffType) {
+        val normalizedName = projectName.trim()
+        if (!Validators.isValidProjectName(normalizedName)) {
+            errorMessage = "Project name must be 1-100 characters."
+            return
+        }
+        val template = when (type) {
+            DesktopTakeoffType.DRYWALL -> ProjectTemplate.BEDROOM
+            DesktopTakeoffType.CONCRETE -> ProjectTemplate.GARAGE
+            DesktopTakeoffType.GRAVEL_MULCH -> ProjectTemplate.YARD_BED
+            DesktopTakeoffType.PAINT -> ProjectTemplate.BEDROOM
+        }
+        val created = template.createProject(normalizedName)
+        projects = (projects + created).sortedByDescending { it.updatedAt }
+        selectedProjectId = created.id
+        selectedTakeoffType = type
         settings = settings.copy(
+            primaryTrade = type.toPrimaryTrade(),
             firstRun = false,
             hasCompletedTradeOnboarding = true
         )
+        activeTab = WorkspaceTab.BLUEPRINT
+        persistProjects("Created ${created.name}")
         persistSettings("Welcome complete")
     }
 
@@ -310,33 +377,44 @@ class DesktopAppState(
         )
     }
 
+    fun exportJson(): String {
+        val project = selectedProject ?: return ""
+        val result = currentTakeoffResult ?: return ""
+        return ExportFormatter.formatAsJson(
+            project = project,
+            settings = settings,
+            takeoffType = selectedTakeoffType.label,
+            result = result
+        )
+    }
+
     private fun calculateTakeoff(): TakeoffResult? {
         val project = selectedProject ?: return null
+        val blueprint = project.authoritativeBlueprint()
         return runCatching {
             when (selectedTakeoffType) {
                 DesktopTakeoffType.DRYWALL -> {
-                    val walls = project.spaces.filter { it.geometry is Geometry.Wall }
-                    TakeoffCalculator.drywallTakeoff(
-                        walls = walls,
+                    BlueprintTakeoffCalculator.drywallTakeoff(
+                        document = blueprint,
                         sheetAreaSqFt = drywallParams.sheetAreaSqFt,
                         wastePercent = drywallParams.wastePercent,
                         screwsPerSheet = drywallParams.screwsPerSheet,
                         mudGallonsPer100SqFt = drywallParams.mudGallonsPer100SqFt,
+                        includeCeilings = true,
                         costing = costingInputsFor(selectedTakeoffType)
                     )
                 }
                 DesktopTakeoffType.CONCRETE -> {
-                    val slabs = project.spaces.filter { it.geometry is Geometry.Slab }
-                    TakeoffCalculator.concreteTakeoff(
-                        slabSpaces = slabs,
+                    BlueprintTakeoffCalculator.concreteTakeoff(
+                        document = blueprint,
                         thicknessFeet = concreteParams.thicknessFeet,
                         wastePercent = concreteParams.wastePercent,
                         costing = costingInputsFor(selectedTakeoffType)
                     )
                 }
                 DesktopTakeoffType.GRAVEL_MULCH -> {
-                    TakeoffCalculator.gravelMulchTakeoff(
-                        spaces = project.spaces,
+                    BlueprintTakeoffCalculator.gravelMulchTakeoff(
+                        document = blueprint,
                         depthFeet = gravelParams.depthFeet,
                         densityTonsPerYard = gravelParams.densityTonsPerYard,
                         wastePercent = gravelParams.wastePercent,
@@ -344,11 +422,8 @@ class DesktopAppState(
                     )
                 }
                 DesktopTakeoffType.PAINT -> {
-                    val paintable = project.spaces.filter {
-                        it.geometry is Geometry.Wall || it.geometry is Geometry.Rect
-                    }
-                    TakeoffCalculator.paintTakeoff(
-                        spaces = paintable,
+                    BlueprintTakeoffCalculator.paintTakeoff(
+                        document = blueprint,
                         coverageSqFtPerGallon = paintParams.coverageSqFtPerGallon,
                         coats = paintParams.coats,
                         wastePercent = paintParams.wastePercent,
@@ -424,5 +499,14 @@ class DesktopAppState(
         }.onFailure {
             errorMessage = "Unable to save settings: ${it.message}"
         }
+    }
+}
+
+private fun DesktopTakeoffType.toPrimaryTrade(): PrimaryTrade {
+    return when (this) {
+        DesktopTakeoffType.DRYWALL -> PrimaryTrade.DRYWALL
+        DesktopTakeoffType.CONCRETE -> PrimaryTrade.CONCRETE
+        DesktopTakeoffType.GRAVEL_MULCH -> PrimaryTrade.GRAVEL_MULCH
+        DesktopTakeoffType.PAINT -> PrimaryTrade.PAINT
     }
 }

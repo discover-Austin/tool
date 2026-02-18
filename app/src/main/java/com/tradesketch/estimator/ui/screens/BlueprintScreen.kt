@@ -1,66 +1,100 @@
 package com.tradesketch.estimator.ui.screens
 
-import com.tradesketch.estimator.ui.components.PrimaryActionButton
-import com.tradesketch.estimator.ui.components.SecondaryActionButton
-
-import android.widget.Toast
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DoorFront
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Window
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.domain.calc.BlueprintSnapMath
+import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
+import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.BlueprintOpening
+import com.tradesketch.estimator.domain.model.BlueprintParams
 import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
-import com.tradesketch.estimator.domain.model.Geometry
-import com.tradesketch.estimator.domain.model.Project
-import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.Space
-import com.tradesketch.estimator.domain.model.SpaceTransform
-import com.tradesketch.estimator.domain.model.areaSqFt
-import com.tradesketch.estimator.domain.model.openingsAreaSqFt
-import com.tradesketch.estimator.ui.components.rememberAppHaptics
-import com.tradesketch.estimator.ui.viewmodel.ProjectDetailViewModel
-import com.tradesketch.estimator.utils.BlueprintExportManager
+import com.tradesketch.estimator.domain.model.Millimeters
+import com.tradesketch.estimator.domain.model.OpeningType
+import com.tradesketch.estimator.domain.model.PointMm
+import com.tradesketch.estimator.domain.model.WallSegment
+import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
+import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import java.util.UUID
-import kotlinx.coroutines.launch
 import kotlin.math.atan2
-import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.max
+import kotlin.math.roundToLong
+import kotlin.math.sin
+
+private data class OpeningPreset(
+    val name: String,
+    val type: OpeningType,
+    val widthMm: Long,
+    val heightMm: Long,
+    val sillMm: Long
+)
+
+private val doorPreset = OpeningPreset(
+    name = "Door 3'x7'",
+    type = OpeningType.DOOR,
+    widthMm = Millimeters.fromFeet(3.0).value,
+    heightMm = Millimeters.fromFeet(7.0).value,
+    sillMm = 0L
+)
+
+private val windowPreset = OpeningPreset(
+    name = "Window 4'x4'",
+    type = OpeningType.WINDOW,
+    widthMm = Millimeters.fromFeet(4.0).value,
+    heightMm = Millimeters.fromFeet(4.0).value,
+    sillMm = Millimeters.fromFeet(3.0).value
+)
 
 @Composable
 fun BlueprintScreen(
@@ -68,1245 +102,475 @@ fun BlueprintScreen(
     modifier: Modifier = Modifier,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
-    viewModel: ProjectDetailViewModel = hiltViewModel()
+    viewModel: BlueprintEditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val historyUiState by viewModel.historyUiState.collectAsState()
-    val haptics = rememberAppHaptics()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var showSpaceEditor by remember { mutableStateOf(false) }
-    var editingSpace by remember { mutableStateOf<Space?>(null) }
-    var showAddMethodDialog by remember { mutableStateOf(false) }
-    var showQuickRoomDialog by remember { mutableStateOf(false) }
-    var quickRoomDialogKey by remember { mutableIntStateOf(0) }
-    var layerFilter by rememberSaveable(projectId) { mutableStateOf(BlueprintLayerFilter.ALL) }
-    var snapStepFeet by rememberSaveable(projectId) { mutableDoubleStateOf(1.0) }
-    var fullScreenBlueprint by rememberSaveable(projectId) { mutableStateOf(true) }
-    var isExportingBlueprint by remember { mutableStateOf(false) }
 
-    LaunchedEffect(projectId) {
-        viewModel.setProjectId(projectId)
-        viewModel.recordTap("blueprint_screen_opened")
-    }
-    LaunchedEffect(fullScreenBlueprint, onFullscreenBlueprintChanged) {
-        onFullscreenBlueprintChanged(fullScreenBlueprint)
-    }
+    var tool by remember { mutableStateOf(BlueprintDraftTool.DRAW_WALL) }
+    var drawingStart by remember { mutableStateOf<PointMm?>(null) }
+    var drawingPreview by remember { mutableStateOf<PointMm?>(null) }
+    var chainOrigin by remember { mutableStateOf<PointMm?>(null) }
+    var chainWalls by remember { mutableStateOf(true) }
+    var detachedWalls by remember { mutableStateOf(false) }
+    var snapSettings by remember { mutableStateOf(BlueprintSnapSettings()) }
+    var scale by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    var lengthInputFeet by remember { mutableStateOf("") }
+    var angleInputDegrees by remember { mutableStateOf("") }
+    var showAddons by remember { mutableStateOf(true) }
+    var selectedPreset by remember { mutableStateOf<OpeningPreset?>(null) }
+    var customWidthFeet by remember { mutableStateOf("3.0") }
+    var customHeightFeet by remember { mutableStateOf("7.0") }
+    var customSillFeet by remember { mutableStateOf("0.0") }
 
-    Box(modifier = modifier) {
-        when {
-            uiState.isLoading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-
-            uiState.error != null -> {
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Text(
-                        text = uiState.error ?: "Unknown error",
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-
-            uiState.project != null -> {
-                val project = uiState.project!!
-                BlueprintContent(
-                    project = project,
-                    settings = uiState.settings,
-                    onRequestAddSpace = {
-                        viewModel.recordTap("blueprint_open_add_space")
-                        showAddMethodDialog = true
-                    },
-                    onDirectAddSpace = { viewModel.addSpace(it) },
-                    onQuickRoom = {
-                        haptics.confirm()
-                        viewModel.recordTap("blueprint_quick_room")
-                        showQuickRoomDialog = true
-                    },
-                    onQuickAddWall = {
-                        haptics.confirm()
-                        viewModel.recordTap("blueprint_quick_wall")
-                        val wallCount = project.spaces.count { it.geometry is Geometry.Wall } + 1
-                        viewModel.addSpace(
-                            Space(
-                                id = UUID.randomUUID().toString(),
-                                name = "Wall $wallCount",
-                                geometry = Geometry.Wall(
-                                    length = mmFromFeet(12.0),
-                                    height = mmFromFeet(9.0)
-                                )
-                            )
-                        )
-                    },
-                    onQuickAddSlab = {
-                        haptics.confirm()
-                        viewModel.recordTap("blueprint_quick_slab")
-                        val slabCount = project.spaces.count { it.geometry is Geometry.Slab } + 1
-                        viewModel.addSpace(
-                            Space(
-                                id = UUID.randomUUID().toString(),
-                                name = "Slab $slabCount",
-                                geometry = Geometry.Slab(
-                                    length = mmFromFeet(12.0),
-                                    width = mmFromFeet(10.0),
-                                    thickness = mmFromFeet(0.33)
-                                )
-                            )
-                        )
-                    },
-                    onQuickAddBed = {
-                        haptics.confirm()
-                        viewModel.recordTap("blueprint_quick_bed")
-                        val bedCount = project.spaces.count { space ->
-                            space.geometry !is Geometry.Wall &&
-                                space.geometry !is Geometry.Slab &&
-                                isLandscapeSpaceName(space.name)
-                        } + 1
-                        viewModel.addSpace(
-                            Space(
-                                id = UUID.randomUUID().toString(),
-                                name = "Gravel/Mulch Bed $bedCount",
-                                geometry = Geometry.Rect(
-                                    length = mmFromFeet(14.0),
-                                    width = mmFromFeet(6.0)
-                                )
-                            )
-                        )
-                    },
-                    onEditSpace = { space ->
-                        viewModel.recordTap("blueprint_edit_space")
-                        editingSpace = space
-                        showSpaceEditor = true
-                    },
-                    onDuplicateSpace = { viewModel.duplicateSpace(it) },
-                    onDeleteSpace = { viewModel.deleteSpace(it) },
-                    onUpdateSpaceTransform = { spaceId, transform ->
-                        viewModel.updateSpaceTransform(spaceId, transform)
-                    },
-                    onUpdateSpace = { space ->
-                        viewModel.updateSpace(space)
-                    },
-                    onAutoLayout = { viewModel.autoLayoutSpaces() },
-                    onFlattenElevations = { viewModel.flattenElevations() },
-                    onSnapToGrid = { stepFeet -> viewModel.snapLayoutToGrid(stepFeet) },
-                    onOptimizeLayout = { viewModel.optimizeBlueprintLayout(snapStepFeet) },
-                    onCenterLayout = { viewModel.centerLayoutAtOrigin() },
-                    onAlignNorth = { viewModel.alignLayoutToCardinal() },
-                    onExpandScopePainting = { viewModel.expandScopeWithPainting() },
-                    onUpdateSnapSettings = { snapSettings ->
-                        viewModel.updateBlueprintSnapSettings(snapSettings)
-                    },
-                    snapStepFeet = snapStepFeet,
-                    onSnapStepChange = { snapStepFeet = it },
-                    layerFilter = layerFilter,
-                    onLayerFilterChange = { layerFilter = it },
-                    fullScreenBlueprint = fullScreenBlueprint,
-                    onToggleFullScreenBlueprint = { fullScreenBlueprint = !fullScreenBlueprint },
-                    canUndo = historyUiState.canUndo,
-                    canRedo = historyUiState.canRedo,
-                    undoCount = historyUiState.undoCount,
-                    redoCount = historyUiState.redoCount,
-                    onUndo = { viewModel.undoBlueprintChange() },
-                    onRedo = { viewModel.redoBlueprintChange() },
-                    onDownloadBlueprint = {
-                        val exportSpaces = spacesForLayer(project.spaces, layerFilter)
-                        if (exportSpaces.isEmpty()) {
-                            Toast.makeText(context, "No spaces in this layer to export.", Toast.LENGTH_SHORT).show()
-                        } else if (!isExportingBlueprint) {
-                            isExportingBlueprint = true
-                            scope.launch {
-                                try {
-                                    val uri = BlueprintExportManager.saveBlueprintToDownloads(
-                                        context = context,
-                                        projectName = project.name,
-                                        spaces = exportSpaces
-                                    )
-                                    if (uri != null) {
-                                        haptics.confirm()
-                                        Toast.makeText(
-                                            context,
-                                            "Blueprint downloaded to TradeSketch folder.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(context, "Could not save blueprint.", Toast.LENGTH_SHORT).show()
-                                    }
-                                } finally {
-                                    isExportingBlueprint = false
-                                }
-                            }
-                        }
-                    },
-                    onDownloadBlueprintPdf = {
-                        val exportSpaces = spacesForLayer(project.spaces, layerFilter)
-                        if (exportSpaces.isEmpty()) {
-                            Toast.makeText(context, "No spaces in this layer to export.", Toast.LENGTH_SHORT).show()
-                        } else if (!isExportingBlueprint) {
-                            isExportingBlueprint = true
-                            scope.launch {
-                                try {
-                                    val uri = BlueprintExportManager.saveBlueprintPdfToDownloads(
-                                        context = context,
-                                        projectName = project.name,
-                                        spaces = exportSpaces
-                                    )
-                                    if (uri != null) {
-                                        haptics.confirm()
-                                        Toast.makeText(
-                                            context,
-                                            "Blueprint PDF downloaded to TradeSketch folder.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(context, "Could not save blueprint PDF.", Toast.LENGTH_SHORT).show()
-                                    }
-                                } finally {
-                                    isExportingBlueprint = false
-                                }
-                            }
-                        }
-                    },
-                    onShareBlueprint = {
-                        val exportSpaces = spacesForLayer(project.spaces, layerFilter)
-                        if (exportSpaces.isEmpty()) {
-                            Toast.makeText(context, "No spaces in this layer to share.", Toast.LENGTH_SHORT).show()
-                        } else if (!isExportingBlueprint) {
-                            isExportingBlueprint = true
-                            scope.launch {
-                                try {
-                                    val shareIntent = BlueprintExportManager.createBlueprintShareIntent(
-                                        context = context,
-                                        projectName = project.name,
-                                        spaces = exportSpaces
-                                    )
-                                    if (shareIntent != null) {
-                                        haptics.confirm()
-                                        context.startActivity(shareIntent)
-                                    } else {
-                                        Toast.makeText(context, "Could not prepare share image.", Toast.LENGTH_SHORT).show()
-                                    }
-                                } finally {
-                                    isExportingBlueprint = false
-                                }
-                            }
-                        }
-                    },
-                    onShareBlueprintPdf = {
-                        val exportSpaces = spacesForLayer(project.spaces, layerFilter)
-                        if (exportSpaces.isEmpty()) {
-                            Toast.makeText(context, "No spaces in this layer to share.", Toast.LENGTH_SHORT).show()
-                        } else if (!isExportingBlueprint) {
-                            isExportingBlueprint = true
-                            scope.launch {
-                                try {
-                                    val shareIntent = BlueprintExportManager.createBlueprintPdfShareIntent(
-                                        context = context,
-                                        projectName = project.name,
-                                        spaces = exportSpaces
-                                    )
-                                    if (shareIntent != null) {
-                                        haptics.confirm()
-                                        context.startActivity(shareIntent)
-                                    } else {
-                                        Toast.makeText(context, "Could not prepare blueprint PDF.", Toast.LENGTH_SHORT).show()
-                                    }
-                                } finally {
-                                    isExportingBlueprint = false
-                                }
-                            }
-                        }
-                    },
-                    isExportingBlueprint = isExportingBlueprint,
-                    onOpenTakeoff = {
-                        viewModel.recordTap("blueprint_open_takeoff")
-                        onOpenTakeoff()
-                    }
-                )
-            }
-        }
-    }
-
-    if (showAddMethodDialog) {
-        AddSpaceMethodDialog(
-            onDismiss = { showAddMethodDialog = false },
-            onQuickRoom = {
-                haptics.confirm()
-                showAddMethodDialog = false
-                showQuickRoomDialog = true
-            },
-            onCustomSpace = {
-                haptics.tap()
-                showAddMethodDialog = false
-                editingSpace = null
-                showSpaceEditor = true
-            }
-        )
-    }
-
-    if (showQuickRoomDialog) {
-        QuickRoomDialog(
-            dialogKey = quickRoomDialogKey,
-            suggestedRoomName = uiState.project?.let { project ->
-                nextSuggestedRoomName(project.spaces)
-            } ?: "Room 1",
-            onDismiss = { showQuickRoomDialog = false },
-            onSave = { spaces, continueToNextRoom ->
-                haptics.confirm()
-                viewModel.addSpaces(spaces)
-                if (continueToNextRoom) {
-                    quickRoomDialogKey += 1
-                } else {
-                    showQuickRoomDialog = false
-                }
-            }
-        )
-    }
-
-    if (showSpaceEditor && uiState.project != null) {
-        SpaceEditorDialog(
-            initialSpace = editingSpace,
-            onDismiss = { showSpaceEditor = false },
-            onSave = { space ->
-                haptics.confirm()
-                if (editingSpace == null) {
-                    viewModel.addSpace(space)
-                } else {
-                    viewModel.updateSpace(space)
-                }
-                showSpaceEditor = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun BlueprintContent(
-    project: Project,
-    settings: Settings,
-    onRequestAddSpace: () -> Unit,
-    onDirectAddSpace: (Space) -> Unit,
-    onQuickRoom: () -> Unit,
-    onQuickAddWall: () -> Unit,
-    onQuickAddSlab: () -> Unit,
-    onQuickAddBed: () -> Unit,
-    onEditSpace: (Space) -> Unit,
-    onDuplicateSpace: (String) -> Unit,
-    onDeleteSpace: (String) -> Unit,
-    onUpdateSpaceTransform: (String, SpaceTransform) -> Unit,
-    onUpdateSpace: (Space) -> Unit,
-    onAutoLayout: () -> Unit,
-    onFlattenElevations: () -> Unit,
-    onSnapToGrid: (Double) -> Unit,
-    onOptimizeLayout: () -> Unit,
-    onCenterLayout: () -> Unit,
-    onAlignNorth: () -> Unit,
-    onExpandScopePainting: () -> Unit,
-    onUpdateSnapSettings: (BlueprintSnapSettings) -> Unit,
-    snapStepFeet: Double,
-    onSnapStepChange: (Double) -> Unit,
-    layerFilter: BlueprintLayerFilter,
-    onLayerFilterChange: (BlueprintLayerFilter) -> Unit,
-    fullScreenBlueprint: Boolean,
-    onToggleFullScreenBlueprint: () -> Unit,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    undoCount: Int,
-    redoCount: Int,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onDownloadBlueprint: () -> Unit,
-    onDownloadBlueprintPdf: () -> Unit,
-    onShareBlueprint: () -> Unit,
-    onShareBlueprintPdf: () -> Unit,
-    isExportingBlueprint: Boolean,
-    onOpenTakeoff: () -> Unit
-) {
-    val measuredArea = project.spaces.sumOf { it.geometry.areaSqFt() }
-    val hasMeasuredArea = measuredArea > 0.0
-    val wallCount = project.spaces.count { it.geometry is Geometry.Wall }
-    val slabCount = project.spaces.count { it.geometry is Geometry.Slab }
-    val roomCount = project.spaces.size - wallCount - slabCount
-    val overlapCount = blueprintOverlapCount(project.spaces)
-    val unplacedCount = project.spaces.count { it.transform == SpaceTransform() }
-    val elevatedCount = project.spaces.count { abs(it.transform.yFeet) > 0.01 }
-    val spacesInCurrentLayer = spacesForLayer(project.spaces, layerFilter).size
-    val netArea = project.spaces.sumOf { (it.geometry.areaSqFt() - it.openingsAreaSqFt()).coerceAtLeast(0.0) }
-    val envelope = blueprintEnvelope(project.spaces)
-    val envelopeArea = envelope?.let {
-        ((it.maxX - it.minX) * (it.maxZ - it.minZ)).coerceAtLeast(0.0)
-    } ?: 0.0
-    val coverageDensity = if (envelopeArea > 0.0) {
-        ((measuredArea / envelopeArea) * 100.0).coerceIn(0.0, 100.0)
-    } else {
-        0.0
-    }
-    val longestSpan = envelope?.let {
-        max(it.maxX - it.minX, it.maxZ - it.minZ)
-    } ?: 0.0
-    val readiness = blueprintReadinessScore(
-        totalSpaces = project.spaces.size,
-        measuredArea = measuredArea,
-        overlapCount = overlapCount,
-        unplacedCount = unplacedCount,
-        elevatedCount = elevatedCount
-    )
-    if (fullScreenBlueprint) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            ModelBuilder3DPanel(
-                project = project,
-                onAddSpace = onRequestAddSpace,
-                onEditSpace = onEditSpace,
-                onDuplicateSpace = onDuplicateSpace,
-                onDeleteSpace = onDeleteSpace,
-                onAutoLayout = onAutoLayout,
-                onUpdateTransform = onUpdateSpaceTransform,
-                onUpdateSpace = onUpdateSpace,
-                immersiveMode = true,
-                blueprintMode = true,
-                calmModeEnabled = settings.calmModeEnabled,
-                workflowAidsEnabled = settings.workflowAidsEnabled,
-                preferredLayerFilter = layerFilter,
-                onQuickRoom = onQuickRoom,
-                onQuickAddWall = onQuickAddWall,
-                onQuickAddSlab = onQuickAddSlab,
-                onQuickAddBed = onQuickAddBed,
-                onBlueprintLayerFilterChange = onLayerFilterChange,
-                onUpdateSnapSettings = onUpdateSnapSettings,
-                onDrawWallSegment = { startX, startZ, endX, endZ ->
-                    val lengthFeet = hypot(endX - startX, endZ - startZ)
-                    if (lengthFeet < 1.0) return@ModelBuilder3DPanel
-                    val wallCount = project.spaces.count { it.geometry is Geometry.Wall } + 1
-                    val centerX = (startX + endX) / 2.0
-                    val centerZ = (startZ + endZ) / 2.0
-                    val yawDegrees = Math.toDegrees(atan2((endZ - startZ), (endX - startX)))
-                    val wall = Space(
-                        id = UUID.randomUUID().toString(),
-                        name = "Wall $wallCount",
-                        geometry = Geometry.Wall(
-                            length = mmFromFeet(lengthFeet),
-                            height = mmFromFeet(9.0)
-                        ),
-                        transform = SpaceTransform(
-                            xFeet = centerX,
-                            yFeet = 0.0,
-                            zFeet = centerZ,
-                            yawDegrees = yawDegrees
-                        )
-                    )
-                    onDirectAddSpace(wall)
-                },
-                onOptimizeLayout = onOptimizeLayout,
-                onCenterLayout = onCenterLayout,
-                onAlignNorth = onAlignNorth,
-                onUndoBlueprint = onUndo,
-                onRedoBlueprint = onRedo,
-                canUndoBlueprint = canUndo,
-                canRedoBlueprint = canRedo,
-                onDownloadBlueprintPng = onDownloadBlueprint,
-                onShareBlueprintPng = onShareBlueprint,
-                onDownloadBlueprintPdf = onDownloadBlueprintPdf,
-                onShareBlueprintPdf = onShareBlueprintPdf,
-                fullScreenBlueprint = true,
-                onToggleBlueprintFullscreen = onToggleFullScreenBlueprint,
-                modifier = Modifier.fillMaxSize()
-            )
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "Need quick controls?",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    SecondaryActionButton(onClick = onToggleFullScreenBlueprint) {
-                        Text("Open Control Panel")
-                    }
-                }
-            }
+    LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
+    if (uiState.isLoading || uiState.document == null) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
         return
     }
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        val isWideLayout = maxWidth >= 920.dp
-        val compactControls = maxWidth < 620.dp
-        val compactControlMaxHeight = this.maxHeight * 0.56f
 
-        if (isWideLayout) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(min = 340.dp, max = 440.dp)
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+    val doc = uiState.document!!
+    val wallArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(doc).values.sum()
+    val openingArea = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(doc).values.sum()
+    val netArea = (wallArea - openingArea).coerceAtLeast(0.0)
+    val wallLengthFeet = doc.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
+
+    Box(modifier = modifier.fillMaxSize().background(Color(0xFF0C1728))) {
+        BlueprintCanvas(
+            document = doc,
+            tool = tool,
+            snapSettings = snapSettings,
+            scale = scale,
+            pan = pan,
+            drawingStart = drawingStart,
+            drawingPreview = drawingPreview,
+            onPanScaleChange = { updatedPan, updatedScale ->
+                pan = updatedPan
+                scale = updatedScale.coerceIn(0.2f, 7.5f)
+            },
+            onLivePointerWorld = {
+                if (drawingStart != null && tool == BlueprintDraftTool.DRAW_WALL) {
+                    drawingPreview = it
+                }
+            },
+            onTapWorld = { tap ->
+                when (tool) {
+                    BlueprintDraftTool.DRAW_WALL -> {
+                        val snappedTap = BlueprintSnapMath.applySnapping(
+                            rawPoint = tap,
+                            drawingStart = drawingStart,
+                            settings = snapSettings,
+                            walls = doc.walls
                         )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = project.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        if (drawingStart == null) {
+                            val chained = if (chainWalls && !detachedWalls) doc.walls.lastOrNull()?.end else null
+                            drawingStart = chained ?: snappedTap
+                            drawingPreview = snappedTap
+                            if (chainOrigin == null) chainOrigin = drawingStart
+                        } else {
+                            val start = drawingStart ?: return@BlueprintCanvas
+                            var end = applyLengthAngleOverride(
+                                start = start,
+                                fallbackEnd = snappedTap,
+                                lengthInputFeet = lengthInputFeet,
+                                angleInputDegrees = angleInputDegrees
                             )
-                            Text(
-                                text = "Blueprint source of truth",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            if (snapSettings.closureEnabled) {
+                                chainOrigin?.let { origin ->
+                                    BlueprintSnapMath.roomClosureSnap(
+                                        candidateEnd = end,
+                                        roomStart = origin,
+                                        thresholdMm = Millimeters.fromFeet(snapSettings.thresholdFeet).value
+                                    )?.let { end = it }
+                                }
+                            }
+                            if (end != start) {
+                                viewModel.addWall(
+                                    WallSegment(
+                                        id = UUID.randomUUID().toString(),
+                                        start = start,
+                                        end = end,
+                                        height = Millimeters(doc.params.wallHeightMm),
+                                        thickness = Millimeters(doc.params.defaultWallThicknessMm),
+                                        tags = setOf("drawn")
+                                    )
+                                )
+                            }
+                            val closed = chainOrigin != null && end == chainOrigin
+                            if (chainWalls && !detachedWalls && !closed) {
+                                drawingStart = end
+                                drawingPreview = end
+                            } else {
+                                drawingStart = null
+                                drawingPreview = null
+                                chainOrigin = null
+                            }
+                        }
+                    }
+                    BlueprintDraftTool.PLACE_DOOR,
+                    BlueprintDraftTool.PLACE_WINDOW -> {
+                        val basePreset = selectedPreset ?: if (tool == BlueprintDraftTool.PLACE_DOOR) doorPreset else windowPreset
+                        val preset = basePreset.copy(
+                            widthMm = customWidthFeet.toDoubleOrNull()
+                                ?.let { Millimeters.fromFeet(it).value }
+                                ?.coerceAtLeast(1L)
+                                ?: basePreset.widthMm,
+                            heightMm = customHeightFeet.toDoubleOrNull()
+                                ?.let { Millimeters.fromFeet(it).value }
+                                ?.coerceAtLeast(1L)
+                                ?: basePreset.heightMm,
+                            sillMm = customSillFeet.toDoubleOrNull()
+                                ?.let { Millimeters.fromFeet(it).value }
+                                ?.coerceAtLeast(0L)
+                                ?: basePreset.sillMm
+                        )
+                        val nearestWall = doc.walls
+                            .map { it to BlueprintSnapMath.pointToWallDistanceMm(tap, it) }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= Millimeters.fromFeet(snapSettings.thresholdFeet * 2).value }
+                            ?.first
+                        if (nearestWall != null) {
+                            viewModel.addOpening(
+                                BlueprintSnapMath.placeOpeningAlongWall(
+                                    wall = nearestWall,
+                                    tapPointMm = tap,
+                                    widthMm = preset.widthMm,
+                                    heightMm = preset.heightMm,
+                                    sillMm = preset.sillMm,
+                                    type = preset.type,
+                                    openingId = UUID.randomUUID().toString()
+                                )
                             )
                         }
                     }
-                    BlueprintCommandCenterCard(
-                        project = project,
-                        calmModeEnabled = settings.calmModeEnabled,
-                        workflowAidsEnabled = settings.workflowAidsEnabled,
-                        readiness = readiness,
-                        wallCount = wallCount,
-                        slabCount = slabCount,
-                        roomCount = roomCount,
-                        measuredArea = measuredArea,
-                        netArea = netArea,
-                        envelopeArea = envelopeArea,
-                        coverageDensity = coverageDensity,
-                        longestSpan = longestSpan,
-                        overlapCount = overlapCount,
-                        unplacedCount = unplacedCount,
-                        elevatedCount = elevatedCount,
-                        hasMeasuredArea = hasMeasuredArea,
-                        layerFilter = layerFilter,
-                        onLayerFilterChange = onLayerFilterChange,
-                        snapStepFeet = snapStepFeet,
-                        onSnapStepChange = onSnapStepChange,
-                        onOptimizeLayout = onOptimizeLayout,
-                        onOpenTakeoff = onOpenTakeoff,
-                        onRequestAddSpace = onRequestAddSpace,
-                        onAutoLayout = onAutoLayout,
-                        onFlattenElevations = onFlattenElevations,
-                        onSnapToGrid = onSnapToGrid,
-                        onCenterLayout = onCenterLayout,
-                        onAlignNorth = onAlignNorth,
-                        onExpandScopePainting = onExpandScopePainting,
-                        canUndo = canUndo,
-                        canRedo = canRedo,
-                        undoCount = undoCount,
-                        redoCount = redoCount,
-                        onUndo = onUndo,
-                        onRedo = onRedo,
-                        onDownloadBlueprint = onDownloadBlueprint,
-                        onDownloadBlueprintPdf = onDownloadBlueprintPdf,
-                        onShareBlueprint = onShareBlueprint,
-                        onShareBlueprintPdf = onShareBlueprintPdf,
-                        spacesInCurrentLayer = spacesInCurrentLayer,
-                        isExportingBlueprint = isExportingBlueprint,
-                        onOpenFullscreenEditor = onToggleFullScreenBlueprint,
-                        compactControls = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        scrollContent = false
-                    )
+                    else -> Unit
                 }
-                ModelBuilder3DPanel(
-                    project = project,
-                    onAddSpace = onRequestAddSpace,
-                    onEditSpace = onEditSpace,
-                    onDuplicateSpace = onDuplicateSpace,
-                    onDeleteSpace = onDeleteSpace,
-                    onAutoLayout = onAutoLayout,
-                    onUpdateTransform = onUpdateSpaceTransform,
-                    onUpdateSpace = onUpdateSpace,
-                    immersiveMode = true,
-                    blueprintMode = true,
-                    calmModeEnabled = settings.calmModeEnabled,
-                    workflowAidsEnabled = settings.workflowAidsEnabled,
-                    preferredLayerFilter = layerFilter,
-                    onQuickRoom = onQuickRoom,
-                    onQuickAddWall = onQuickAddWall,
-                    onQuickAddSlab = onQuickAddSlab,
-                    onQuickAddBed = onQuickAddBed,
-                    onBlueprintLayerFilterChange = onLayerFilterChange,
-                    onUpdateSnapSettings = onUpdateSnapSettings,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                )
             }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = project.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Blueprint source of truth",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                BlueprintCommandCenterCard(
-                    project = project,
-                    calmModeEnabled = settings.calmModeEnabled,
-                    workflowAidsEnabled = settings.workflowAidsEnabled,
-                    readiness = readiness,
-                    wallCount = wallCount,
-                    slabCount = slabCount,
-                    roomCount = roomCount,
-                    measuredArea = measuredArea,
-                    netArea = netArea,
-                    envelopeArea = envelopeArea,
-                    coverageDensity = coverageDensity,
-                    longestSpan = longestSpan,
-                    overlapCount = overlapCount,
-                    unplacedCount = unplacedCount,
-                    elevatedCount = elevatedCount,
-                    hasMeasuredArea = hasMeasuredArea,
-                    layerFilter = layerFilter,
-                    onLayerFilterChange = onLayerFilterChange,
-                    snapStepFeet = snapStepFeet,
-                    onSnapStepChange = onSnapStepChange,
-                    onOptimizeLayout = onOptimizeLayout,
-                    onOpenTakeoff = onOpenTakeoff,
-                    onRequestAddSpace = onRequestAddSpace,
-                    onAutoLayout = onAutoLayout,
-                    onFlattenElevations = onFlattenElevations,
-                    onSnapToGrid = onSnapToGrid,
-                    onCenterLayout = onCenterLayout,
-                    onAlignNorth = onAlignNorth,
-                    onExpandScopePainting = onExpandScopePainting,
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    undoCount = undoCount,
-                    redoCount = redoCount,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onDownloadBlueprint = onDownloadBlueprint,
-                    onDownloadBlueprintPdf = onDownloadBlueprintPdf,
-                    onShareBlueprint = onShareBlueprint,
-                    onShareBlueprintPdf = onShareBlueprintPdf,
-                    spacesInCurrentLayer = spacesInCurrentLayer,
-                    isExportingBlueprint = isExportingBlueprint,
-                    onOpenFullscreenEditor = onToggleFullScreenBlueprint,
-                    compactControls = compactControls,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = compactControlMaxHeight),
-                    scrollContent = true
-                )
-                ModelBuilder3DPanel(
-                    project = project,
-                    onAddSpace = onRequestAddSpace,
-                    onEditSpace = onEditSpace,
-                    onDuplicateSpace = onDuplicateSpace,
-                    onDeleteSpace = onDeleteSpace,
-                    onAutoLayout = onAutoLayout,
-                    onUpdateTransform = onUpdateSpaceTransform,
-                    onUpdateSpace = onUpdateSpace,
-                    immersiveMode = true,
-                    blueprintMode = true,
-                    calmModeEnabled = settings.calmModeEnabled,
-                    workflowAidsEnabled = settings.workflowAidsEnabled,
-                    preferredLayerFilter = layerFilter,
-                    onQuickRoom = onQuickRoom,
-                    onQuickAddWall = onQuickAddWall,
-                    onQuickAddSlab = onQuickAddSlab,
-                    onQuickAddBed = onQuickAddBed,
-                    onBlueprintLayerFilterChange = onLayerFilterChange,
-                    onUpdateSnapSettings = onUpdateSnapSettings,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-private fun BlueprintCommandCenterCard(
-    project: Project,
-    calmModeEnabled: Boolean,
-    workflowAidsEnabled: Boolean,
-    readiness: Int,
-    wallCount: Int,
-    slabCount: Int,
-    roomCount: Int,
-    measuredArea: Double,
-    netArea: Double,
-    envelopeArea: Double,
-    coverageDensity: Double,
-    longestSpan: Double,
-    overlapCount: Int,
-    unplacedCount: Int,
-    elevatedCount: Int,
-    hasMeasuredArea: Boolean,
-    layerFilter: BlueprintLayerFilter,
-    onLayerFilterChange: (BlueprintLayerFilter) -> Unit,
-    snapStepFeet: Double,
-    onSnapStepChange: (Double) -> Unit,
-    onOptimizeLayout: () -> Unit,
-    onOpenTakeoff: () -> Unit,
-    onRequestAddSpace: () -> Unit,
-    onAutoLayout: () -> Unit,
-    onFlattenElevations: () -> Unit,
-    onSnapToGrid: (Double) -> Unit,
-    onCenterLayout: () -> Unit,
-    onAlignNorth: () -> Unit,
-    onExpandScopePainting: () -> Unit,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    undoCount: Int,
-    redoCount: Int,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onDownloadBlueprint: () -> Unit,
-    onDownloadBlueprintPdf: () -> Unit,
-    onShareBlueprint: () -> Unit,
-    onShareBlueprintPdf: () -> Unit,
-    spacesInCurrentLayer: Int,
-    isExportingBlueprint: Boolean,
-    onOpenFullscreenEditor: () -> Unit,
-    compactControls: Boolean,
-    modifier: Modifier = Modifier,
-    scrollContent: Boolean = false
-) {
-    val needsLayoutFix = overlapCount > 0 || unplacedCount > 0 || elevatedCount > 0
-    val hasLayerSpaces = spacesInCurrentLayer > 0
-    val readinessLabel = when {
-        readiness >= 90 -> "Ready for takeoff"
-        readiness >= 70 -> "Nearly ready"
-        readiness >= 45 -> "In progress"
-        else -> "Needs setup"
-    }
-    val layoutStatus = when {
-        project.spaces.isEmpty() -> "Add your first space (room, wall, or slab)."
-        needsLayoutFix -> "Run Auto Fix Layout to clean collisions and placements."
-        !hasMeasuredArea -> "Add measurable spaces before opening takeoff."
-        else -> "Layout is ready for takeoff and pricing."
-    }
-
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
+
+        LiveOverlay(
+            doc = doc,
+            wallLengthFeet = wallLengthFeet,
+            netArea = netArea,
+            modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
+        )
+
+        DrawingInputPanel(
+            drawingStart = drawingStart,
+            drawingPreview = drawingPreview,
+            lengthInputFeet = lengthInputFeet,
+            angleInputDegrees = angleInputDegrees,
+            onLengthChange = { lengthInputFeet = it },
+            onAngleChange = { angleInputDegrees = it },
+            onLock = {
+                val start = drawingStart ?: return@DrawingInputPanel
+                val preview = drawingPreview ?: return@DrawingInputPanel
+                drawingPreview = applyLengthAngleOverride(start, preview, lengthInputFeet, angleInputDegrees)
+            },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+        )
+
+        ParamsPanel(
+            params = doc.params,
+            snap = snapSettings,
+            onParamsChange = viewModel::updateParams,
+            onSnapChange = { snapSettings = it },
+            onScopeExpand = viewModel::expandScopeWithPaint,
+            onDetectRooms = viewModel::ensureRoomDetection,
+            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+        )
+
+        AddonsDrawer(
+            expanded = showAddons,
+            selectedPreset = selectedPreset,
+            onToggle = { showAddons = !showAddons },
+            onSelectPreset = {
+                selectedPreset = it
+                tool = if (it.type == OpeningType.DOOR) BlueprintDraftTool.PLACE_DOOR else BlueprintDraftTool.PLACE_WINDOW
+            },
+            customWidthFeet = customWidthFeet,
+            customHeightFeet = customHeightFeet,
+            customSillFeet = customSillFeet,
+            onCustomWidthChange = { customWidthFeet = it },
+            onCustomHeightChange = { customHeightFeet = it },
+            onCustomSillChange = { customSillFeet = it },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp)
+        )
+
+        Toolbar(
+            tool = tool,
+            canUndo = uiState.canUndo,
+            canRedo = uiState.canRedo,
+            chainWalls = chainWalls,
+            detachedWalls = detachedWalls,
+            onSelectTool = { tool = it; if (it != BlueprintDraftTool.DRAW_WALL) { drawingStart = null; drawingPreview = null; chainOrigin = null } },
+            onUndo = viewModel::undo,
+            onRedo = viewModel::redo,
+            onToggleChain = { chainWalls = !chainWalls },
+            onToggleDetached = { detachedWalls = !detachedWalls },
+            onOpenTakeoff = onOpenTakeoff,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)
+        )
+    }
+    onFullscreenBlueprintChanged(true)
+}
+
+@Composable
+private fun BlueprintCanvas(
+    document: BlueprintDocument,
+    tool: BlueprintDraftTool,
+    snapSettings: BlueprintSnapSettings,
+    scale: Float,
+    pan: Offset,
+    drawingStart: PointMm?,
+    drawingPreview: PointMm?,
+    onPanScaleChange: (Offset, Float) -> Unit,
+    onLivePointerWorld: (PointMm) -> Unit,
+    onTapWorld: (PointMm) -> Unit
+) {
+    val basePxPerMm = 0.065f
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
+    fun worldToScreen(p: PointMm): Offset {
+        val ppm = basePxPerMm * scale
+        return Offset(canvasSize.width / 2f + pan.x + (p.x * ppm), canvasSize.height / 2f + pan.y - (p.y * ppm))
+    }
+    fun screenToWorld(p: Offset): PointMm {
+        val ppm = basePxPerMm * scale
+        return PointMm(
+            ((p.x - canvasSize.width / 2f - pan.x) / ppm).roundToLong(),
+            (-(p.y - canvasSize.height / 2f - pan.y) / ppm).roundToLong()
+        )
+    }
+
+    Canvas(
+        modifier = Modifier.fillMaxSize()
+            .pointerInput(tool, scale, pan, drawingStart, snapSettings, document.walls) {
+                detectTransformGestures { _, panDelta, zoom, _ ->
+                    onPanScaleChange(pan + panDelta, scale * zoom)
+                }
+            }
+            .pointerInput(tool, scale, pan, drawingStart, snapSettings, document.walls) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        val change = event.changes.firstOrNull() ?: continue
+                        onLivePointerWorld(
+                            BlueprintSnapMath.applySnapping(
+                                rawPoint = screenToWorld(change.position),
+                                drawingStart = drawingStart,
+                                settings = snapSettings,
+                                walls = document.walls
+                            )
+                        )
+                        if (change.changedToUpIgnoreConsumed()) onTapWorld(screenToWorld(change.position))
+                    }
+                }
+            }
     ) {
-        val contentModifier = if (scrollContent) {
-            Modifier
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState())
-        } else {
-            Modifier.padding(12.dp)
+        canvasSize = size
+        drawLine(Color(0xFF2C5072), worldToScreen(PointMm(-70_000, 0)), worldToScreen(PointMm(70_000, 0)), strokeWidth = 1.4f)
+        drawLine(Color(0xFF2C5072), worldToScreen(PointMm(0, -70_000)), worldToScreen(PointMm(0, 70_000)), strokeWidth = 1.4f)
+        document.walls.forEach { wall ->
+            drawLine(Color(0xFFA2D6FF), worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = 3f, cap = StrokeCap.Round)
         }
-        Column(
-            modifier = contentModifier,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Blueprint Command Center",
-                style = MaterialTheme.typography.titleSmall
-            )
-            LinearProgressIndicator(
-                progress = { (readiness / 100f).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface
-            )
-            Text(
-                text = "Readiness $readiness/100 • $readinessLabel",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = layoutStatus,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                BlueprintMetric(label = "Walls", value = wallCount.toString(), modifier = Modifier.weight(1f))
-                BlueprintMetric(label = "Slabs", value = slabCount.toString(), modifier = Modifier.weight(1f))
-                BlueprintMetric(label = "Rooms", value = roomCount.toString(), modifier = Modifier.weight(1f))
-            }
-            Text(
-                text = "Area mapped: ${"%.1f".format(measuredArea)} sq ft • Net area: ${"%.1f".format(netArea)} sq ft",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Envelope: ${"%.1f".format(envelopeArea)} sq ft • Density ${coverageDensity.toInt()}% • Span ${"%.1f".format(longestSpan)} ft",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                BlueprintLayerFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = filter == layerFilter,
-                        onClick = { onLayerFilterChange(filter) },
-                        label = { Text(filter.label) }
-                    )
-                }
-            }
-            Text(
-                text = "Current layer: ${layerFilter.label} • $spacesInCurrentLayer visible space(s).",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(0.5, 1.0, 2.0).forEach { step ->
-                    FilterChip(
-                        selected = snapStepFeet == step,
-                        onClick = { onSnapStepChange(step) },
-                        label = { Text("${step}ft snap") }
-                    )
-                }
-            }
-
-            if (needsLayoutFix) {
-                Text(
-                    text = buildString {
-                        append("Layout warnings:")
-                        if (overlapCount > 0) append(" overlaps=$overlapCount")
-                        if (unplacedCount > 0) append(" unplaced=$unplacedCount")
-                        if (elevatedCount > 0) append(" elevated=$elevatedCount")
+        document.openings.forEach { opening ->
+            val wall = document.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
+            val center = pointOnWall(wall, opening.t)
+            val c = worldToScreen(center)
+            val w = opening.widthMm * (basePxPerMm * scale)
+            if (opening.type == OpeningType.DOOR) {
+                drawArc(Color(0xFFE7BE73), -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = 2f))
+            } else {
+                drawLine(Color(0xFFC5F5FF), Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = 3f)
+                drawPath(
+                    path = Path().apply {
+                        moveTo(c.x - w / 6f, c.y - 6f)
+                        lineTo(c.x + w / 6f, c.y + 6f)
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    color = Color(0xFFC5F5FF),
+                    style = Stroke(width = 2f)
                 )
             }
+        }
+        if (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) {
+            drawLine(Color(0xFFFFB46D), worldToScreen(drawingStart), worldToScreen(drawingPreview), strokeWidth = 3f, cap = StrokeCap.Round)
+        }
+    }
+}
 
-            if (compactControls) {
-                PrimaryActionButton(
-                    onClick = onOptimizeLayout,
-                    enabled = project.spaces.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (needsLayoutFix) "Auto Fix Layout" else "Optimize Layout")
-                }
-                SecondaryActionButton(
-                    onClick = onOpenTakeoff,
-                    enabled = hasMeasuredArea,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Continue to Takeoff")
-                }
-                SecondaryActionButton(
-                    onClick = onRequestAddSpace,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Add Space")
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PrimaryActionButton(
-                        onClick = onOptimizeLayout,
-                        enabled = project.spaces.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (needsLayoutFix) "Auto Fix Layout" else "Optimize Layout")
-                    }
-                    SecondaryActionButton(
-                        onClick = onOpenTakeoff,
-                        enabled = hasMeasuredArea,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Continue to Takeoff")
-                    }
-                }
-                SecondaryActionButton(
-                    onClick = onRequestAddSpace,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Add Space")
-                }
-            }
-            SecondaryActionButton(
-                onClick = onExpandScopePainting,
-                enabled = project.spaces.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Add Painting To Scope")
-            }
+@Composable private fun Toolbar(
+    tool: BlueprintDraftTool, canUndo: Boolean, canRedo: Boolean, chainWalls: Boolean, detachedWalls: Boolean,
+    onSelectTool: (BlueprintDraftTool) -> Unit, onUndo: () -> Unit, onRedo: () -> Unit, onToggleChain: () -> Unit,
+    onToggleDetached: () -> Unit, onOpenTakeoff: () -> Unit, modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
+        Row(modifier = Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            listOf(
+                BlueprintDraftTool.SELECT to "Select",
+                BlueprintDraftTool.DRAW_WALL to "Draw",
+                BlueprintDraftTool.PLACE_DOOR to "Door",
+                BlueprintDraftTool.PLACE_WINDOW to "Window",
+                BlueprintDraftTool.PAN to "Pan",
+                BlueprintDraftTool.MEASURE to "Measure"
+            ).forEach { (t, label) -> FilterChip(selected = tool == t, onClick = { onSelectTool(t) }, label = { Text(label) }) }
+            Spacer(Modifier.weight(1f))
+            FilterChip(selected = chainWalls, onClick = onToggleChain, label = { Text("Chain") })
+            FilterChip(selected = detachedWalls, onClick = onToggleDetached, label = { Text("Detached") })
+            IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.Filled.Undo, contentDescription = null) }
+            IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.Filled.Redo, contentDescription = null) }
+            Button(onClick = onOpenTakeoff) { Text("Materials") }
+        }
+    }
+}
 
-            if (compactControls) {
-                SecondaryActionButton(
-                    onClick = onAutoLayout,
-                    enabled = project.spaces.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Auto Arrange")
-                }
-                SecondaryActionButton(
-                    onClick = { onSnapToGrid(snapStepFeet) },
-                    enabled = project.spaces.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Snap ${snapStepFeet}ft")
-                }
-                SecondaryActionButton(
-                    onClick = onCenterLayout,
-                    enabled = project.spaces.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Center Layout")
-                }
-                SecondaryActionButton(
-                    onClick = onAlignNorth,
-                    enabled = project.spaces.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Align North")
-                }
-                SecondaryActionButton(
-                    onClick = onFlattenElevations,
-                    enabled = elevatedCount > 0,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Flatten Elevation")
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SecondaryActionButton(
-                        onClick = onAutoLayout,
-                        enabled = project.spaces.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Auto Arrange")
-                    }
-                    SecondaryActionButton(
-                        onClick = { onSnapToGrid(snapStepFeet) },
-                        enabled = project.spaces.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Snap ${snapStepFeet}ft")
-                    }
-                    SecondaryActionButton(
-                        onClick = onCenterLayout,
-                        enabled = project.spaces.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Center")
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SecondaryActionButton(
-                        onClick = onAlignNorth,
-                        enabled = project.spaces.isNotEmpty(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Align North")
-                    }
-                    SecondaryActionButton(
-                        onClick = onFlattenElevations,
-                        enabled = elevatedCount > 0,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Flatten Elevation")
-                    }
-                    SecondaryActionButton(
-                        onClick = onOpenFullscreenEditor,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Fullscreen")
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SecondaryActionButton(
-                    onClick = onUndo,
-                    enabled = canUndo && !isExportingBlueprint,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Undo ($undoCount)")
-                }
-                SecondaryActionButton(
-                    onClick = onRedo,
-                    enabled = canRedo && !isExportingBlueprint,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Redo ($redoCount)")
-                }
-            }
-
-            if (compactControls) {
-                SecondaryActionButton(
-                    onClick = onShareBlueprintPdf,
-                    enabled = hasLayerSpaces && !isExportingBlueprint,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (isExportingBlueprint) "Preparing..." else "Share Blueprint PDF")
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SecondaryActionButton(
-                        onClick = onDownloadBlueprint,
-                        enabled = hasLayerSpaces && !isExportingBlueprint,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isExportingBlueprint) "Preparing..." else "Download PNG")
-                    }
-                    SecondaryActionButton(
-                        onClick = onShareBlueprint,
-                        enabled = hasLayerSpaces && !isExportingBlueprint,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isExportingBlueprint) "Preparing..." else "Share PNG")
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SecondaryActionButton(
-                        onClick = onDownloadBlueprintPdf,
-                        enabled = hasLayerSpaces && !isExportingBlueprint,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isExportingBlueprint) "Preparing..." else "Download PDF")
-                    }
-                    SecondaryActionButton(
-                        onClick = onShareBlueprintPdf,
-                        enabled = hasLayerSpaces && !isExportingBlueprint,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isExportingBlueprint) "Preparing..." else "Share PDF")
-                    }
-                }
-            }
-            Text(
-                text = if (hasLayerSpaces) {
-                    "Current layer export includes $spacesInCurrentLayer space(s)."
-                } else {
-                    "No spaces available in the active layer for export."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (compactControls) {
-                SecondaryActionButton(
-                    onClick = onOpenFullscreenEditor,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Open Fullscreen Drafting")
-                }
+@Composable
+private fun DrawingInputPanel(
+    drawingStart: PointMm?, drawingPreview: PointMm?, lengthInputFeet: String, angleInputDegrees: String,
+    onLengthChange: (String) -> Unit, onAngleChange: (String) -> Unit, onLock: () -> Unit, modifier: Modifier = Modifier
+) {
+    if (drawingStart == null || drawingPreview == null) return
+    val lengthFt = Millimeters(BlueprintSnapMath.distanceMillimeters(drawingStart, drawingPreview)).toFeet()
+    val angle = Math.toDegrees(atan2((drawingPreview.y - drawingStart.y).toDouble(), (drawingPreview.x - drawingStart.x).toDouble()))
+    Card(modifier = modifier.widthIn(max = 620.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Live: ${"%.2f".format(lengthFt)} ft @ ${"%.1f".format(angle)}°", fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(lengthInputFeet, onLengthChange, label = { Text("Length (ft)") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(angleInputDegrees, onAngleChange, label = { Text("Angle (deg)") }, singleLine = true, modifier = Modifier.weight(1f))
+                Button(onClick = onLock) { Text("Lock") }
             }
         }
     }
 }
-private fun mmFromFeet(feet: Double) = com.tradesketch.estimator.domain.model.Millimeters.fromFeet(feet)
 
 @Composable
-private fun BlueprintMetric(
-    label: String,
-    value: String,
+private fun ParamsPanel(
+    params: BlueprintParams, snap: BlueprintSnapSettings, onParamsChange: (BlueprintParams) -> Unit,
+    onSnapChange: (BlueprintSnapSettings) -> Unit, onScopeExpand: () -> Unit, onDetectRooms: () -> Unit, modifier: Modifier = Modifier
+) {
+    var heightFt by remember(params.wallHeightMm) { mutableStateOf("%.2f".format(Millimeters(params.wallHeightMm).toFeet())) }
+    var coats by remember(params.paintCoats) { mutableStateOf(params.paintCoats.toString()) }
+    var waste by remember(params.wasteFactorPercent) { mutableStateOf(params.wasteFactorPercent.toString()) }
+    Card(modifier = modifier.width(300.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
+        Column(Modifier.padding(10.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Parameters", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(heightFt, { heightFt = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wallHeightMm = Millimeters.fromFeet(v).value)) } }, label = { Text("Wall height (ft)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(coats, { coats = it; it.toIntOrNull()?.let { v -> onParamsChange(params.copy(paintCoats = v.coerceAtLeast(1))) } }, label = { Text("Paint coats") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(waste, { waste = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wasteFactorPercent = v.coerceAtLeast(0.0))) } }, label = { Text("Waste (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Text("Snap toggles", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(snap.gridEnabled, { onSnapChange(snap.copy(gridEnabled = !snap.gridEnabled)) }, label = { Text("Grid") })
+                FilterChip(snap.angleEnabled, { onSnapChange(snap.copy(angleEnabled = !snap.angleEnabled)) }, label = { Text("Angle") })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(snap.endpointEnabled, { onSnapChange(snap.copy(endpointEnabled = !snap.endpointEnabled)) }, label = { Text("Endpoints") })
+                FilterChip(snap.midpointEnabled, { onSnapChange(snap.copy(midpointEnabled = !snap.midpointEnabled)) }, label = { Text("Midpoints") })
+            }
+            FilterChip(snap.closureEnabled, { onSnapChange(snap.copy(closureEnabled = !snap.closureEnabled)) }, label = { Text("Room closure") })
+            Button(onClick = onDetectRooms, modifier = Modifier.fillMaxWidth()) { Text("Detect Rooms") }
+            Button(onClick = onScopeExpand, modifier = Modifier.fillMaxWidth()) { Text("Scope Expansion: Paint") }
+        }
+    }
+}
+
+@Composable
+private fun AddonsDrawer(
+    expanded: Boolean,
+    selectedPreset: OpeningPreset?,
+    onToggle: () -> Unit,
+    onSelectPreset: (OpeningPreset) -> Unit,
+    customWidthFeet: String,
+    customHeightFeet: String,
+    customSillFeet: String,
+    onCustomWidthChange: (String) -> Unit,
+    onCustomHeightChange: (String) -> Unit,
+    onCustomSillChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-private fun blueprintReadinessScore(
-    totalSpaces: Int,
-    measuredArea: Double,
-    overlapCount: Int,
-    unplacedCount: Int,
-    elevatedCount: Int
-): Int {
-    var score = 0
-    if (totalSpaces > 0) score += 35
-    if (measuredArea > 0.0) score += 25
-    if (overlapCount == 0) score += 20
-    if (unplacedCount == 0) score += 12
-    if (elevatedCount == 0) score += 8
-    return score.coerceIn(0, 100)
-}
-
-private fun nextSuggestedRoomName(spaces: List<Space>): String {
-    val existingNames = spaces.map { it.name.trim() }.toSet()
-    var index = 1
-    while (true) {
-        val candidate = "Room $index"
-        if (candidate !in existingNames) return candidate
-        index += 1
-    }
-}
-
-private fun isLandscapeSpaceName(name: String): Boolean {
-    val normalized = name.trim().lowercase()
-    return normalized.contains("gravel") ||
-        normalized.contains("mulch") ||
-        normalized.contains("landscape") ||
-        normalized.contains("bed")
-}
-
-private data class BlueprintFootprint(
-    val minX: Double,
-    val maxX: Double,
-    val minZ: Double,
-    val maxZ: Double
-)
-
-private fun blueprintOverlapCount(spaces: List<Space>): Int {
-    if (spaces.size < 2) return 0
-    val boxes = spaces.map { space ->
-        space.id to footprintForSpace(space)
-    }
-    var count = 0
-    for (i in 0 until boxes.lastIndex) {
-        for (j in (i + 1) until boxes.size) {
-            val a = boxes[i].second
-            val b = boxes[j].second
-            if (a.maxX >= b.minX && b.maxX >= a.minX && a.maxZ >= b.minZ && b.maxZ >= a.minZ) {
-                count += 1
+    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f)) {
+        if (!expanded) {
+            Button(onClick = onToggle) { Text("Add-ons") }
+        } else {
+            Column(Modifier.width(220.dp).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Add-ons", style = MaterialTheme.typography.titleSmall)
+                    Button(onClick = onToggle) { Text("Hide") }
+                }
+                Text("Choose preset, set size, then tap or drag onto a wall.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AddonPresetCard(doorPreset, selectedPreset == doorPreset, { Icon(Icons.Filled.DoorFront, contentDescription = null) }) { onSelectPreset(doorPreset) }
+                AddonPresetCard(windowPreset, selectedPreset == windowPreset, { Icon(Icons.Filled.Window, contentDescription = null) }) { onSelectPreset(windowPreset) }
+                OutlinedTextField(
+                    value = customWidthFeet,
+                    onValueChange = onCustomWidthChange,
+                    label = { Text("Width ft") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = customHeightFeet,
+                    onValueChange = onCustomHeightChange,
+                    label = { Text("Height ft") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = customSillFeet,
+                    onValueChange = onCustomSillChange,
+                    label = { Text("Sill ft") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
-    return count
 }
 
-private fun spacesForLayer(
-    spaces: List<Space>,
-    layerFilter: BlueprintLayerFilter
-): List<Space> {
-    return when (layerFilter) {
-        BlueprintLayerFilter.ALL -> spaces
-        BlueprintLayerFilter.WALLS -> spaces.filter { it.geometry is Geometry.Wall }
-        BlueprintLayerFilter.SLABS -> spaces.filter { it.geometry is Geometry.Slab }
-        BlueprintLayerFilter.ROOMS -> spaces.filter {
-            it.geometry !is Geometry.Wall && it.geometry !is Geometry.Slab
+@Composable
+private fun AddonPresetCard(preset: OpeningPreset, selected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            icon()
+            Column {
+                Text(preset.name)
+                Text(if (preset.type == OpeningType.DOOR) "Door swing arc" else "Window break", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
-private fun blueprintEnvelope(spaces: List<Space>): BlueprintFootprint? {
-    if (spaces.isEmpty()) return null
-    var minX = Double.POSITIVE_INFINITY
-    var maxX = Double.NEGATIVE_INFINITY
-    var minZ = Double.POSITIVE_INFINITY
-    var maxZ = Double.NEGATIVE_INFINITY
-    spaces.forEach { space ->
-        val footprint = footprintForSpace(space)
-        minX = kotlin.math.min(minX, footprint.minX)
-        maxX = kotlin.math.max(maxX, footprint.maxX)
-        minZ = kotlin.math.min(minZ, footprint.minZ)
-        maxZ = kotlin.math.max(maxZ, footprint.maxZ)
+@Composable
+private fun LiveOverlay(doc: BlueprintDocument, wallLengthFeet: Double, netArea: Double, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Color(0xCC111F32))) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Live Quantities", color = Color(0xFFB7D8FF), fontWeight = FontWeight.SemiBold)
+            Text("Rooms: ${doc.rooms.size}", color = Color.White)
+            Text("Walls: ${doc.walls.size}", color = Color.White)
+            Text("Openings: ${doc.openings.size}", color = Color.White)
+            Text("Wall Length: ${"%.1f".format(wallLengthFeet)} ft", color = Color.White)
+            Text("Net Wall Area: ${"%.1f".format(netArea)} sq ft", color = Color.White)
+        }
     }
-    return BlueprintFootprint(minX = minX, maxX = maxX, minZ = minZ, maxZ = maxZ)
 }
 
-private fun footprintForSpace(space: Space): BlueprintFootprint {
-    val (width, depth) = footprintDimensions(space.geometry)
-    val halfW = width / 2.0
-    val halfD = depth / 2.0
-    return BlueprintFootprint(
-        minX = space.transform.xFeet - halfW,
-        maxX = space.transform.xFeet + halfW,
-        minZ = space.transform.zFeet - halfD,
-        maxZ = space.transform.zFeet + halfD
+private fun pointOnWall(wall: WallSegment, t: Double): PointMm {
+    val clamped = t.coerceIn(0.0, 1.0)
+    return PointMm(
+        x = wall.start.x + ((wall.end.x - wall.start.x) * clamped).roundToLong(),
+        y = wall.start.y + ((wall.end.y - wall.start.y) * clamped).roundToLong()
     )
 }
 
-private fun footprintDimensions(geometry: Geometry): Pair<Double, Double> {
-    return when (geometry) {
-        is Geometry.Rect -> geometry.length.toFeet() to geometry.width.toFeet()
-        is Geometry.Slab -> geometry.length.toFeet() to geometry.width.toFeet()
-        is Geometry.Wall -> geometry.length.toFeet() to 0.75
-        is Geometry.Circle -> {
-            val diameter = geometry.radius.toFeet() * 2.0
-            diameter to diameter
-        }
-        is Geometry.LShape -> {
-            val width = max(geometry.rectA.length.toFeet(), geometry.rectB.length.toFeet())
-            val depth = max(geometry.rectA.width.toFeet(), geometry.rectB.width.toFeet())
-            width to depth
-        }
-    }
+private fun applyLengthAngleOverride(start: PointMm, fallbackEnd: PointMm, lengthInputFeet: String, angleInputDegrees: String): PointMm {
+    val dx = (fallbackEnd.x - start.x).toDouble()
+    val dy = (fallbackEnd.y - start.y).toDouble()
+    val fallbackLength = hypot(dx, dy)
+    val fallbackAngle = Math.toDegrees(atan2(dy, dx))
+    val lengthMm = lengthInputFeet.toDoubleOrNull()?.let { Millimeters.fromFeet(it).value.toDouble() }?.coerceAtLeast(1.0) ?: fallbackLength
+    val angleDeg = angleInputDegrees.toDoubleOrNull() ?: fallbackAngle
+    val rad = Math.toRadians(angleDeg)
+    return PointMm(start.x + (cos(rad) * lengthMm).roundToLong(), start.y + (sin(rad) * lengthMm).roundToLong())
 }
 
+private fun PointerInputChange.changedToUpIgnoreConsumed(): Boolean = !pressed && previousPressed

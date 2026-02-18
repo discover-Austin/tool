@@ -146,16 +146,17 @@ class ExportViewModel @Inject constructor(
         }
 
         val label = selectedType.displayLabel
-        _uiState.update {
-            it.copy(
-                result = result,
-                takeoffType = label,
-                textContent = ExportFormatter.formatAsText(project, settings, label, result),
-                summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
-                csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
-                error = null
-            )
-        }
+                _uiState.update {
+                    it.copy(
+                        result = result,
+                        takeoffType = label,
+                        textContent = ExportFormatter.formatAsText(project, settings, label, result),
+                        summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
+                        csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
+                        jsonContent = ExportFormatter.formatAsJson(project, settings, label, result),
+                        error = null
+                    )
+                }
     }
 
     fun copySummaryToClipboard(): Boolean {
@@ -224,7 +225,8 @@ class ExportViewModel @Inject constructor(
                 projectName = project.name,
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
-                result = result
+                result = result,
+                blueprintSpaces = project.spaces
             )
         }.getOrElse { error ->
             _uiState.update { it.copy(error = "Could not prepare estimate PDF: ${error.message}") }
@@ -246,7 +248,8 @@ class ExportViewModel @Inject constructor(
                 projectName = project.name,
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
-                result = result
+                result = result,
+                blueprintSpaces = project.spaces
             )
         }.onSuccess { uri ->
             if (uri != null) {
@@ -258,9 +261,30 @@ class ExportViewModel @Inject constructor(
         }
     }
 
+    fun csvContent(): String = _uiState.value.csvContent
+
+    suspend fun buildEstimatePdfBytes(): ByteArray? {
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val result = state.result ?: return null
+        return runCatching {
+            EstimateExportManager.buildEstimatePdfBytes(
+                projectName = project.name,
+                takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
+                settings = state.settings,
+                result = result,
+                blueprintSpaces = project.spaces
+            )
+        }.onFailure { error ->
+            _uiState.update { it.copy(error = "Could not build PDF bytes: ${error.message}") }
+        }.getOrNull()
+    }
+
     fun clearLastAction() {
         _uiState.update { it.copy(lastAction = null, error = null) }
     }
+
+    fun jsonContent(): String = _uiState.value.jsonContent
 
     private fun copyToClipboard(
         label: String,
@@ -292,6 +316,7 @@ data class ExportUiState(
     val textContent: String = "",
     val summaryContent: String = "",
     val csvContent: String = "",
+    val jsonContent: String = "",
     val lastAction: String? = null,
     val error: String? = null,
     val isLoading: Boolean = true

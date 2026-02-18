@@ -4,6 +4,8 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
@@ -11,6 +13,55 @@ data class PointMm(
     val x: Long,
     val y: Long
 )
+
+enum class BlueprintUnits {
+    IMPERIAL,
+    METRIC
+}
+
+enum class BlueprintPrecision {
+    STANDARD,
+    PRO
+}
+
+data class BlueprintParams(
+    val wallHeightMm: Long = Millimeters.fromFeet(9.0).value,
+    val bedDepthMm: Long = Millimeters.fromInches(4.0).value,
+    val paintCoats: Int = 2,
+    val drywallSheetSqFt: Double = 32.0,
+    val wasteFactorPercent: Double = 10.0,
+    val concreteThicknessMm: Long = Millimeters.fromFeet(0.33).value,
+    val defaultWallThicknessMm: Long = Millimeters.fromInches(4.5).value
+)
+
+data class BlueprintUndoStackMeta(
+    val undoDepth: Int = 0,
+    val redoDepth: Int = 0,
+    val revision: Long = 0L
+)
+
+data class BlueprintOpening(
+    val id: String,
+    val wallId: String,
+    val t: Double,
+    val widthMm: Long,
+    val heightMm: Long,
+    val sillMm: Long,
+    val type: OpeningType = OpeningType.WINDOW,
+    val tags: Set<String> = emptySet()
+) {
+    val openingAreaSqFt: Double
+        get() = areaSqFt(Millimeters(widthMm), Millimeters(heightMm))
+
+    fun normalized(): BlueprintOpening {
+        return copy(
+            t = t.coerceIn(0.0, 1.0),
+            widthMm = widthMm.coerceAtLeast(1L),
+            heightMm = heightMm.coerceAtLeast(1L),
+            sillMm = sillMm.coerceAtLeast(0L)
+        )
+    }
+}
 
 enum class WallType {
     INTERIOR,
@@ -25,8 +76,18 @@ data class WallSegment(
     val end: PointMm,
     val thickness: Millimeters = Millimeters.fromInches(4.5),
     val height: Millimeters = Millimeters.fromFeet(9.0),
+    val tags: Set<String> = emptySet(),
     val type: WallType = WallType.INTERIOR
 ) {
+    val startMm: PointMm
+        get() = start
+    val endMm: PointMm
+        get() = end
+    val thicknessMm: Long
+        get() = thickness.value
+    val heightMm: Long
+        get() = height.value
+
     fun lengthMillimeters(): Long {
         return hypot(
             (end.x - start.x).toDouble(),
@@ -44,7 +105,20 @@ data class WallSegment(
             )
         )
     }
+
+    fun midpoint(): PointMm {
+        return PointMm(
+            x = ((start.x + end.x) / 2.0).roundToLong(),
+            y = ((start.y + end.y) / 2.0).roundToLong()
+        )
+    }
 }
+
+data class RoomOverrides(
+    val wallHeightMm: Long? = null,
+    val paintCoats: Int? = null,
+    val wasteFactorPercent: Double? = null
+)
 
 data class CeilingSpec(
     val enabled: Boolean = true,
@@ -53,11 +127,13 @@ data class CeilingSpec(
 
 data class Room(
     val id: String,
-    val name: String,
-    val polygon: List<PointMm>,
+    val name: String = "Room",
+    val polygon: List<PointMm> = emptyList(),
     val wallSegmentIds: List<String> = emptyList(),
     val tags: Set<String> = emptySet(),
-    val ceiling: CeilingSpec = CeilingSpec()
+    val ceiling: CeilingSpec = CeilingSpec(),
+    val overrides: RoomOverrides = RoomOverrides(),
+    val wallLoopRef: List<String> = wallSegmentIds
 ) {
     fun areaSquareMillimeters(): Long {
         if (polygon.size < 3) return 0L
@@ -95,6 +171,92 @@ data class Room(
     fun wallSurfaceAreaSqFt(openingAreaSqFt: Double = 0.0): Double {
         val gross = perimeterFeet() * ceiling.height.toFeet()
         return (gross - openingAreaSqFt).coerceAtLeast(0.0)
+    }
+}
+
+data class BlueprintDocument(
+    val projectId: String,
+    val units: BlueprintUnits = BlueprintUnits.IMPERIAL,
+    val precision: BlueprintPrecision = BlueprintPrecision.PRO,
+    val params: BlueprintParams = BlueprintParams(),
+    val walls: List<WallSegment> = emptyList(),
+    val rooms: List<Room> = emptyList(),
+    val openings: List<BlueprintOpening> = emptyList(),
+    val undoStackMeta: BlueprintUndoStackMeta = BlueprintUndoStackMeta()
+) {
+    companion object {
+        fun empty(projectId: String): BlueprintDocument {
+            return BlueprintDocument(projectId = projectId)
+        }
+
+        fun fromLegacySpaces(
+            projectId: String,
+            spaces: List<Space>,
+            params: BlueprintParams = BlueprintParams()
+        ): BlueprintDocument {
+            val walls = spaces.mapNotNull { it.toWallSegmentOrNull() }
+            val roomSpaces = spaces.filter { it.geometry is Geometry.Rect || it.geometry is Geometry.LShape }
+            val rooms = roomSpaces.mapIndexed { index, space ->
+                Room(
+                    id = "room-${index + 1}",
+                    name = space.name,
+                    polygon = spacePolygon(space),
+                    tags = space.tags
+                )
+            }
+            val openings = spaces.flatMap { space ->
+                space.openings.mapIndexed { index, opening ->
+                    BlueprintOpening(
+                        id = opening.id.ifBlank { "${space.id}-opening-${index + 1}" },
+                        wallId = space.id,
+                        t = opening.wallPositionT,
+                        widthMm = opening.width.value,
+                        heightMm = opening.height.value,
+                        sillMm = opening.sillHeight.value,
+                        type = opening.type
+                    ).normalized()
+                }
+            }
+            return BlueprintDocument(
+                projectId = projectId,
+                params = params,
+                walls = walls,
+                rooms = rooms,
+                openings = openings
+            )
+        }
+
+        private fun spacePolygon(space: Space): List<PointMm> {
+            val geometry = space.geometry as? Geometry.Rect ?: return emptyList()
+            val centerX = Millimeters.fromFeet(space.transform.xFeet).value
+            val centerY = Millimeters.fromFeet(space.transform.zFeet).value
+            val halfLength = geometry.length.value / 2
+            val halfWidth = geometry.width.value / 2
+            return listOf(
+                PointMm(centerX - halfLength, centerY - halfWidth),
+                PointMm(centerX + halfLength, centerY - halfWidth),
+                PointMm(centerX + halfLength, centerY + halfWidth),
+                PointMm(centerX - halfLength, centerY + halfWidth)
+            )
+        }
+    }
+
+    fun wallById(id: String): WallSegment? = walls.firstOrNull { it.id == id }
+
+    fun openingAreaByWallId(): Map<String, Double> {
+        return openings.groupBy { it.wallId }
+            .mapValues { (_, entries) -> entries.sumOf { it.openingAreaSqFt } }
+    }
+
+    fun withRoomsDetected(detectedRooms: List<Room>): BlueprintDocument {
+        return copy(rooms = detectedRooms)
+    }
+
+    fun addWall(wall: WallSegment): BlueprintDocument {
+        return copy(
+            walls = walls + wall,
+            undoStackMeta = undoStackMeta.copy(revision = undoStackMeta.revision + 1)
+        )
     }
 }
 
@@ -145,10 +307,102 @@ fun Space.toWallSegmentOrNull(): WallSegment? {
         id = id,
         start = start,
         end = end,
-        height = wall.height
+        height = wall.height,
+        tags = tags
     )
 }
 
 fun Project.wallSegments(): List<WallSegment> {
     return spaces.mapNotNull { it.toWallSegmentOrNull() }
+}
+
+fun Project.authoritativeBlueprint(): BlueprintDocument {
+    val current = blueprintDocument
+    if (current.projectId == id) {
+        return current
+    }
+    if (current.walls.isNotEmpty() || current.rooms.isNotEmpty() || current.openings.isNotEmpty()) {
+        return current.copy(projectId = id)
+    }
+    return BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces)
+}
+
+fun BlueprintDocument.toLegacySpaces(): List<Space> {
+    val roomSpaces = rooms.map { room ->
+        val polygon = room.polygon
+        val minX = polygon.minOfOrNull { it.x } ?: 0L
+        val maxX = polygon.maxOfOrNull { it.x } ?: 0L
+        val minY = polygon.minOfOrNull { it.y } ?: 0L
+        val maxY = polygon.maxOfOrNull { it.y } ?: 0L
+        val lengthMm = (maxX - minX).coerceAtLeast(1L)
+        val widthMm = (maxY - minY).coerceAtLeast(1L)
+        Space(
+            id = room.id,
+            name = room.name,
+            geometry = Geometry.Rect(
+                length = Millimeters(lengthMm),
+                width = Millimeters(widthMm)
+            ),
+            tags = room.tags,
+            transform = SpaceTransform(
+                xFeet = Millimeters((minX + maxX) / 2).toFeet(),
+                zFeet = Millimeters((minY + maxY) / 2).toFeet()
+            )
+        )
+    }
+
+    val openingsByWall = openings.groupBy { it.wallId }
+    val wallSpaces = walls.map { wall ->
+        val openingModels = openingsByWall[wall.id].orEmpty().map { opening ->
+            Opening(
+                width = Millimeters(opening.widthMm),
+                height = Millimeters(opening.heightMm),
+                count = 1,
+                type = opening.type,
+                wallPositionT = opening.t,
+                sillHeight = Millimeters(opening.sillMm),
+                id = opening.id
+            )
+        }
+        val centerX = ((wall.start.x + wall.end.x) / 2.0).roundToLong()
+        val centerY = ((wall.start.y + wall.end.y) / 2.0).roundToLong()
+        val yaw = Math.toDegrees(
+            atan2(
+                (wall.end.y - wall.start.y).toDouble(),
+                (wall.end.x - wall.start.x).toDouble()
+            )
+        )
+        Space(
+            id = wall.id,
+            name = "Wall",
+            geometry = Geometry.Wall(
+                length = Millimeters(wall.lengthMillimeters().coerceAtLeast(1L)),
+                height = wall.height
+            ),
+            tags = wall.tags,
+            openings = openingModels,
+            transform = SpaceTransform(
+                xFeet = Millimeters(centerX).toFeet(),
+                zFeet = Millimeters(centerY).toFeet(),
+                yawDegrees = yaw
+            )
+        )
+    }
+
+    return wallSpaces + roomSpaces
+}
+
+fun List<PointMm>.boundsOrNull(): Pair<PointMm, PointMm>? {
+    if (isEmpty()) return null
+    var minX = Long.MAX_VALUE
+    var minY = Long.MAX_VALUE
+    var maxX = Long.MIN_VALUE
+    var maxY = Long.MIN_VALUE
+    forEach { point ->
+        minX = min(minX, point.x)
+        minY = min(minY, point.y)
+        maxX = max(maxX, point.x)
+        maxY = max(maxY, point.y)
+    }
+    return PointMm(minX, minY) to PointMm(maxX, maxY)
 }

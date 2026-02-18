@@ -9,7 +9,8 @@ data class Project(
     val spaces: List<Space> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val takeoffSession: ProjectTakeoffSession = ProjectTakeoffSession()
+    val takeoffSession: ProjectTakeoffSession = ProjectTakeoffSession(),
+    val blueprintDocument: BlueprintDocument = BlueprintDocument.empty(projectId = id)
 )
 
 /**
@@ -21,7 +22,7 @@ enum class ProjectTemplate {
     DRIVEWAY,
     YARD_BED,
     BLANK;
-    
+
     fun createProject(name: String = this.displayName()): Project {
         val spaces = when (this) {
             BEDROOM -> listOf(
@@ -114,14 +115,16 @@ enum class ProjectTemplate {
             )
             BLANK -> emptyList()
         }
-        
+
+        val id = java.util.UUID.randomUUID().toString()
         return Project(
-            id = java.util.UUID.randomUUID().toString(),
+            id = id,
             name = name,
-            spaces = spaces
+            spaces = spaces,
+            blueprintDocument = BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces)
         )
     }
-    
+
     fun displayName(): String = when (this) {
         BEDROOM -> "Bedroom"
         GARAGE -> "Garage"
@@ -129,7 +132,7 @@ enum class ProjectTemplate {
         YARD_BED -> "Yard bed"
         BLANK -> "Blank project"
     }
-    
+
     fun description(): String = when (this) {
         BEDROOM -> "4 walls + ceiling, with door and windows"
         GARAGE -> "20'×20' concrete slab, 4\" thick"

@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import kotlinx.coroutines.Dispatchers
@@ -25,19 +26,37 @@ import java.util.Date
 import java.util.Locale
 
 object EstimateExportManager {
+    fun buildEstimatePdfBytes(
+        projectName: String,
+        takeoffType: String,
+        settings: Settings,
+        result: TakeoffResult,
+        blueprintSpaces: List<Space> = emptyList()
+    ): ByteArray {
+        return renderEstimatePdfBytes(
+            projectName = projectName,
+            takeoffType = takeoffType,
+            settings = settings,
+            result = result,
+            blueprintSpaces = blueprintSpaces
+        )
+    }
+
     suspend fun saveEstimatePdfToDownloads(
         context: Context,
         projectName: String,
         takeoffType: String,
         settings: Settings,
-        result: TakeoffResult
+        result: TakeoffResult,
+        blueprintSpaces: List<Space> = emptyList()
     ): Uri? = withContext(Dispatchers.IO) {
         val fileName = buildFileName(projectName = projectName, extension = "pdf")
         val pdfBytes = renderEstimatePdfBytes(
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
-            result = result
+            result = result,
+            blueprintSpaces = blueprintSpaces
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             saveBytesToPublicDownloads(
@@ -60,7 +79,8 @@ object EstimateExportManager {
         projectName: String,
         takeoffType: String,
         settings: Settings,
-        result: TakeoffResult
+        result: TakeoffResult,
+        blueprintSpaces: List<Space> = emptyList()
     ): Intent? = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "estimate-share").apply { mkdirs() }
         val shareFile = File(cacheDir, buildFileName(projectName = projectName, extension = "pdf"))
@@ -68,7 +88,8 @@ object EstimateExportManager {
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
-            result = result
+            result = result,
+            blueprintSpaces = blueprintSpaces
         )
         FileOutputStream(shareFile).use { output ->
             output.write(pdfBytes)
@@ -94,7 +115,8 @@ object EstimateExportManager {
         projectName: String,
         takeoffType: String,
         settings: Settings,
-        result: TakeoffResult
+        result: TakeoffResult,
+        blueprintSpaces: List<Space> = emptyList()
     ): ByteArray {
         val document = PdfDocument()
         val pageWidth = 1240
@@ -189,6 +211,27 @@ object EstimateExportManager {
         y += 28f
         canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
         y += 28f
+
+        if (blueprintSpaces.isNotEmpty()) {
+            ensureSpace(340f)
+            canvas.drawText("Blueprint Snapshot", margin, y, headingPaint)
+            y += 20f
+            val bitmap = BlueprintExportManager.renderBlueprintBitmap(
+                projectName = projectName,
+                spaces = blueprintSpaces,
+                widthPx = 1200,
+                heightPx = 900
+            )
+            val targetLeft = margin
+            val targetTop = y
+            val targetRight = pageWidth - margin
+            val targetBottom = y + 300f
+            val targetRect = android.graphics.RectF(targetLeft, targetTop, targetRight, targetBottom)
+            canvas.drawBitmap(bitmap, null, targetRect, null)
+            y = targetBottom + 24f
+            canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
+            y += 24f
+        }
 
         ensureSpace(52f)
         canvas.drawText("Line Items", margin, y, headingPaint)

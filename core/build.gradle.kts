@@ -8,4 +8,5 @@ kotlin {
 
 dependencies {
     // Pure Kotlin shared logic module.
+    testImplementation(kotlin("test"))
 }

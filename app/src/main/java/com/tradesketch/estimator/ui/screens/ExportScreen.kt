@@ -3,9 +3,10 @@ package com.tradesketch.estimator.ui.screens
 import com.tradesketch.estimator.ui.components.PrimaryActionButton
 import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
-import com.tradesketch.estimator.ui.components.DangerActionButton
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +52,9 @@ import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.utils.Formatters
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -69,6 +73,51 @@ fun ExportScreen(
     }
     var isPreparingEstimatePdf by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(false)
+    }
+    val csvSafLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(viewModel.csvContent().toByteArray())
+            }
+        }.onSuccess {
+            Toast.makeText(context, "CSV exported.", Toast.LENGTH_SHORT).show()
+        }.onFailure {
+            Toast.makeText(context, "Could not export CSV.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val jsonSafLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(viewModel.jsonContent().toByteArray())
+            }
+        }.onSuccess {
+            Toast.makeText(context, "JSON exported.", Toast.LENGTH_SHORT).show()
+        }.onFailure {
+            Toast.makeText(context, "Could not export JSON.", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val pdfSafLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val bytes = viewModel.buildEstimatePdfBytes() ?: return@launch
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(bytes)
+                }
+            }.onSuccess {
+                Toast.makeText(context, "PDF exported.", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Could not export PDF.", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     LaunchedEffect(projectId) {
@@ -287,6 +336,39 @@ fun ExportScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Estimate PDF")
                     }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            csvSafLauncher.launch(buildSafFileName(name, "quantities", "csv"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save CSV (SAF)")
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            jsonSafLauncher.launch(buildSafFileName(name, "traceability", "json"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save JSON (SAF)")
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            pdfSafLauncher.launch(buildSafFileName(name, "estimate", "pdf"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save PDF (SAF)")
+                    }
                 }
             }
         } ?: Card {
@@ -345,6 +427,18 @@ fun ExportScreen(
             }
         }
     }
+}
+
+private fun buildSafFileName(projectName: String, suffix: String, extension: String): String {
+    val cleanName = projectName
+        .trim()
+        .ifBlank { "project" }
+        .replace(Regex("[^A-Za-z0-9_-]"), "_")
+        .replace(Regex("_+"), "_")
+        .take(40)
+        .ifBlank { "project" }
+    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+    return "${cleanName}_${suffix}_$stamp.$extension"
 }
 
 
