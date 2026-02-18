@@ -17,13 +17,29 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Architecture
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,14 +48,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,23 +89,34 @@ fun TradeSketchDesktopApp() {
     var showSpaceEditor by remember { mutableStateOf(false) }
     var editingSpace by remember { mutableStateOf<Space?>(null) }
     var exportViewMode by remember { mutableStateOf(ExportViewMode.SUMMARY) }
+    var showWelcomeDetail by remember { mutableStateOf(false) }
 
     MaterialTheme {
-        Scaffold { padding ->
+        if (state.settings.firstRun) {
+            DesktopWelcomeScreen(
+                showDetail = showWelcomeDetail,
+                onToggleDetail = { showWelcomeDetail = it },
+                onBegin = {
+                    state.completeWelcomeOnboarding()
+                    showWelcomeDetail = false
+                    state.activeTab = WorkspaceTab.PROJECTS
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(14.dp)
+                    .padding(12.dp)
             ) {
-                ProjectsSidebar(
-                    state = state,
-                    modifier = Modifier
-                        .width(300.dp)
-                        .fillMaxHeight()
+                DesktopWorkspaceRail(
+                    activeTab = state.activeTab,
+                    onSelectTab = { state.activeTab = it },
+                    modifier = Modifier.fillMaxHeight()
                 )
-                Spacer(modifier = Modifier.width(14.dp))
-
+                Spacer(modifier = Modifier.width(10.dp))
+                VerticalDivider()
+                Spacer(modifier = Modifier.width(10.dp))
                 Card(
                     modifier = Modifier
                         .weight(1f)
@@ -97,18 +124,12 @@ fun TradeSketchDesktopApp() {
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         WorkspaceHeader(state = state)
-                        TabRow(selectedTabIndex = state.activeTab.ordinal) {
-                            WorkspaceTab.entries.forEach { tab ->
-                                Tab(
-                                    selected = state.activeTab == tab,
-                                    onClick = { state.activeTab = tab },
-                                    text = { Text(tab.label) }
-                                )
-                            }
-                        }
-
                         when (state.activeTab) {
-                            WorkspaceTab.MODEL -> ModelTab(
+                            WorkspaceTab.PROJECTS -> ProjectsSidebar(
+                                state = state,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            WorkspaceTab.BLUEPRINT -> ModelTab(
                                 state = state,
                                 onAddSpace = {
                                     editingSpace = null
@@ -119,7 +140,30 @@ fun TradeSketchDesktopApp() {
                                     showSpaceEditor = true
                                 }
                             )
-                            WorkspaceTab.TAKEOFF -> TakeoffTab(state = state)
+                            WorkspaceTab.MATERIALS -> TakeoffTab(state = state)
+                            WorkspaceTab.QUANTITIES -> TakeoffTab(state = state)
+                            WorkspaceTab.ADDONS -> ModelTab(
+                                state = state,
+                                onAddSpace = {
+                                    editingSpace = null
+                                    showSpaceEditor = true
+                                },
+                                onEditSpace = {
+                                    editingSpace = it
+                                    showSpaceEditor = true
+                                }
+                            )
+                            WorkspaceTab.REVIEW -> ModelTab(
+                                state = state,
+                                onAddSpace = {
+                                    editingSpace = null
+                                    showSpaceEditor = true
+                                },
+                                onEditSpace = {
+                                    editingSpace = it
+                                    showSpaceEditor = true
+                                }
+                            )
                             WorkspaceTab.EXPORT -> ExportTab(
                                 state = state,
                                 exportViewMode = exportViewMode,
@@ -146,6 +190,116 @@ fun TradeSketchDesktopApp() {
                 editingSpace = null
             }
         )
+    }
+}
+
+@Composable
+private fun DesktopWelcomeScreen(
+    showDetail: Boolean,
+    onToggleDetail: (Boolean) -> Unit,
+    onBegin: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedContent(
+            targetState = showDetail,
+            transitionSpec = {
+                slideInHorizontally { fullWidth -> fullWidth / 4 } + fadeIn() togetherWith
+                    slideOutHorizontally { fullWidth -> -fullWidth / 4 } + fadeOut()
+            },
+            label = "desktop_welcome"
+        ) { detailVisible ->
+            if (!detailVisible) {
+                Card(
+                    modifier = Modifier.width(520.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Architecture,
+                            contentDescription = null
+                        )
+                        Text(
+                            text = "TradeSketch Desktop",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            text = "Blueprint-driven estimating for walls, slabs, rooms, openings, and exports.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Button(onClick = { onToggleDetail(true) }) {
+                            Text("Begin")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                        }
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier.width(620.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Welcome",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            text = "Start with project naming, choose what you are estimating, then draft geometry that drives quantities.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { onToggleDetail(false) }) {
+                                Text("Back")
+                            }
+                            Button(onClick = onBegin) {
+                                Text("Open Workspace")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DesktopWorkspaceRail(
+    activeTab: WorkspaceTab,
+    onSelectTab: (WorkspaceTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NavigationRail(
+        modifier = modifier.width(60.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
+    ) {
+        WorkspaceTab.entries.forEach { tab ->
+            NavigationRailItem(
+                selected = activeTab == tab,
+                onClick = { onSelectTab(tab) },
+                icon = {
+                    Icon(
+                        imageVector = tab.icon(),
+                        contentDescription = tab.label
+                    )
+                },
+                label = { Text(tab.label) },
+                alwaysShowLabel = false
+            )
+        }
     }
 }
 
@@ -878,6 +1032,17 @@ private fun describeGeometry(geometry: Geometry): String {
                 "(${Formatters.formatDimension(geometry.rectB.length)} x ${Formatters.formatDimension(geometry.rectB.width)})"
         }
     }
+}
+
+private fun WorkspaceTab.icon() = when (this) {
+    WorkspaceTab.PROJECTS -> Icons.Default.FolderOpen
+    WorkspaceTab.BLUEPRINT -> Icons.Default.AutoFixHigh
+    WorkspaceTab.MATERIALS -> Icons.Default.Assessment
+    WorkspaceTab.QUANTITIES -> Icons.Default.Straighten
+    WorkspaceTab.ADDONS -> Icons.Default.Add
+    WorkspaceTab.REVIEW -> Icons.Default.Description
+    WorkspaceTab.EXPORT -> Icons.Default.Share
+    WorkspaceTab.SETTINGS -> Icons.Default.Tune
 }
 
 private fun copyToClipboard(value: String) {

@@ -116,7 +116,7 @@ class ProjectDetailViewModel @Inject constructor(
                     space = placedSpace,
                     existingSpaces = currentProject.spaces
                 )
-            )
+            ).let(::normalizeSpaceTags)
             saveSpacesChange(
                 currentProject = currentProject,
                 updatedSpaces = currentProject.spaces + normalizedSpace
@@ -145,7 +145,7 @@ class ProjectDetailViewModel @Inject constructor(
                                 space = space,
                                 existingSpaces = currentProject.spaces + this
                             )
-                        )
+                        ).let(::normalizeSpaceTags)
                     )
                 }
             }
@@ -168,7 +168,7 @@ class ProjectDetailViewModel @Inject constructor(
             } else {
                 space.transform
             }
-            val mergedSpace = space.copy(transform = mergedTransform)
+            val mergedSpace = normalizeSpaceTags(space.copy(transform = mergedTransform))
             val updatedSpaces = currentProject.spaces.map {
                 if (it.id == space.id) mergedSpace else it
             }
@@ -192,7 +192,7 @@ class ProjectDetailViewModel @Inject constructor(
                     source = source.transform,
                     index = currentProject.spaces.size
                 )
-            )
+            ).let(::normalizeSpaceTags)
             saveSpacesChange(
                 currentProject = currentProject,
                 updatedSpaces = currentProject.spaces + duplicate
@@ -352,6 +352,20 @@ class ProjectDetailViewModel @Inject constructor(
         }
     }
 
+    fun updateBlueprintSnapSettings(snapSettings: BlueprintSnapSettings) {
+        viewModelScope.launch {
+            val currentProject = _uiState.value.project ?: return@launch
+            if (currentProject.takeoffSession.snapSettings == snapSettings) return@launch
+            val updatedProject = currentProject.copy(
+                takeoffSession = currentProject.takeoffSession.copy(
+                    snapSettings = snapSettings
+                ),
+                updatedAt = System.currentTimeMillis()
+            )
+            saveProjectUseCase(updatedProject)
+        }
+    }
+
     fun undoBlueprintChange() {
         viewModelScope.launch {
             uxMetricsRepository.recordTap("blueprint_undo")
@@ -408,6 +422,54 @@ class ProjectDetailViewModel @Inject constructor(
                 updatedAt = System.currentTimeMillis()
             )
             saveProjectUseCase(updatedProject)
+        }
+    }
+
+    fun applyProjectEstimateProfile(primaryTrade: PrimaryTrade) {
+        viewModelScope.launch {
+            val currentProject = _uiState.value.project ?: return@launch
+            val mappedScope = when (primaryTrade) {
+                PrimaryTrade.DRYWALL -> TakeoffScope.DRYWALL
+                PrimaryTrade.CONCRETE -> TakeoffScope.CONCRETE
+                PrimaryTrade.PAINT -> TakeoffScope.PAINT
+                PrimaryTrade.GRAVEL_MULCH -> TakeoffScope.GRAVEL_MULCH
+                PrimaryTrade.MULTI -> currentProject.takeoffSession.selectedScope
+            }
+            val updatedSession = currentProject.takeoffSession.copy(
+                selectedScope = mappedScope,
+                selectedPlaybook = primaryTrade.name,
+                snapSettings = snapSettingsProfileForTrade(primaryTrade)
+            )
+            if (updatedSession == currentProject.takeoffSession) return@launch
+            saveProjectUseCase(
+                currentProject.copy(
+                    takeoffSession = updatedSession,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    fun expandScopeWithPainting() {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap("blueprint_expand_scope_paint")
+            val currentProject = _uiState.value.project ?: return@launch
+            if (currentProject.spaces.isEmpty()) return@launch
+            val updatedSpaces = currentProject.spaces.map { space ->
+                val shouldPaint = when (space.geometry) {
+                    is Geometry.Wall -> true
+                    else -> "drywall" in space.tags
+                }
+                if (shouldPaint) {
+                    normalizeSpaceTags(space.copy(tags = space.tags + "paint"))
+                } else {
+                    normalizeSpaceTags(space)
+                }
+            }
+            saveSpacesChange(
+                currentProject = currentProject,
+                updatedSpaces = updatedSpaces
+            )
         }
     }
 
@@ -503,6 +565,52 @@ class ProjectDetailViewModel @Inject constructor(
     }
 }
 
+private fun snapSettingsProfileForTrade(trade: PrimaryTrade): BlueprintSnapSettings {
+    return when (trade) {
+        PrimaryTrade.DRYWALL -> BlueprintSnapSettings(
+            gridEnabled = true,
+            endpointEnabled = true,
+            midpointEnabled = true,
+            angleEnabled = true,
+            closureEnabled = true,
+            gridStepFeet = 1.0,
+            angleIncrementDegrees = 15,
+            thresholdFeet = 0.75
+        )
+        PrimaryTrade.CONCRETE -> BlueprintSnapSettings(
+            gridEnabled = true,
+            endpointEnabled = true,
+            midpointEnabled = false,
+            angleEnabled = true,
+            closureEnabled = true,
+            gridStepFeet = 0.5,
+            angleIncrementDegrees = 45,
+            thresholdFeet = 0.6
+        )
+        PrimaryTrade.PAINT -> BlueprintSnapSettings(
+            gridEnabled = true,
+            endpointEnabled = true,
+            midpointEnabled = true,
+            angleEnabled = true,
+            closureEnabled = true,
+            gridStepFeet = 1.0,
+            angleIncrementDegrees = 15,
+            thresholdFeet = 0.5
+        )
+        PrimaryTrade.GRAVEL_MULCH -> BlueprintSnapSettings(
+            gridEnabled = true,
+            endpointEnabled = true,
+            midpointEnabled = false,
+            angleEnabled = true,
+            closureEnabled = true,
+            gridStepFeet = 1.0,
+            angleIncrementDegrees = 30,
+            thresholdFeet = 1.0
+        )
+        PrimaryTrade.MULTI -> BlueprintSnapSettings()
+    }
+}
+
 data class ProjectDetailUiState(
     val project: Project? = null,
     val settings: Settings = Settings.DEFAULT,
@@ -525,6 +633,25 @@ private val modelPalette = listOf(
     0xFF59A14FL,
     0xFFEDC948L
 )
+
+private fun normalizeSpaceTags(space: Space): Space {
+    val geometryTags = when (space.geometry) {
+        is Geometry.Wall -> setOf("drywall", "wall")
+        is Geometry.Slab -> setOf("concrete", "slab")
+        is Geometry.Rect -> setOf("room")
+        is Geometry.LShape -> setOf("room")
+        is Geometry.Circle -> setOf("region")
+    }
+    val normalized = (space.tags + geometryTags)
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .toSet()
+    return if (normalized == space.tags) {
+        space
+    } else {
+        space.copy(tags = normalized)
+    }
+}
 
 private fun suggestedTransformForIndex(index: Int): SpaceTransform {
     val columns = 4
@@ -706,6 +833,7 @@ private data class SpaceHistoryEntry(
     val id: String,
     val name: String,
     val geometry: GeometryHistoryEntry,
+    val tags: List<String> = emptyList(),
     val openings: List<OpeningHistoryEntry>,
     val transform: SpaceTransformHistoryEntry
 ) {
@@ -713,6 +841,7 @@ private data class SpaceHistoryEntry(
         id = id,
         name = name,
         geometry = geometry.toGeometry(),
+        tags = tags.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet(),
         openings = openings.map { it.toOpening() },
         transform = transform.toTransform()
     )
@@ -722,6 +851,7 @@ private data class SpaceHistoryEntry(
             id = space.id,
             name = space.name,
             geometry = GeometryHistoryEntry.fromGeometry(space.geometry),
+            tags = space.tags.toList(),
             openings = space.openings.map { OpeningHistoryEntry.fromOpening(it) },
             transform = SpaceTransformHistoryEntry.fromTransform(space.transform)
         )
@@ -811,19 +941,32 @@ private data class RectHistoryEntry(
 private data class OpeningHistoryEntry(
     val width: Long,
     val height: Long,
-    val count: Int
+    val count: Int,
+    val type: String?,
+    val wallPositionT: Double?,
+    val sillHeight: Long?,
+    val id: String?
 ) {
     fun toOpening() = Opening(
         width = Millimeters(width),
         height = Millimeters(height),
-        count = count
+        count = count,
+        type = type?.let { runCatching { OpeningType.valueOf(it) }.getOrNull() }
+            ?: if (Millimeters(height).toFeet() >= 6.0) OpeningType.DOOR else OpeningType.WINDOW,
+        wallPositionT = wallPositionT ?: 0.5,
+        sillHeight = Millimeters(sillHeight ?: 0L),
+        id = id ?: java.util.UUID.randomUUID().toString()
     )
 
     companion object {
         fun fromOpening(opening: Opening) = OpeningHistoryEntry(
             width = opening.width.value,
             height = opening.height.value,
-            count = opening.count
+            count = opening.count,
+            type = opening.type.name,
+            wallPositionT = opening.wallPositionT,
+            sillHeight = opening.sillHeight.value,
+            id = opening.id
         )
     }
 }

@@ -78,6 +78,7 @@ class SettingsViewModel @Inject constructor(
             saveSettingsUseCase(
                 current.copy(
                     primaryTrade = primaryTrade,
+                    firstRun = false,
                     hasCompletedTradeOnboarding = true
                 )
             )
@@ -87,9 +88,12 @@ class SettingsViewModel @Inject constructor(
     fun completeWelcomeOnboarding() {
         viewModelScope.launch {
             val current = _uiState.value.settings
-            if (!current.hasCompletedTradeOnboarding) {
+            if (current.firstRun || !current.hasCompletedTradeOnboarding) {
                 saveSettingsUseCase(
-                    current.copy(hasCompletedTradeOnboarding = true)
+                    current.copy(
+                        firstRun = false,
+                        hasCompletedTradeOnboarding = true
+                    )
                 )
             }
         }

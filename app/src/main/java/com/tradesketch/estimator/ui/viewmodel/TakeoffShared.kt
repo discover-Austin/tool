@@ -135,10 +135,15 @@ internal fun Project.drywallSpaces(includeCeilings: Boolean): List<Space> {
 }
 
 internal fun Project.concreteSpaces(): List<Space> {
-    return spaces.filter { it.geometry is Geometry.Slab }
+    val slabs = spaces.filter { it.geometry is Geometry.Slab }
+    if (slabs.isNotEmpty()) return slabs
+    // Blueprint-first fallback: if no explicit slab objects exist, use room footprints.
+    return spaces.filter { it.geometry is Geometry.Rect || it.geometry is Geometry.LShape }
 }
 
 internal fun Project.paintableSpaces(): List<Space> {
+    val explicitlyTagged = spaces.filter { "paint" in it.tags }
+    if (explicitlyTagged.isNotEmpty()) return explicitlyTagged
     return spaces.filter { it.geometry is Geometry.Wall || it.geometry is Geometry.Rect }
 }
 

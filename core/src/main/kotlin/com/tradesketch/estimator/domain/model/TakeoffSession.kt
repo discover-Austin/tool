@@ -10,6 +10,7 @@ enum class TakeoffScope {
 data class ProjectTakeoffSession(
     val selectedScope: TakeoffScope = TakeoffScope.DRYWALL,
     val selectedPlaybook: String = "BALANCED",
+    val snapSettings: BlueprintSnapSettings = BlueprintSnapSettings(),
     val drywall: DrywallSessionParams = DrywallSessionParams(),
     val concrete: ConcreteSessionParams = ConcreteSessionParams(),
     val gravel: GravelSessionParams = GravelSessionParams(),
