@@ -21,6 +21,9 @@ class SettingsDataStore @Inject constructor(
     companion object {
         private val PRIMARY_TRADE = stringPreferencesKey("primary_trade")
         private val SIMPLIFIED_HOME = booleanPreferencesKey("simplified_home")
+        private val CALM_MODE_ENABLED = booleanPreferencesKey("calm_mode_enabled")
+        private val WORKFLOW_AIDS_ENABLED = booleanPreferencesKey("workflow_aids_enabled")
+        private val REDUCED_MOTION_ENABLED = booleanPreferencesKey("reduced_motion_enabled")
         private val HAS_COMPLETED_TRADE_ONBOARDING = booleanPreferencesKey("has_completed_trade_onboarding")
         private val DEFAULT_WASTE_PERCENT = doublePreferencesKey("default_waste_percent")
         private val USE_METRIC = booleanPreferencesKey("use_metric")
@@ -39,6 +42,11 @@ class SettingsDataStore @Inject constructor(
         private val LABOR_PERCENT = doublePreferencesKey("labor_percent")
         private val MARKUP_PERCENT = doublePreferencesKey("markup_percent")
         private val TAX_PERCENT = doublePreferencesKey("tax_percent")
+        private val BUSINESS_NAME = stringPreferencesKey("business_name")
+        private val BUSINESS_PHONE = stringPreferencesKey("business_phone")
+        private val BUSINESS_EMAIL = stringPreferencesKey("business_email")
+        private val BUSINESS_ADDRESS = stringPreferencesKey("business_address")
+        private val BUSINESS_LICENSE = stringPreferencesKey("business_license")
     }
     
     val settings: Flow<Settings> = context.settingsDataStore.data
@@ -50,6 +58,9 @@ class SettingsDataStore @Inject constructor(
             Settings(
                 primaryTrade = primaryTrade,
                 simplifiedHome = preferences[SIMPLIFIED_HOME] ?: true,
+                calmModeEnabled = preferences[CALM_MODE_ENABLED] ?: true,
+                workflowAidsEnabled = preferences[WORKFLOW_AIDS_ENABLED] ?: false,
+                reducedMotionEnabled = preferences[REDUCED_MOTION_ENABLED] ?: true,
                 hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING] ?: false,
                 defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: 10.0,
                 useMetric = preferences[USE_METRIC] ?: false,
@@ -67,7 +78,12 @@ class SettingsDataStore @Inject constructor(
                 paintGallonUnitCost = preferences[PAINT_GALLON_UNIT_COST] ?: 38.0,
                 laborPercent = preferences[LABOR_PERCENT] ?: 20.0,
                 markupPercent = preferences[MARKUP_PERCENT] ?: 15.0,
-                taxPercent = preferences[TAX_PERCENT] ?: 8.0
+                taxPercent = preferences[TAX_PERCENT] ?: 8.0,
+                businessName = preferences[BUSINESS_NAME] ?: "",
+                businessPhone = preferences[BUSINESS_PHONE] ?: "",
+                businessEmail = preferences[BUSINESS_EMAIL] ?: "",
+                businessAddress = preferences[BUSINESS_ADDRESS] ?: "",
+                businessLicense = preferences[BUSINESS_LICENSE] ?: ""
             )
         }
     
@@ -75,6 +91,9 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { preferences ->
             preferences[PRIMARY_TRADE] = settings.primaryTrade.name
             preferences[SIMPLIFIED_HOME] = settings.simplifiedHome
+            preferences[CALM_MODE_ENABLED] = settings.calmModeEnabled
+            preferences[WORKFLOW_AIDS_ENABLED] = settings.workflowAidsEnabled
+            preferences[REDUCED_MOTION_ENABLED] = settings.reducedMotionEnabled
             preferences[HAS_COMPLETED_TRADE_ONBOARDING] = settings.hasCompletedTradeOnboarding
             preferences[DEFAULT_WASTE_PERCENT] = settings.defaultWastePercent
             preferences[USE_METRIC] = settings.useMetric
@@ -93,6 +112,11 @@ class SettingsDataStore @Inject constructor(
             preferences[LABOR_PERCENT] = settings.laborPercent
             preferences[MARKUP_PERCENT] = settings.markupPercent
             preferences[TAX_PERCENT] = settings.taxPercent
+            preferences[BUSINESS_NAME] = settings.businessName
+            preferences[BUSINESS_PHONE] = settings.businessPhone
+            preferences[BUSINESS_EMAIL] = settings.businessEmail
+            preferences[BUSINESS_ADDRESS] = settings.businessAddress
+            preferences[BUSINESS_LICENSE] = settings.businessLicense
         }
     }
     

@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tradesketch.estimator.data.repository.ProjectRepository
 import com.tradesketch.estimator.data.repository.SettingsRepository
+import com.tradesketch.estimator.data.repository.UxMetricsRepository
 import com.tradesketch.estimator.domain.model.*
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -21,12 +23,15 @@ import javax.inject.Inject
 class TakeoffViewModel @Inject constructor(
     private val repository: ProjectRepository,
     private val settingsRepository: SettingsRepository,
+    private val uxMetricsRepository: UxMetricsRepository,
     private val calculateTakeoffUseCase: CalculateTakeoffUseCase,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private var currentProjectId: String? = savedStateHandle["projectId"]
     private var projectObserverJob: Job? = null
+    private val trackedFirstEstimateProjectIds = mutableSetOf<String>()
+    private val trackedGeneratedEstimateKeys = mutableSetOf<String>()
 
     private val _uiState = MutableStateFlow(TakeoffUiState())
     val uiState: StateFlow<TakeoffUiState> = _uiState.asStateFlow()
@@ -53,53 +58,63 @@ class TakeoffViewModel @Inject constructor(
                 Pair(project, settings)
             }.collect { (project, settings) ->
                 if (project != null) {
+                    val session = project.takeoffSession
+                    val hasPersistedSession = session != ProjectTakeoffSession()
                     val alreadyInitializedForProject =
                         !_uiState.value.isLoading && _uiState.value.project?.id == project.id
                     _uiState.update {
                         it.copy(
                             project = project,
                             settings = settings,
-                            selectedType = it.selectedType ?: defaultTakeoffTypeForTrade(settings.primaryTrade),
+                            selectedType = if (alreadyInitializedForProject) {
+                                it.selectedType
+                            } else if (hasPersistedSession) {
+                                session.selectedScope.toTakeoffType()
+                            } else {
+                                defaultTakeoffTypeForTrade(settings.primaryTrade) ?: TakeoffType.DRYWALL
+                            },
+                            selectedPlaybook = if (alreadyInitializedForProject) {
+                                it.selectedPlaybook
+                            } else if (hasPersistedSession) {
+                                runCatching { TakeoffPlaybook.valueOf(session.selectedPlaybook) }
+                                    .getOrDefault(TakeoffPlaybook.BALANCED)
+                            } else {
+                                TakeoffPlaybook.BALANCED
+                            },
                             drywallParams = if (alreadyInitializedForProject) {
                                 it.drywallParams
+                            } else if (hasPersistedSession) {
+                                session.drywall.toUiParams()
                             } else {
-                                DrywallParams(
-                                    sheetAreaSqFt = settings.defaultDrywallSheetArea,
-                                    wastePercent = settings.defaultWastePercent,
-                                    screwsPerSheet = settings.defaultScrewsPerSheet,
-                                    mudGallonsPer100SqFt = settings.defaultMudGallonsPer100SqFt
-                                )
+                                settings.defaultDrywallParams()
                             },
                             concreteParams = if (alreadyInitializedForProject) {
                                 it.concreteParams
+                            } else if (hasPersistedSession) {
+                                session.concrete.toUiParams()
                             } else {
-                                ConcreteParams(
-                                    thicknessFeet = 0.33,
-                                    wastePercent = settings.defaultWastePercent
-                                )
+                                settings.defaultConcreteParams()
                             },
                             gravelParams = if (alreadyInitializedForProject) {
                                 it.gravelParams
+                            } else if (hasPersistedSession) {
+                                session.gravel.toUiParams()
                             } else {
-                                GravelParams(
-                                    depthFeet = 0.25,
-                                    densityTonsPerYard = 1.4,
-                                    wastePercent = settings.defaultWastePercent
-                                )
+                                settings.defaultGravelParams()
                             },
                             paintParams = if (alreadyInitializedForProject) {
                                 it.paintParams
+                            } else if (hasPersistedSession) {
+                                session.paint.toUiParams()
                             } else {
-                                PaintParams(
-                                    coverageSqFtPerGallon = settings.defaultCoveragePerGallon,
-                                    coats = settings.defaultCoatsOfPaint,
-                                    wastePercent = settings.defaultWastePercent
-                                )
+                                settings.defaultPaintParams()
                             },
                             pricingParams = if (alreadyInitializedForProject) {
                                 it.pricingParams
+                            } else if (hasPersistedSession) {
+                                session.pricing.toUiParams()
                             } else {
-                                PricingParams.fromSettings(settings)
+                                settings.defaultPricingParams()
                             },
                             isLoading = false,
                             error = null
@@ -110,7 +125,13 @@ class TakeoffViewModel @Inject constructor(
                         calculate()
                     }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, error = "Project not found") }
+                    _uiState.update {
+                        it.copy(
+                            project = null,
+                            isLoading = false,
+                            error = "Project not found"
+                        )
+                    }
                 }
             }
         }
@@ -120,12 +141,131 @@ class TakeoffViewModel @Inject constructor(
         _uiState.update { it.copy(selectedType = type) }
         calculate()
     }
+
+    fun recordTap(task: String) {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap(task)
+        }
+    }
+
+    fun applyPlaybook(playbook: TakeoffPlaybook) {
+        val state = _uiState.value
+        val settings = state.settings
+        val selectedType = state.selectedType
+            ?: defaultTakeoffTypeForTrade(settings.primaryTrade)
+            ?: TakeoffType.DRYWALL
+        val basePricing = settings.defaultPricingParams()
+
+        val tunedPricing = when (playbook) {
+            TakeoffPlaybook.FAST_BID -> basePricing.copy(
+                laborPercent = (basePricing.laborPercent - 4.0).coerceAtLeast(8.0),
+                markupPercent = (basePricing.markupPercent - 3.0).coerceAtLeast(8.0),
+                taxPercent = basePricing.taxPercent
+            )
+            TakeoffPlaybook.BALANCED -> basePricing
+            TakeoffPlaybook.SAFETY_FIRST -> basePricing.copy(
+                laborPercent = (basePricing.laborPercent + 5.0).coerceAtMost(40.0),
+                markupPercent = (basePricing.markupPercent + 4.0).coerceAtMost(35.0),
+                taxPercent = basePricing.taxPercent
+            )
+        }
+
+        _uiState.update {
+            when (selectedType) {
+                TakeoffType.DRYWALL -> {
+                    val base = settings.defaultDrywallParams()
+                    val tuned = when (playbook) {
+                        TakeoffPlaybook.FAST_BID -> base.copy(
+                            wastePercent = (base.wastePercent - 3.0).coerceAtLeast(4.0),
+                            screwsPerSheet = (base.screwsPerSheet - 4).coerceAtLeast(12),
+                            mudGallonsPer100SqFt = (base.mudGallonsPer100SqFt - 0.1).coerceAtLeast(0.2)
+                        )
+                        TakeoffPlaybook.BALANCED -> base
+                        TakeoffPlaybook.SAFETY_FIRST -> base.copy(
+                            wastePercent = (base.wastePercent + 4.0).coerceAtMost(30.0),
+                            screwsPerSheet = (base.screwsPerSheet + 4).coerceAtMost(80),
+                            mudGallonsPer100SqFt = (base.mudGallonsPer100SqFt + 0.15).coerceAtMost(1.6)
+                        )
+                    }
+                    it.copy(
+                        selectedType = selectedType,
+                        selectedPlaybook = playbook,
+                        drywallParams = tuned,
+                        pricingParams = tunedPricing
+                    )
+                }
+                TakeoffType.CONCRETE -> {
+                    val base = settings.defaultConcreteParams()
+                    val tuned = when (playbook) {
+                        TakeoffPlaybook.FAST_BID -> base.copy(
+                            thicknessFeet = 0.30,
+                            wastePercent = (base.wastePercent - 2.0).coerceAtLeast(3.0)
+                        )
+                        TakeoffPlaybook.BALANCED -> base
+                        TakeoffPlaybook.SAFETY_FIRST -> base.copy(
+                            thicknessFeet = 0.36,
+                            wastePercent = (base.wastePercent + 3.0).coerceAtMost(25.0)
+                        )
+                    }
+                    it.copy(
+                        selectedType = selectedType,
+                        selectedPlaybook = playbook,
+                        concreteParams = tuned,
+                        pricingParams = tunedPricing
+                    )
+                }
+                TakeoffType.GRAVEL_MULCH -> {
+                    val base = settings.defaultGravelParams()
+                    val tuned = when (playbook) {
+                        TakeoffPlaybook.FAST_BID -> base.copy(
+                            depthFeet = 0.22,
+                            wastePercent = (base.wastePercent - 2.0).coerceAtLeast(3.0)
+                        )
+                        TakeoffPlaybook.BALANCED -> base
+                        TakeoffPlaybook.SAFETY_FIRST -> base.copy(
+                            depthFeet = 0.30,
+                            wastePercent = (base.wastePercent + 3.0).coerceAtMost(30.0),
+                            densityTonsPerYard = (base.densityTonsPerYard + 0.1).coerceAtMost(2.2)
+                        )
+                    }
+                    it.copy(
+                        selectedType = selectedType,
+                        selectedPlaybook = playbook,
+                        gravelParams = tuned,
+                        pricingParams = tunedPricing
+                    )
+                }
+                TakeoffType.PAINT -> {
+                    val base = settings.defaultPaintParams()
+                    val tuned = when (playbook) {
+                        TakeoffPlaybook.FAST_BID -> base.copy(
+                            coats = (base.coats - 1).coerceAtLeast(1),
+                            wastePercent = (base.wastePercent - 2.0).coerceAtLeast(2.0)
+                        )
+                        TakeoffPlaybook.BALANCED -> base
+                        TakeoffPlaybook.SAFETY_FIRST -> base.copy(
+                            coats = (base.coats + 1).coerceAtMost(4),
+                            wastePercent = (base.wastePercent + 2.0).coerceAtMost(20.0)
+                        )
+                    }
+                    it.copy(
+                        selectedType = selectedType,
+                        selectedPlaybook = playbook,
+                        paintParams = tuned,
+                        pricingParams = tunedPricing
+                    )
+                }
+            }
+        }
+        calculate()
+    }
     
     fun updateDrywallParams(
         sheetAreaSqFt: Double? = null,
         wastePercent: Double? = null,
         screwsPerSheet: Int? = null,
-        mudGallonsPer100SqFt: Double? = null
+        mudGallonsPer100SqFt: Double? = null,
+        includeCeilings: Boolean? = null
     ) {
         val current = _uiState.value.drywallParams
         _uiState.update {
@@ -134,7 +274,8 @@ class TakeoffViewModel @Inject constructor(
                     sheetAreaSqFt = sheetAreaSqFt ?: current.sheetAreaSqFt,
                     wastePercent = wastePercent ?: current.wastePercent,
                     screwsPerSheet = screwsPerSheet ?: current.screwsPerSheet,
-                    mudGallonsPer100SqFt = mudGallonsPer100SqFt ?: current.mudGallonsPer100SqFt
+                    mudGallonsPer100SqFt = mudGallonsPer100SqFt ?: current.mudGallonsPer100SqFt,
+                    includeCeilings = includeCeilings ?: current.includeCeilings
                 )
             )
         }
@@ -227,85 +368,55 @@ class TakeoffViewModel @Inject constructor(
         val project = state.project ?: return
         val type = state.selectedType ?: return
         val pricing = state.pricingParams
+        val sessionSnapshot = state.toTakeoffSession(type)
         
         try {
-            val result = when (type) {
-                TakeoffType.DRYWALL -> {
-                    val walls = project.spaces.filter { it.geometry is Geometry.Wall }
-                    calculateTakeoffUseCase.calculateDrywall(
-                        walls,
-                        state.drywallParams.sheetAreaSqFt,
-                        state.drywallParams.wastePercent,
-                        state.drywallParams.screwsPerSheet,
-                        state.drywallParams.mudGallonsPer100SqFt,
-                        CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Drywall sheets" to pricing.drywallSheetCost,
-                                "Drywall screws" to pricing.drywallScrewCost,
-                                "Joint compound" to pricing.drywallMudCost
-                            ),
-                            laborPercent = pricing.laborPercent,
-                            markupPercent = pricing.markupPercent,
-                            taxPercent = pricing.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.CONCRETE -> {
-                    val slabs = project.spaces.filter { it.geometry is Geometry.Slab }
-                    calculateTakeoffUseCase.calculateConcrete(
-                        slabs,
-                        state.concreteParams.thicknessFeet,
-                        state.concreteParams.wastePercent,
-                        CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Concrete volume" to pricing.concreteYardCost
-                            ),
-                            laborPercent = pricing.laborPercent,
-                            markupPercent = pricing.markupPercent,
-                            taxPercent = pricing.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.GRAVEL_MULCH -> {
-                    calculateTakeoffUseCase.calculateGravelMulch(
-                        project.spaces,
-                        state.gravelParams.depthFeet,
-                        state.gravelParams.densityTonsPerYard,
-                        state.gravelParams.wastePercent,
-                        CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Material volume" to pricing.gravelYardCost,
-                                "Material weight" to pricing.gravelTonCost
-                            ),
-                            laborPercent = pricing.laborPercent,
-                            markupPercent = pricing.markupPercent,
-                            taxPercent = pricing.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.PAINT -> {
-                    val paintableSpaces = project.spaces.filter { 
-                        it.geometry is Geometry.Wall || it.geometry is Geometry.Rect 
-                    }
-                    calculateTakeoffUseCase.calculatePaint(
-                        paintableSpaces,
-                        state.paintParams.coverageSqFtPerGallon,
-                        state.paintParams.coats,
-                        state.paintParams.wastePercent,
-                        CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Paint" to pricing.paintGallonCost
-                            ),
-                            laborPercent = pricing.laborPercent,
-                            markupPercent = pricing.markupPercent,
-                            taxPercent = pricing.taxPercent
-                        )
-                    )
+            val result = calculateTakeoffUseCase.calculateForType(
+                project = project,
+                type = type,
+                inputs = TakeoffCalculationInputs(
+                    drywall = state.drywallParams,
+                    concrete = state.concreteParams,
+                    gravel = state.gravelParams,
+                    paint = state.paintParams,
+                    pricing = pricing
+                )
+            )
+            _uiState.update { it.copy(result = result, error = null) }
+            val generatedEstimateKey = "${project.id}:${type.name}"
+            if (trackedGeneratedEstimateKeys.add(generatedEstimateKey)) {
+                viewModelScope.launch {
+                    uxMetricsRepository.recordTap("takeoff_estimate_generated")
                 }
             }
-            _uiState.update { it.copy(result = result, error = null) }
+            if (trackedFirstEstimateProjectIds.add(project.id)) {
+                val timeToFirstEstimateMs = (System.currentTimeMillis() - project.createdAt).coerceAtLeast(0L)
+                viewModelScope.launch {
+                    uxMetricsRepository.recordTimeToFirstEstimate(timeToFirstEstimateMs)
+                }
+            }
         } catch (e: Exception) {
             _uiState.update { it.copy(error = "Calculation failed: ${e.message}") }
+        }
+        persistTakeoffSessionIfNeeded(project, sessionSnapshot)
+    }
+
+    private fun persistTakeoffSessionIfNeeded(
+        project: Project,
+        session: ProjectTakeoffSession
+    ) {
+        if (project.takeoffSession == session) return
+        viewModelScope.launch {
+            runCatching {
+                repository.saveProject(
+                    project.copy(
+                        takeoffSession = session,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to save takeoff session: ${error.message}") }
+            }
         }
     }
 }
@@ -314,6 +425,7 @@ data class TakeoffUiState(
     val project: Project? = null,
     val settings: Settings = Settings.DEFAULT,
     val selectedType: TakeoffType? = null,
+    val selectedPlaybook: TakeoffPlaybook = TakeoffPlaybook.BALANCED,
     val drywallParams: DrywallParams = DrywallParams(),
     val concreteParams: ConcreteParams = ConcreteParams(),
     val gravelParams: GravelParams = GravelParams(),
@@ -328,11 +440,18 @@ enum class TakeoffType {
     DRYWALL, CONCRETE, GRAVEL_MULCH, PAINT
 }
 
+enum class TakeoffPlaybook {
+    FAST_BID,
+    BALANCED,
+    SAFETY_FIRST
+}
+
 data class DrywallParams(
     val sheetAreaSqFt: Double = 32.0,
     val wastePercent: Double = 10.0,
     val screwsPerSheet: Int = 32,
-    val mudGallonsPer100SqFt: Double = 0.5
+    val mudGallonsPer100SqFt: Double = 0.5,
+    val includeCeilings: Boolean = true
 )
 
 data class ConcreteParams(
@@ -382,12 +501,42 @@ data class PricingParams(
     }
 }
 
-private fun defaultTakeoffTypeForTrade(primaryTrade: PrimaryTrade): TakeoffType? {
-    return when (primaryTrade) {
-        PrimaryTrade.DRYWALL -> TakeoffType.DRYWALL
-        PrimaryTrade.CONCRETE -> TakeoffType.CONCRETE
-        PrimaryTrade.PAINT -> TakeoffType.PAINT
-        PrimaryTrade.GRAVEL_MULCH -> TakeoffType.GRAVEL_MULCH
-        PrimaryTrade.MULTI -> null
-    }
+private fun TakeoffUiState.toTakeoffSession(selectedType: TakeoffType): ProjectTakeoffSession {
+    return ProjectTakeoffSession(
+        selectedScope = selectedType.toTakeoffScope(),
+        selectedPlaybook = selectedPlaybook.name,
+        drywall = DrywallSessionParams(
+            sheetAreaSqFt = drywallParams.sheetAreaSqFt,
+            wastePercent = drywallParams.wastePercent,
+            screwsPerSheet = drywallParams.screwsPerSheet,
+            mudGallonsPer100SqFt = drywallParams.mudGallonsPer100SqFt,
+            includeCeilings = drywallParams.includeCeilings
+        ),
+        concrete = ConcreteSessionParams(
+            thicknessFeet = concreteParams.thicknessFeet,
+            wastePercent = concreteParams.wastePercent
+        ),
+        gravel = GravelSessionParams(
+            depthFeet = gravelParams.depthFeet,
+            densityTonsPerYard = gravelParams.densityTonsPerYard,
+            wastePercent = gravelParams.wastePercent
+        ),
+        paint = PaintSessionParams(
+            coverageSqFtPerGallon = paintParams.coverageSqFtPerGallon,
+            coats = paintParams.coats,
+            wastePercent = paintParams.wastePercent
+        ),
+        pricing = PricingSessionParams(
+            drywallSheetCost = pricingParams.drywallSheetCost,
+            drywallScrewCost = pricingParams.drywallScrewCost,
+            drywallMudCost = pricingParams.drywallMudCost,
+            concreteYardCost = pricingParams.concreteYardCost,
+            gravelYardCost = pricingParams.gravelYardCost,
+            gravelTonCost = pricingParams.gravelTonCost,
+            paintGallonCost = pricingParams.paintGallonCost,
+            laborPercent = pricingParams.laborPercent,
+            markupPercent = pricingParams.markupPercent,
+            taxPercent = pricingParams.taxPercent
+        )
+    )
 }

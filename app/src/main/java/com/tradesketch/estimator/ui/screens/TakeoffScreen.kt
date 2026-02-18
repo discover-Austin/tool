@@ -1,5 +1,10 @@
 package com.tradesketch.estimator.ui.screens
 
+import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.SecondaryActionButton
+import com.tradesketch.estimator.ui.components.QuietActionButton
+import com.tradesketch.estimator.ui.components.DangerActionButton
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,20 +20,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoGraph
-import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.Summarize
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,23 +44,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.Geometry
-import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.domain.model.openingsAreaSqFt
 import com.tradesketch.estimator.ui.components.AnimatedEntry
+import com.tradesketch.estimator.ui.components.BufferedInputField
+import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
-import com.tradesketch.estimator.ui.viewmodel.TakeoffType
+import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
+import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
+import com.tradesketch.estimator.ui.viewmodel.TakeoffType
+import com.tradesketch.estimator.ui.viewmodel.concreteSpaces
+import com.tradesketch.estimator.ui.viewmodel.drywallSpaces
+import com.tradesketch.estimator.ui.viewmodel.paintableSpaces
 import com.tradesketch.estimator.utils.Formatters
 
 @Composable
 fun TakeoffScreen(
     projectId: String,
+    modifier: Modifier = Modifier,
     onOpenModel: () -> Unit = {},
     onOpenBlueprint: () -> Unit = {},
     onOpenExport: () -> Unit = {},
-    modifier: Modifier = Modifier,
     viewModel: TakeoffViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -69,8 +75,19 @@ fun TakeoffScreen(
     var showAllTradeScopes by rememberSaveable(
         projectId,
         uiState.settings.primaryTrade.name,
-        uiState.settings.simplifiedHome
-    ) { mutableStateOf(false) }
+        uiState.settings.simplifiedHome,
+        uiState.settings.calmModeEnabled
+    ) { mutableStateOf(!uiState.settings.calmModeEnabled) }
+    var showPricingInputs by rememberSaveable(projectId) { mutableStateOf(true) }
+    var showScopeSelector by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
+        mutableStateOf(uiState.selectedType == null)
+    }
+    var showDetailedResults by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
+        mutableStateOf(false)
+    }
+    val staggeredDelay: (Int) -> Int = { base ->
+        if (uiState.settings.reducedMotionEnabled) 0 else base
+    }
     val availableTypes = if (
         uiState.settings.simplifiedHome &&
         focusedType != null &&
@@ -80,25 +97,9 @@ fun TakeoffScreen(
     } else {
         TakeoffType.entries.toList()
     }
-    val flowSteps = listOf(
-        TakeoffFlowStep(
-            label = "Choose Trade",
-            detail = uiState.selectedType?.displayLabel ?: "Select scope",
-            complete = uiState.selectedType != null
-        ),
-        TakeoffFlowStep(
-            label = "Tune Inputs",
-            detail = if (uiState.selectedType != null) "Inputs unlocked" else "Pick trade first",
-            complete = uiState.selectedType != null
-        ),
-        TakeoffFlowStep(
-            label = "Review Results",
-            detail = if (uiState.result != null) "Totals generated" else "Generate takeoff",
-            complete = uiState.result != null
-        )
-    )
     LaunchedEffect(projectId) {
         viewModel.setProjectId(projectId)
+        viewModel.recordTap("takeoff_screen_opened")
     }
 
     if (uiState.isLoading) {
@@ -117,147 +118,36 @@ fun TakeoffScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            AnimatedEntry(delayMs = 0) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
+            AnimatedEntry(delayMs = staggeredDelay(70)) {
+                TitledSectionCard(
+                    title = "Estimate Type",
+                    subtitle = if (uiState.settings.simplifiedHome && focusedType != null && !showAllTradeScopes) {
+                        "Focused on ${uiState.settings.primaryTrade.displayLabel()}."
+                    } else {
+                        "Set the trade for this estimate."
+                    },
                     modifier = Modifier.animateContentSize()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoGraph,
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Takeoff Engine",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
+                    val selectedType = uiState.selectedType
+                    if (selectedType != null && !showScopeSelector) {
                         Text(
-                            text = uiState.project?.name ?: "Current Project",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            text = "Selected type: ${selectedType.displayLabel}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        Text(
-                            text = "Select a scope, tune assumptions, and get quantity + pricing instantly.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.animateContentSize()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Takeoff Workflow",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        flowSteps.forEach { step ->
-                            TakeoffFlowStepPill(
-                                step = step,
-                                modifier = Modifier.width(150.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier.animateContentSize()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "Flow Navigator",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onOpenModel,
-                            modifier = Modifier.width(120.dp)
+                        SecondaryActionButton(
+                            onClick = { showScopeSelector = true },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Model")
+                            Text("Change Type")
                         }
-                        OutlinedButton(
-                            onClick = onOpenBlueprint,
-                            modifier = Modifier.width(120.dp)
-                        ) {
-                            Text("Blueprint")
-                        }
-                        Button(
-                            onClick = onOpenExport,
-                            enabled = uiState.result != null,
-                            modifier = Modifier.width(140.dp)
-                        ) {
-                            Text("Continue Export")
-                        }
-                    }
-                    Text(
-                        text = if (uiState.result != null) {
-                            "Takeoff results are ready for packaging and share."
-                        } else {
-                            "Select a trade and tune inputs to unlock export."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        item {
-            AnimatedEntry(delayMs = 50) {
-                Card(modifier = Modifier.animateContentSize()) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "Trade Scope",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (uiState.settings.simplifiedHome && focusedType != null && !showAllTradeScopes) {
-                                "Focused on ${uiState.settings.primaryTrade.displayLabel()} scope. Expand when you need more."
-                            } else {
-                                "Clear separation by trade. Choose one workflow below."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                    } else {
                         if (uiState.settings.simplifiedHome && focusedType != null) {
-                            OutlinedButton(
-                                onClick = { showAllTradeScopes = !showAllTradeScopes }
+                            SecondaryActionButton(
+                                onClick = {
+                                    viewModel.recordTap("takeoff_toggle_scope_list")
+                                    showAllTradeScopes = !showAllTradeScopes
+                                }
                             ) {
                                 Text(
                                     if (showAllTradeScopes) {
@@ -274,26 +164,26 @@ fun TakeoffScreen(
                             selectedType = uiState.selectedType,
                             onSelect = { type ->
                                 haptics.tap()
+                                viewModel.recordTap("takeoff_select_scope")
                                 viewModel.selectTakeoffType(type)
+                                showScopeSelector = false
                             }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            availableTypes.forEach { type ->
-                                FilterChip(
-                                    selected = uiState.selectedType == type,
-                                    onClick = {
-                                        haptics.tap()
-                                        viewModel.selectTakeoffType(type)
-                                    },
-                                    label = { Text(type.displayLabel) }
-                                )
+                        if (selectedType != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            QuietActionButton(
+                                onClick = { showScopeSelector = false },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Done")
                             }
+                        } else {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Tap an estimate type to continue.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -301,7 +191,12 @@ fun TakeoffScreen(
         }
 
         uiState.selectedType?.let { type ->
-            val scopeSummary = scopeSummaryForType(uiState.project, type)
+            val scopeSummary = scopeSummaryForType(
+                project = uiState.project,
+                type = type,
+                includeDrywallCeilings = uiState.drywallParams.includeCeilings
+            )
+            val warnings = takeoffWarnings(uiState, type, scopeSummary)
             item {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -311,7 +206,7 @@ fun TakeoffScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "Detected ${type.displayLabel} Scope",
+                            text = "${type.displayLabel} Summary",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -329,6 +224,64 @@ fun TakeoffScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (scopeSummary.spaceCount == 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                SecondaryActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("takeoff_open_model")
+                                        onOpenModel()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Open Model")
+                                }
+                                SecondaryActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("takeoff_open_blueprint")
+                                        onOpenBlueprint()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Open Blueprint")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (warnings.isNotEmpty()) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.animateContentSize()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "Smart Checks",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${warnings.size} item(s) to review before sharing this estimate.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            warnings.forEach { warning ->
+                                Text(
+                                    text = "• $warning",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -336,52 +289,81 @@ fun TakeoffScreen(
             item {
                 when (type) {
                     TakeoffType.DRYWALL -> {
-                        ParameterCard(
-                            title = "Drywall Inputs",
-                            description = "Sheet sizing and fastener assumptions for walls.",
-                            fields = listOf(
-                                NumberFieldSpec(
-                                    label = "Sheet Area (sq ft)",
-                                    value = uiState.drywallParams.sheetAreaSqFt.toString(),
-                                    hint = "Typical: 32",
-                                    onChange = {
-                                        it.toDoubleOrNull()?.let { value ->
-                                            viewModel.updateDrywallParams(sheetAreaSqFt = value)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ParameterCard(
+                                title = "Drywall Inputs",
+                                description = "Sheet sizing and fastener assumptions for walls/ceilings.",
+                                fields = listOf(
+                                    NumberFieldSpec(
+                                        label = "Sheet Area (sq ft)",
+                                        value = uiState.drywallParams.sheetAreaSqFt.toString(),
+                                        hint = "Typical: 32",
+                                        onChange = {
+                                            it.toDoubleOrNull()?.let { value ->
+                                                viewModel.updateDrywallParams(sheetAreaSqFt = value)
+                                            }
                                         }
-                                    }
-                                ),
-                                NumberFieldSpec(
-                                    label = "Waste %",
-                                    value = uiState.drywallParams.wastePercent.toString(),
-                                    hint = "Typical: 5-15",
-                                    onChange = {
-                                        it.toDoubleOrNull()?.let { value ->
-                                            viewModel.updateDrywallParams(wastePercent = value)
+                                    ),
+                                    NumberFieldSpec(
+                                        label = "Waste %",
+                                        value = uiState.drywallParams.wastePercent.toString(),
+                                        hint = "Typical: 5-15",
+                                        onChange = {
+                                            it.toDoubleOrNull()?.let { value ->
+                                                viewModel.updateDrywallParams(wastePercent = value)
+                                            }
                                         }
-                                    }
-                                ),
-                                NumberFieldSpec(
-                                    label = "Screws per Sheet",
-                                    value = uiState.drywallParams.screwsPerSheet.toString(),
-                                    hint = "Typical: 28-36",
-                                    onChange = {
-                                        it.toIntOrNull()?.let { value ->
-                                            viewModel.updateDrywallParams(screwsPerSheet = value)
+                                    ),
+                                    NumberFieldSpec(
+                                        label = "Screws per Sheet",
+                                        value = uiState.drywallParams.screwsPerSheet.toString(),
+                                        hint = "Typical: 28-36",
+                                        onChange = {
+                                            it.toIntOrNull()?.let { value ->
+                                                viewModel.updateDrywallParams(screwsPerSheet = value)
+                                            }
                                         }
-                                    }
-                                ),
-                                NumberFieldSpec(
-                                    label = "Mud (gal / 100 sq ft)",
-                                    value = uiState.drywallParams.mudGallonsPer100SqFt.toString(),
-                                    hint = "Typical: 0.5",
-                                    onChange = {
-                                        it.toDoubleOrNull()?.let { value ->
-                                            viewModel.updateDrywallParams(mudGallonsPer100SqFt = value)
+                                    ),
+                                    NumberFieldSpec(
+                                        label = "Mud (gal / 100 sq ft)",
+                                        value = uiState.drywallParams.mudGallonsPer100SqFt.toString(),
+                                        hint = "Typical: 0.5",
+                                        onChange = {
+                                            it.toDoubleOrNull()?.let { value ->
+                                                viewModel.updateDrywallParams(mudGallonsPer100SqFt = value)
+                                            }
                                         }
-                                    }
+                                    )
                                 )
                             )
-                        )
+                            Card {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Include Ceilings",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            text = "Adds rectangular surfaces (room ceilings) to drywall and screw counts.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Switch(
+                                        checked = uiState.drywallParams.includeCeilings,
+                                        onCheckedChange = { enabled ->
+                                            viewModel.updateDrywallParams(includeCeilings = enabled)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     TakeoffType.CONCRETE -> {
@@ -494,128 +476,171 @@ fun TakeoffScreen(
             }
 
             item {
-                val pricing = uiState.pricingParams
-                val typeSpecificPricing = when (type) {
-                    TakeoffType.DRYWALL -> listOf(
-                        NumberFieldSpec(
-                            label = "Sheet Cost ($/sheet)",
-                            value = pricing.drywallSheetCost.toString(),
-                            hint = "Material price",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(drywallSheetCost = value)
-                                }
-                            }
-                        ),
-                        NumberFieldSpec(
-                            label = "Screw Cost ($/screw)",
-                            value = pricing.drywallScrewCost.toString(),
-                            hint = "Fastener price",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(drywallScrewCost = value)
-                                }
-                            }
-                        ),
-                        NumberFieldSpec(
-                            label = "Mud Cost ($/gallon)",
-                            value = pricing.drywallMudCost.toString(),
-                            hint = "Compound price",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(drywallMudCost = value)
-                                }
-                            }
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    modifier = Modifier.animateContentSize()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Pricing Inputs",
+                            style = MaterialTheme.typography.titleSmall
                         )
-                    )
-
-                    TakeoffType.CONCRETE -> listOf(
-                        NumberFieldSpec(
-                            label = "Concrete Cost ($/cubic yard)",
-                            value = pricing.concreteYardCost.toString(),
-                            hint = "Batch price",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(concreteYardCost = value)
-                                }
-                            }
+                        Text(
+                            text = "Labor ${Formatters.formatQuantity(uiState.pricingParams.laborPercent)}% • " +
+                                "Markup ${Formatters.formatQuantity(uiState.pricingParams.markupPercent)}% • " +
+                                "Tax ${Formatters.formatQuantity(uiState.pricingParams.taxPercent)}%",
+                            style = MaterialTheme.typography.bodySmall
                         )
-                    )
+                        SecondaryActionButton(
+                            onClick = {
+                                viewModel.recordTap("takeoff_toggle_pricing_inputs")
+                                showPricingInputs = !showPricingInputs
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (showPricingInputs) {
+                                    "Hide Pricing Inputs"
+                                } else {
+                                    "Show Pricing Inputs"
+                                }
+                            )
+                        }
+                    }
+                }
+            }
 
-                    TakeoffType.GRAVEL_MULCH -> listOf(
-                        NumberFieldSpec(
-                            label = "Volume Cost ($/cubic yard)",
-                            value = pricing.gravelYardCost.toString(),
-                            hint = "Yard pricing",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(gravelYardCost = value)
+            if (showPricingInputs) {
+                item {
+                    val pricing = uiState.pricingParams
+                    val typeSpecificPricing = when (type) {
+                        TakeoffType.DRYWALL -> listOf(
+                            NumberFieldSpec(
+                                label = "Sheet Cost ($/sheet)",
+                                value = pricing.drywallSheetCost.toString(),
+                                hint = "Material price",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(drywallSheetCost = value)
+                                    }
                                 }
-                            }
-                        ),
-                        NumberFieldSpec(
-                            label = "Weight Cost ($/ton)",
-                            value = pricing.gravelTonCost.toString(),
-                            hint = "Ton pricing",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(gravelTonCost = value)
+                            ),
+                            NumberFieldSpec(
+                                label = "Screw Cost ($/screw)",
+                                value = pricing.drywallScrewCost.toString(),
+                                hint = "Fastener price",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(drywallScrewCost = value)
+                                    }
                                 }
-                            }
+                            ),
+                            NumberFieldSpec(
+                                label = "Mud Cost ($/gallon)",
+                                value = pricing.drywallMudCost.toString(),
+                                hint = "Compound price",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(drywallMudCost = value)
+                                    }
+                                }
+                            )
                         )
-                    )
 
-                    TakeoffType.PAINT -> listOf(
-                        NumberFieldSpec(
-                            label = "Paint Cost ($/gallon)",
-                            value = pricing.paintGallonCost.toString(),
-                            hint = "Can price",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(paintGallonCost = value)
+                        TakeoffType.CONCRETE -> listOf(
+                            NumberFieldSpec(
+                                label = "Concrete Cost ($/cubic yard)",
+                                value = pricing.concreteYardCost.toString(),
+                                hint = "Batch price",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(concreteYardCost = value)
+                                    }
                                 }
-                            }
+                            )
+                        )
+
+                        TakeoffType.GRAVEL_MULCH -> listOf(
+                            NumberFieldSpec(
+                                label = "Volume Cost ($/cubic yard)",
+                                value = pricing.gravelYardCost.toString(),
+                                hint = "Yard pricing",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(gravelYardCost = value)
+                                    }
+                                }
+                            ),
+                            NumberFieldSpec(
+                                label = "Weight Cost ($/ton)",
+                                value = pricing.gravelTonCost.toString(),
+                                hint = "Ton pricing",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(gravelTonCost = value)
+                                    }
+                                }
+                            )
+                        )
+
+                        TakeoffType.PAINT -> listOf(
+                            NumberFieldSpec(
+                                label = "Paint Cost ($/gallon)",
+                                value = pricing.paintGallonCost.toString(),
+                                hint = "Can price",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(paintGallonCost = value)
+                                    }
+                                }
+                            )
+                        )
+                    }
+
+                    ParameterCard(
+                        title = "Pricing",
+                        description = "Material costs and business percentages used in this estimate.",
+                        fields = typeSpecificPricing + listOf(
+                            NumberFieldSpec(
+                                label = "Labor %",
+                                value = pricing.laborPercent.toString(),
+                                hint = "Crew labor burden",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(laborPercent = value)
+                                    }
+                                }
+                            ),
+                            NumberFieldSpec(
+                                label = "Markup %",
+                                value = pricing.markupPercent.toString(),
+                                hint = "Gross margin add",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(markupPercent = value)
+                                    }
+                                }
+                            ),
+                            NumberFieldSpec(
+                                label = "Tax %",
+                                value = pricing.taxPercent.toString(),
+                                hint = "Final tax applied",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updatePricingParams(taxPercent = value)
+                                    }
+                                }
+                            )
                         )
                     )
                 }
-
-                ParameterCard(
-                    title = "Pricing + Profit",
-                    description = "Live business math stacked on top of material quantities.",
-                    fields = typeSpecificPricing + listOf(
-                        NumberFieldSpec(
-                            label = "Labor %",
-                            value = pricing.laborPercent.toString(),
-                            hint = "Crew labor burden",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(laborPercent = value)
-                                }
-                            }
-                        ),
-                        NumberFieldSpec(
-                            label = "Markup %",
-                            value = pricing.markupPercent.toString(),
-                            hint = "Gross margin add",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(markupPercent = value)
-                                }
-                            }
-                        ),
-                        NumberFieldSpec(
-                            label = "Tax %",
-                            value = pricing.taxPercent.toString(),
-                            hint = "Final tax applied",
-                            onChange = {
-                                it.toDoubleOrNull()?.let { value ->
-                                    viewModel.updatePricingParams(taxPercent = value)
-                                }
-                            }
-                        )
-                    )
-                )
             }
+
 
             uiState.result?.let { result ->
                 item {
@@ -626,7 +651,7 @@ fun TakeoffScreen(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "Result Snapshot",
+                                text = "Estimate Total",
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -647,97 +672,92 @@ fun TakeoffScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                        }
-                    }
-                }
-
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
+                            Spacer(modifier = Modifier.height(8.dp))
+                            SecondaryActionButton(
+                                onClick = {
+                                    viewModel.recordTap("takeoff_open_export")
+                                    onOpenExport()
+                                },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.Summarize, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Continue to Export")
+                            }
+                            QuietActionButton(
+                                onClick = {
+                                    viewModel.recordTap("takeoff_toggle_detailed_results")
+                                    showDetailedResults = !showDetailedResults
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
-                                    text = "${type.displayLabel} Results",
-                                    style = MaterialTheme.typography.titleMedium
+                                    if (showDetailedResults) {
+                                        "Hide Detailed Results"
+                                    } else {
+                                        "Show Detailed Results"
+                                    }
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            result.items.forEach { line ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = line.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            text = "${Formatters.formatQuantity(line.quantity)} ${line.unit}",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        line.unitCost?.let { cost ->
-                                            Text(
-                                                text = "@ ${Formatters.formatMoney(cost)}",
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
-                                        }
-                                        line.extendedCost?.let { ext ->
-                                            Text(
-                                                text = Formatters.formatMoney(ext),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
                         }
                     }
                 }
 
-                if (result.totalCost != null) {
+                if (showDetailedResults) {
                     item {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                            ),
-                            modifier = Modifier.animateContentSize()
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            )
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Engineering, contentDescription = null)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Summarize, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Job Cost Stack",
+                                        text = "${type.displayLabel} Results",
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
-                                SummaryLine("Materials", result.materialSubtotal)
-                                SummaryLine("Labor", result.laborCost)
-                                SummaryLine("Markup", result.markupCost)
-                                SummaryLine("Tax", result.taxCost)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Grand Total: ${Formatters.formatMoney(result.totalCost)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                result.items.forEach { line ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = line.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = "${Formatters.formatQuantity(line.quantity)} ${line.unit}",
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            line.unitCost?.let { cost ->
+                                                Text(
+                                                    text = "@ ${Formatters.formatMoney(cost)}",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                            line.extendedCost?.let { ext ->
+                                                Text(
+                                                    text = Formatters.formatMoney(ext),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                             }
                         }
                     }
+
                 }
             } ?: item {
                 Card(
@@ -747,7 +767,7 @@ fun TakeoffScreen(
                     modifier = Modifier.animateContentSize()
                 ) {
                     Text(
-                        text = "Set your scope above to generate quantities and pricing.",
+                        text = "Choose an estimate type above to generate quantities and pricing.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(14.dp)
                     )
@@ -820,77 +840,13 @@ private fun ParameterCard(
 
 @Composable
 private fun BufferedNumberField(field: NumberFieldSpec) {
-    var text by rememberSaveable(field.label) { mutableStateOf(field.value) }
-    LaunchedEffect(field.value) {
-        if (field.value != text) {
-            text = field.value
-        }
-    }
-
-    OutlinedTextField(
-        value = text,
-        onValueChange = {
-            text = it
-            field.onChange(it)
-        },
-        label = { Text(field.label) },
-        placeholder = { Text(field.hint) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
+    BufferedInputField(
+        label = field.label,
+        initialValue = field.value,
+        hint = field.hint,
+        keyboardType = KeyboardType.Decimal,
+        onValueChange = field.onChange
     )
-}
-
-@Composable
-private fun SummaryLine(label: String, amount: Double?) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            text = Formatters.formatMoney(amount ?: 0.0),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun TakeoffFlowStepPill(
-    step: TakeoffFlowStep,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = if (step.complete) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(
-                text = step.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (step.complete) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-            Text(
-                text = if (step.complete) "Ready" else "Pending",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = step.detail,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
 }
 
 private data class NumberFieldSpec(
@@ -898,12 +854,6 @@ private data class NumberFieldSpec(
     val value: String,
     val hint: String,
     val onChange: (String) -> Unit
-)
-
-private data class TakeoffFlowStep(
-    val label: String,
-    val detail: String,
-    val complete: Boolean
 )
 
 @Composable
@@ -976,32 +926,6 @@ private fun TradeScopeGrid(
     }
 }
 
-private val TakeoffType.displayLabel: String
-    get() = when (this) {
-        TakeoffType.DRYWALL -> "Drywall"
-        TakeoffType.CONCRETE -> "Concrete"
-        TakeoffType.GRAVEL_MULCH -> "Gravel/Mulch"
-        TakeoffType.PAINT -> "Paint"
-    }
-
-private fun PrimaryTrade.displayLabel(): String = when (this) {
-    PrimaryTrade.DRYWALL -> "Drywall"
-    PrimaryTrade.CONCRETE -> "Concrete"
-    PrimaryTrade.PAINT -> "Paint"
-    PrimaryTrade.GRAVEL_MULCH -> "Gravel/Mulch"
-    PrimaryTrade.MULTI -> "Multi-Trade"
-}
-
-private fun defaultTakeoffTypeForTrade(primaryTrade: PrimaryTrade): TakeoffType? {
-    return when (primaryTrade) {
-        PrimaryTrade.DRYWALL -> TakeoffType.DRYWALL
-        PrimaryTrade.CONCRETE -> TakeoffType.CONCRETE
-        PrimaryTrade.PAINT -> TakeoffType.PAINT
-        PrimaryTrade.GRAVEL_MULCH -> TakeoffType.GRAVEL_MULCH
-        PrimaryTrade.MULTI -> null
-    }
-}
-
 private data class TradeScopeInfo(
     val type: TakeoffType,
     val title: String,
@@ -1016,32 +940,40 @@ private data class ScopeSummary(
     val guidance: String
 )
 
-private fun scopeSummaryForType(project: Project?, type: TakeoffType): ScopeSummary {
+private fun scopeSummaryForType(
+    project: Project?,
+    type: TakeoffType,
+    includeDrywallCeilings: Boolean
+): ScopeSummary {
     if (project == null) {
         return ScopeSummary(
             spaceCount = 0,
             measuredQuantity = 0.0,
             unit = "",
-            quantityLabel = "Measured scope",
+            quantityLabel = "Measured quantity",
             guidance = "Project data is still loading."
         )
     }
 
     return when (type) {
         TakeoffType.DRYWALL -> {
-            val spaces = project.spaces.filter { it.geometry is Geometry.Wall }
+            val spaces = project.drywallSpaces(includeDrywallCeilings)
             val netArea = spaces.sumOf { (it.geometry.areaSqFt() - it.openingsAreaSqFt()).coerceAtLeast(0.0) }
             ScopeSummary(
                 spaceCount = spaces.size,
                 measuredQuantity = netArea,
                 unit = "sq ft",
-                quantityLabel = "Net wall area",
-                guidance = "Walls with openings removed are used for drywall quantity."
+                quantityLabel = if (includeDrywallCeilings) "Net drywall area" else "Net wall area",
+                guidance = if (includeDrywallCeilings) {
+                    "Walls plus ceilings (rect surfaces) with openings removed are used for drywall quantity."
+                } else {
+                    "Walls with openings removed are used for drywall quantity."
+                }
             )
         }
 
         TakeoffType.CONCRETE -> {
-            val spaces = project.spaces.filter { it.geometry is Geometry.Slab }
+            val spaces = project.concreteSpaces()
             val area = spaces.sumOf { it.geometry.areaSqFt() }
             ScopeSummary(
                 spaceCount = spaces.size,
@@ -1065,7 +997,7 @@ private fun scopeSummaryForType(project: Project?, type: TakeoffType): ScopeSumm
         }
 
         TakeoffType.PAINT -> {
-            val spaces = project.spaces.filter { it.geometry is Geometry.Wall || it.geometry is Geometry.Rect }
+            val spaces = project.paintableSpaces()
             val netArea = spaces.sumOf { (it.geometry.areaSqFt() - it.openingsAreaSqFt()).coerceAtLeast(0.0) }
             ScopeSummary(
                 spaceCount = spaces.size,
@@ -1077,3 +1009,44 @@ private fun scopeSummaryForType(project: Project?, type: TakeoffType): ScopeSumm
         }
     }
 }
+
+private fun takeoffWarnings(
+    uiState: com.tradesketch.estimator.ui.viewmodel.TakeoffUiState,
+    selectedType: TakeoffType,
+    scopeSummary: ScopeSummary
+): List<String> {
+    val warnings = mutableListOf<String>()
+    if (scopeSummary.spaceCount == 0) {
+        warnings += "No matching spaces were found for ${selectedType.displayLabel}. Add spaces in Model or Blueprint."
+    }
+    if (scopeSummary.measuredQuantity <= 0.0) {
+        warnings += "Measured quantity is zero. Verify dimensions and openings."
+    }
+    if (selectedType == TakeoffType.DRYWALL) {
+        val hasRectangles = uiState.project?.spaces?.any { it.geometry is Geometry.Rect } == true
+        if (hasRectangles && !uiState.drywallParams.includeCeilings) {
+            warnings += "Rectangular room ceilings exist but are excluded from drywall totals."
+        }
+    }
+
+    val wastePercent = when (selectedType) {
+        TakeoffType.DRYWALL -> uiState.drywallParams.wastePercent
+        TakeoffType.CONCRETE -> uiState.concreteParams.wastePercent
+        TakeoffType.GRAVEL_MULCH -> uiState.gravelParams.wastePercent
+        TakeoffType.PAINT -> uiState.paintParams.wastePercent
+    }
+    if (wastePercent > 25.0) {
+        warnings += "Waste is above 25%. Confirm this is intentional."
+    }
+    if (wastePercent < 2.0) {
+        warnings += "Waste is very low. Material shortages may occur."
+    }
+    if (uiState.pricingParams.markupPercent < 8.0) {
+        warnings += "Markup is below 8%. Profit protection may be too thin."
+    }
+    if (uiState.pricingParams.laborPercent < 8.0) {
+        warnings += "Labor percent is very low for most field jobs."
+    }
+    return warnings
+}
+

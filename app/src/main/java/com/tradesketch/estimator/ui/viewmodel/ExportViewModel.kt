@@ -4,17 +4,20 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tradesketch.estimator.data.repository.ProjectRepository
 import com.tradesketch.estimator.data.repository.SettingsRepository
-import com.tradesketch.estimator.domain.model.Geometry
-import com.tradesketch.estimator.domain.model.CostingInputs
+import com.tradesketch.estimator.data.repository.UxMetricsRepository
 import com.tradesketch.estimator.domain.model.Project
+import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.displayLabel
+import com.tradesketch.estimator.utils.EstimateExportManager
 import com.tradesketch.estimator.utils.ExportFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,6 +40,7 @@ class ExportViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val projectRepository: ProjectRepository,
     private val settingsRepository: SettingsRepository,
+    private val uxMetricsRepository: UxMetricsRepository,
     private val calculateTakeoffUseCase: CalculateTakeoffUseCase,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -73,13 +77,18 @@ class ExportViewModel @Inject constructor(
                 if (project == null) {
                     _uiState.update {
                         it.copy(
+                            project = null,
                             isLoading = false,
                             error = "Project not found"
                         )
                     }
                     return@collect
                 }
-                val selectedType = _uiState.value.selectedType ?: TakeoffType.DRYWALL
+                val selectedType = _uiState.value.selectedType
+                    ?: project.takeoffSession.takeIf { it != ProjectTakeoffSession() }
+                        ?.selectedScope
+                        ?.toTakeoffType()
+                    ?: TakeoffType.DRYWALL
                 _uiState.update {
                     it.copy(
                         project = project,
@@ -95,8 +104,17 @@ class ExportViewModel @Inject constructor(
     }
 
     fun selectTakeoffType(type: TakeoffType) {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap("export_select_scope")
+        }
         _uiState.update { it.copy(selectedType = type) }
         recalculate()
+    }
+
+    fun recordTap(task: String) {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap(task)
+        }
     }
 
     private fun recalculate() {
@@ -104,94 +122,37 @@ class ExportViewModel @Inject constructor(
         val project = state.project ?: return
         val settings = state.settings
         val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val persistedSession = project.takeoffSession.takeIf { it != ProjectTakeoffSession() }
+        val drywallParams = persistedSession?.drywall?.toUiParams() ?: settings.defaultDrywallParams()
+        val concreteParams = persistedSession?.concrete?.toUiParams() ?: settings.defaultConcreteParams()
+        val gravelParams = persistedSession?.gravel?.toUiParams() ?: settings.defaultGravelParams()
+        val paintParams = persistedSession?.paint?.toUiParams() ?: settings.defaultPaintParams()
+        val pricingParams = persistedSession?.pricing?.toUiParams() ?: settings.defaultPricingParams()
         val result = try {
-            when (selectedType) {
-                TakeoffType.DRYWALL -> {
-                    val walls = project.spaces.filter { it.geometry is Geometry.Wall }
-                    calculateTakeoffUseCase.calculateDrywall(
-                        walls = walls,
-                        sheetAreaSqFt = settings.defaultDrywallSheetArea,
-                        wastePercent = settings.defaultWastePercent,
-                        screwsPerSheet = settings.defaultScrewsPerSheet,
-                        mudGallonsPer100SqFt = settings.defaultMudGallonsPer100SqFt,
-                        costing = CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Drywall sheets" to settings.drywallSheetUnitCost,
-                                "Drywall screws" to settings.drywallScrewUnitCost,
-                                "Joint compound" to settings.drywallMudUnitCost
-                            ),
-                            laborPercent = settings.laborPercent,
-                            markupPercent = settings.markupPercent,
-                            taxPercent = settings.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.CONCRETE -> {
-                    val slabs = project.spaces.filter { it.geometry is Geometry.Slab }
-                    calculateTakeoffUseCase.calculateConcrete(
-                        slabSpaces = slabs,
-                        thicknessFeet = 0.33,
-                        wastePercent = settings.defaultWastePercent,
-                        costing = CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Concrete volume" to settings.concreteYardUnitCost
-                            ),
-                            laborPercent = settings.laborPercent,
-                            markupPercent = settings.markupPercent,
-                            taxPercent = settings.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.GRAVEL_MULCH -> {
-                    calculateTakeoffUseCase.calculateGravelMulch(
-                        spaces = project.spaces,
-                        depthFeet = 0.25,
-                        densityTonsPerYard = 1.4,
-                        wastePercent = settings.defaultWastePercent,
-                        costing = CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Material volume" to settings.gravelYardUnitCost,
-                                "Material weight" to settings.gravelTonUnitCost
-                            ),
-                            laborPercent = settings.laborPercent,
-                            markupPercent = settings.markupPercent,
-                            taxPercent = settings.taxPercent
-                        )
-                    )
-                }
-                TakeoffType.PAINT -> {
-                    val paintable = project.spaces.filter {
-                        it.geometry is Geometry.Wall || it.geometry is Geometry.Rect
-                    }
-                    calculateTakeoffUseCase.calculatePaint(
-                        spaces = paintable,
-                        coverageSqFtPerGallon = settings.defaultCoveragePerGallon,
-                        coats = settings.defaultCoatsOfPaint,
-                        wastePercent = settings.defaultWastePercent,
-                        costing = CostingInputs(
-                            unitCostByLineName = mapOf(
-                                "Paint" to settings.paintGallonUnitCost
-                            ),
-                            laborPercent = settings.laborPercent,
-                            markupPercent = settings.markupPercent,
-                            taxPercent = settings.taxPercent
-                        )
-                    )
-                }
-            }
+            calculateTakeoffUseCase.calculateForType(
+                project = project,
+                type = selectedType,
+                inputs = TakeoffCalculationInputs(
+                    drywall = drywallParams,
+                    concrete = concreteParams,
+                    gravel = gravelParams,
+                    paint = paintParams,
+                    pricing = pricingParams
+                )
+            )
         } catch (e: Exception) {
             _uiState.update { it.copy(error = "Failed to calculate export: ${e.message}") }
             return
         }
 
-        val label = selectedType.displayName()
+        val label = selectedType.displayLabel
         _uiState.update {
             it.copy(
                 result = result,
                 takeoffType = label,
-                textContent = ExportFormatter.formatAsText(project, label, result),
-                summaryContent = ExportFormatter.formatAsSummary(project, label, result),
-                csvContent = ExportFormatter.formatAsCSV(project, label, result),
+                textContent = ExportFormatter.formatAsText(project, settings, label, result),
+                summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
+                csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
                 error = null
             )
         }
@@ -221,7 +182,23 @@ class ExportViewModel @Inject constructor(
         )
     }
 
+    fun copyCustomTextToClipboard(
+        label: String,
+        content: String,
+        successMessage: String
+    ): Boolean {
+        return copyToClipboard(
+            label = label,
+            content = content,
+            successMessage = successMessage
+        )
+    }
+
     fun createShareIntent(shareCsv: Boolean = false): Intent {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap(if (shareCsv) "export_share_csv" else "export_share_report")
+            uxMetricsRepository.recordTap("export_output_shared")
+        }
         val state = _uiState.value
         val content = if (shareCsv) state.csvContent else state.textContent
         val subjectSuffix = if (shareCsv) "CSV" else state.takeoffType
@@ -233,6 +210,54 @@ class ExportViewModel @Inject constructor(
         return Intent.createChooser(intent, if (shareCsv) "Share CSV" else "Share Estimate")
     }
 
+    suspend fun createEstimatePdfShareIntent(): Intent? {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap("export_share_pdf")
+            uxMetricsRepository.recordTap("export_output_shared")
+        }
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val result = state.result ?: return null
+        return runCatching {
+            EstimateExportManager.createEstimatePdfShareIntent(
+                context = context,
+                projectName = project.name,
+                takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
+                settings = state.settings,
+                result = result
+            )
+        }.getOrElse { error ->
+            _uiState.update { it.copy(error = "Could not prepare estimate PDF: ${error.message}") }
+            null
+        }
+    }
+
+    suspend fun saveEstimatePdfToDownloads(): Uri? {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap("export_download_pdf")
+            uxMetricsRepository.recordTap("export_output_shared")
+        }
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val result = state.result ?: return null
+        return runCatching {
+            EstimateExportManager.saveEstimatePdfToDownloads(
+                context = context,
+                projectName = project.name,
+                takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
+                settings = state.settings,
+                result = result
+            )
+        }.onSuccess { uri ->
+            if (uri != null) {
+                _uiState.update { it.copy(lastAction = "Estimate PDF downloaded") }
+            }
+        }.getOrElse { error ->
+            _uiState.update { it.copy(error = "Could not save estimate PDF: ${error.message}") }
+            null
+        }
+    }
+
     fun clearLastAction() {
         _uiState.update { it.copy(lastAction = null, error = null) }
     }
@@ -242,6 +267,9 @@ class ExportViewModel @Inject constructor(
         content: String,
         successMessage: String
     ): Boolean {
+        viewModelScope.launch {
+            uxMetricsRepository.recordTap("export_copy")
+        }
         return try {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText(label, content)
@@ -268,12 +296,3 @@ data class ExportUiState(
     val error: String? = null,
     val isLoading: Boolean = true
 )
-
-private fun TakeoffType.displayName(): String {
-    return when (this) {
-        TakeoffType.DRYWALL -> "Drywall"
-        TakeoffType.CONCRETE -> "Concrete"
-        TakeoffType.GRAVEL_MULCH -> "Gravel / Mulch"
-        TakeoffType.PAINT -> "Paint"
-    }
-}

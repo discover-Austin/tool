@@ -1,75 +1,51 @@
 package com.tradesketch.estimator.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-private val LightColors = lightColorScheme(
-    primary = ConstructionBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFDDE7FF),
-    onPrimaryContainer = Color(0xFF00174A),
-    secondary = SignalOrange,
-    onSecondary = Color(0xFF2A1600),
-    secondaryContainer = Color(0xFFFFE3C0),
-    onSecondaryContainer = Color(0xFF3A2400),
-    tertiary = TealAccent,
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFC1F2EA),
-    onTertiaryContainer = Color(0xFF002D28),
-    background = Color(0xFFF3F6FA),
-    onBackground = Color(0xFF111827),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF182231),
-    surfaceVariant = Color(0xFFE8EDF5),
-    onSurfaceVariant = SteelGray,
-    error = Color(0xFFB3261E),
-    errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B),
-    outline = Color(0xFFB7C1D1)
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFAEC6FF),
-    onPrimary = Color(0xFF02246F),
-    primaryContainer = Color(0xFF17357E),
-    onPrimaryContainer = Color(0xFFDEE7FF),
-    secondary = Color(0xFFFFB955),
-    onSecondary = Color(0xFF432C00),
-    secondaryContainer = Color(0xFF5F4000),
-    onSecondaryContainer = Color(0xFFFFE3C0),
-    tertiary = Color(0xFF70D7C8),
-    onTertiary = Color(0xFF003730),
-    tertiaryContainer = Color(0xFF005046),
-    onTertiaryContainer = Color(0xFFC1F2EA),
-    background = Color(0xFF0E131C),
-    onBackground = Color(0xFFE3EAF6),
-    surface = Color(0xFF131A25),
-    onSurface = Color(0xFFE3EAF6),
-    surfaceVariant = Color(0xFF273040),
-    onSurfaceVariant = Color(0xFFC1CAD8),
-    error = Color(0xFFF2B8B5),
-    errorContainer = Color(0xFF8C1D18),
-    onErrorContainer = Color(0xFFF9DEDC),
-    outline = Color(0xFF8793A7)
+private val SleekDarkColors = darkColorScheme(
+    primary = ElectricCyan,
+    onPrimary = Midnight950,
+    primaryContainer = Color(0xFF123146),
+    onPrimaryContainer = Color(0xFFBEEBFF),
+    secondary = EmberOrange,
+    onSecondary = Midnight950,
+    secondaryContainer = Color(0xFF4A2C11),
+    onSecondaryContainer = Color(0xFFFFDFBF),
+    tertiary = MintSignal,
+    onTertiary = Midnight950,
+    tertiaryContainer = Color(0xFF163A31),
+    onTertiaryContainer = Color(0xFFBDFBE5),
+    background = Midnight950,
+    onBackground = Color(0xFFE2ECF7),
+    surface = Midnight900,
+    onSurface = Color(0xFFE2ECF7),
+    surfaceVariant = Midnight850,
+    onSurfaceVariant = SteelText,
+    surfaceBright = Slate800,
+    surfaceContainer = Midnight850,
+    surfaceContainerHigh = Slate800,
+    error = Color(0xFFFF8A80),
+    errorContainer = Color(0xFF5A1F1F),
+    onErrorContainer = Color(0xFFFFD9D6),
+    outline = Slate700
 )
 
 private val AppShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp)
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp)
 )
 
 @Composable
 fun TradeSketchTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        colorScheme = SleekDarkColors,
         typography = Typography,
         shapes = AppShapes,
         content = content

@@ -648,9 +648,10 @@ private fun ResultsCard(result: com.tradesketch.estimator.domain.model.TakeoffRe
                     Text(item.name)
                     Text("${Formatters.formatQuantity(item.quantity)} ${item.unit}")
                 }
-                if (item.unitCost != null) {
+                val unitCost = item.unitCost
+                if (unitCost != null) {
                     Text(
-                        text = "@ ${Formatters.formatQuantity(item.unitCost)} each",
+                        text = "@ ${Formatters.formatQuantity(unitCost)} each",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )

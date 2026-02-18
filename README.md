@@ -32,25 +32,26 @@ TradeSketch Estimator is a privacy-first, offline Android app for calculating ma
 - **Navigation:** Navigation Compose
 - **Build:** Gradle Kotlin DSL
 - **Min SDK:** 26 (Android 8.0)
-- **Target SDK:** 34 (Android 14)
+- **Target SDK:** 35 (Android 15)
 
 ## Project Structure
 
 ```
-app/src/main/java/com/tradesketch/estimator/
-├── ui/
-│   ├── screens/          # Composable screens
-│   ├── components/       # Reusable UI components
-│   └── theme/            # Material3 theme, colors, typography
+core/src/main/kotlin/com/tradesketch/estimator/
 ├── domain/
-│   ├── model/            # Core domain models (Space, Geometry, Units, Money)
-│   ├── usecase/          # Business logic use cases
-│   └── calc/             # Takeoff calculation engine
-├── data/
-│   ├── local/            # DataStore persistence
-│   └── repository/       # Repository pattern implementations
+│   ├── model/            # Shared domain models (Space, Geometry, Units, Money)
+│   └── calc/             # Shared takeoff calculation engine
+└── utils/                # Shared non-Android utilities
+
+app/src/main/java/com/tradesketch/estimator/
+├── ui/                   # Android Compose UI
+├── data/                 # Android persistence + repositories
+├── domain/usecase/       # Android use case wiring
 ├── di/                   # Hilt dependency injection modules
-└── utils/                # Utility functions and helpers
+└── utils/                # Android-only utilities (e.g. export manager)
+
+desktop/src/main/kotlin/com/tradesketch/estimator/desktop/
+└── Compose Desktop app shell
 ```
 
 ## Domain Model
@@ -85,16 +86,16 @@ app/src/main/java/com/tradesketch/estimator/
 ./gradlew clean
 
 # Run tests
-./gradlew test
+./gradlew :app:testDebugUnitTest
 
 # Run lint
-./gradlew lint
+./gradlew :app:lint
 
 # Build debug APK
 ./gradlew assembleDebug
 
 # Build release AAB (requires signing configuration)
-./gradlew bundleRelease
+./gradlew :app:bundleRelease
 
 # Run desktop app (Compose Desktop)
 ./gradlew :desktop:run
@@ -102,7 +103,7 @@ app/src/main/java/com/tradesketch/estimator/
 
 ### Desktop App
 
-A Compose Desktop version is included in `desktop/` and reuses the existing domain and calculator logic from `app/src/main/java/com/tradesketch/estimator/domain`.
+A Compose Desktop version is included in `desktop/` and reuses shared logic from the `:core` module.
 
 - Desktop docs: `desktop/README.md`
 - Run: `./gradlew :desktop:run`
@@ -180,7 +181,7 @@ Hilt provides:
 
 ## Play Store Compliance
 
-- ✅ targetSdk 34
+- ✅ targetSdk 35
 - ✅ Privacy policy (in-app + hosted)
 - ✅ Data safety form completed (no data collected)
 - ✅ Content rating: Everyone (E)
@@ -200,7 +201,7 @@ Hilt provides:
 ### Future Considerations
 - L-shaped rooms
 - Circular spaces
-- Custom material presets
+- Custom material libraries
 - Imperial + Metric units
 - Backup/restore projects
 

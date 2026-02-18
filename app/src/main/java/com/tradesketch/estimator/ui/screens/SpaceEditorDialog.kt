@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.ui.screens
 
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,16 +17,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -58,18 +59,42 @@ internal fun SpaceEditorDialog(
     var validationError by remember(initialSpace?.id) { mutableStateOf<String?>(null) }
     var name by remember(initialSpace?.id) { mutableStateOf(initialSpace?.name.orEmpty()) }
     var geometryType by remember(initialSpace?.id) {
-        mutableStateOf(initialSpace?.geometry?.toEditorType() ?: SpaceGeometryType.WALL)
+        mutableStateOf(
+            initialSpace?.geometry?.toEditorType() ?: SpaceGeometryType.WALL
+        )
     }
-
-    var lengthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.lengthForEditor()) }
-    var widthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.widthForEditor()) }
-    var heightFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.heightForEditor()) }
-    var thicknessFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.thicknessForEditor()) }
-    var radiusFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.radiusForEditor()) }
-    var rectALengthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.rectALengthForEditor()) }
-    var rectAWidthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.rectAWidthForEditor()) }
-    var rectBLengthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.rectBLengthForEditor()) }
-    var rectBWidthFt by remember(initialSpace?.id) { mutableStateOf(initialSpace?.geometry.rectBWidthForEditor()) }
+    var lengthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.lengthForEditor())
+    }
+    var widthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.widthForEditor())
+    }
+    var heightFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.heightForEditor())
+    }
+    var thicknessFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.thicknessForEditor())
+    }
+    var radiusFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.radiusForEditor())
+    }
+    var rectALengthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.rectALengthForEditor())
+    }
+    var rectAWidthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.rectAWidthForEditor())
+    }
+    var rectBLengthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.rectBLengthForEditor())
+    }
+    var rectBWidthFt by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.geometry.rectBWidthForEditor())
+    }
+    var showOpeningsEditor by remember(initialSpace?.id) {
+        mutableStateOf(initialSpace?.openings?.isNotEmpty() == true)
+    }
+    var showLivePreview by remember(initialSpace?.id) { mutableStateOf(false) }
+    var currentStep by remember(initialSpace?.id) { mutableStateOf(SpaceEditorStep.BASICS) }
 
     val openingDrafts = remember(initialSpace?.id) {
         mutableStateListOf<OpeningDraft>().apply {
@@ -103,7 +128,9 @@ internal fun SpaceEditorDialog(
         val count = Validators.parsePositiveInt(draft.count) ?: return@sumOf 0.0
         width * height * count
     }
-
+    val configuredOpeningRows = openingDrafts.count { draft ->
+        draft.widthFt.isNotBlank() || draft.heightFt.isNotBlank() || draft.count.isNotBlank()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isEditing) "Edit Space" else "Add Space") },
@@ -114,6 +141,7 @@ internal fun SpaceEditorDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (currentStep == SpaceEditorStep.BASICS) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -130,7 +158,9 @@ internal fun SpaceEditorDialog(
                     selected = geometryType,
                     onSelected = { geometryType = it }
                 )
+                }
 
+                if (currentStep == SpaceEditorStep.GEOMETRY) {
                 when (geometryType) {
                     SpaceGeometryType.WALL -> {
                         DimensionField("Length (ft)", lengthFt) { lengthFt = it }
@@ -163,76 +193,124 @@ internal fun SpaceEditorDialog(
                         DimensionField("B Width (ft)", rectBWidthFt) { rectBWidthFt = it }
                     }
                 }
+                }
 
-                if (geometryType.supportsOpenings) {
+                if (currentStep == SpaceEditorStep.OPENINGS && geometryType.supportsOpenings) {
                     Text(
                         text = "Openings (optional)",
                         style = MaterialTheme.typography.titleSmall
                     )
-                    if (openingDrafts.isEmpty()) {
-                        Text(
-                            text = "No openings added.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        openingDrafts.forEachIndexed { index, draft ->
-                            OpeningEditorRow(
-                                openingNumber = index + 1,
-                                draft = draft,
-                                onWidthChange = { openingDrafts[index] = draft.copy(widthFt = it) },
-                                onHeightChange = { openingDrafts[index] = draft.copy(heightFt = it) },
-                                onCountChange = { openingDrafts[index] = draft.copy(count = it) },
-                                onDelete = { openingDrafts.removeAt(index) }
-                            )
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = { openingDrafts.add(OpeningDraft()) },
+                    Text(
+                        text = if (configuredOpeningRows == 0) {
+                            "No openings added."
+                        } else {
+                            "$configuredOpeningRows opening entry(ies) configured."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(
+                        onClick = { showOpeningsEditor = !showOpeningsEditor },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add Opening")
+                        Text(
+                            if (showOpeningsEditor) {
+                                "Hide Opening Editor"
+                            } else {
+                                "Show Opening Editor"
+                            }
+                        )
+                    }
+                    if (showOpeningsEditor) {
+                        if (openingDrafts.isNotEmpty()) {
+                            openingDrafts.forEachIndexed { index, draft ->
+                                OpeningEditorRow(
+                                    openingNumber = index + 1,
+                                    draft = draft,
+                                    onWidthChange = { openingDrafts[index] = draft.copy(widthFt = it) },
+                                    onHeightChange = { openingDrafts[index] = draft.copy(heightFt = it) },
+                                    onCountChange = { openingDrafts[index] = draft.copy(count = it) },
+                                    onDelete = { openingDrafts.removeAt(index) }
+                                )
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { openingDrafts.add(OpeningDraft()) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add Opening")
+                        }
                     }
                 }
+                if (currentStep == SpaceEditorStep.OPENINGS && !geometryType.supportsOpenings) {
+                    Text(
+                        text = "${geometryType.label} does not use openings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
+                if (currentStep == SpaceEditorStep.REVIEW) {
                 previewGeometry?.let { geometry ->
                     val areaSqFt = geometry.areaSqFt()
                     val volumeCuFt = geometry.volumeCuFt()
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                    TextButton(
+                        onClick = { showLivePreview = !showLivePreview },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = "Live Preview",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Area: ${Formatters.formatArea(areaSqFt)}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            if (previewOpeningsArea > 0.0) {
-                                Text(
-                                    text = "Openings: ${Formatters.formatQuantity(previewOpeningsArea)} sq ft",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    text = "Net area: ${Formatters.formatQuantity((areaSqFt - previewOpeningsArea).coerceAtLeast(0.0))} sq ft",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                        Text(
+                            if (showLivePreview) {
+                                "Hide Live Preview"
+                            } else {
+                                "Show Live Preview"
                             }
-                            if (volumeCuFt > 0.0) {
+                        )
+                    }
+                    if (showLivePreview) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = "Volume: ${Formatters.formatQuantity(volumeCuFt)} cu ft",
+                                    text = "Live Preview",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Area: ${Formatters.formatArea(areaSqFt)}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
+                                if (previewOpeningsArea > 0.0) {
+                                    Text(
+                                        text = "Openings: ${Formatters.formatQuantity(previewOpeningsArea)} sq ft",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = "Net area: ${Formatters.formatQuantity((areaSqFt - previewOpeningsArea).coerceAtLeast(0.0))} sq ft",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (volumeCuFt > 0.0) {
+                                    Text(
+                                        text = "Volume: ${Formatters.formatQuantity(volumeCuFt)} cu ft",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                     }
+                }
+                if (previewGeometry == null) {
+                    Text(
+                        text = "Complete geometry fields to review the live preview.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 }
 
                 validationError?.let { error ->
@@ -248,6 +326,10 @@ internal fun SpaceEditorDialog(
             Button(
                 onClick = {
                     validationError = null
+                    if (currentStep != SpaceEditorStep.REVIEW) {
+                        currentStep = currentStep.next()
+                        return@Button
+                    }
                     if (!Validators.isValidSpaceName(name)) {
                         validationError = "Enter a space name (1-50 chars)."
                         return@Button
@@ -327,14 +409,29 @@ internal fun SpaceEditorDialog(
                         )
                     )
                 },
-                enabled = name.isNotBlank()
+                enabled = if (currentStep == SpaceEditorStep.REVIEW) name.isNotBlank() else true
             ) {
-                Text(if (isEditing) "Save Changes" else "Add Space")
+                Text(
+                    if (currentStep == SpaceEditorStep.REVIEW) {
+                        if (isEditing) "Save Changes" else "Add Space"
+                    } else {
+                        "Continue"
+                    }
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(
+                onClick = {
+                    if (currentStep == SpaceEditorStep.BASICS) {
+                        onDismiss()
+                    } else {
+                        validationError = null
+                        currentStep = currentStep.previous()
+                    }
+                }
+            ) {
+                Text(if (currentStep == SpaceEditorStep.BASICS) "Cancel" else "Back")
             }
         }
     )
@@ -600,3 +697,20 @@ private fun Millimeters.toEditorFeetString(): String {
     val fixed = String.format(Locale.US, "%.2f", feet)
     return fixed.trimEnd('0').trimEnd('.')
 }
+
+private enum class SpaceEditorStep(val index: Int, val label: String) {
+    BASICS(0, "Basics"),
+    GEOMETRY(1, "Geometry"),
+    OPENINGS(2, "Openings"),
+    REVIEW(3, "Review");
+
+    fun next(): SpaceEditorStep {
+        return entries.getOrNull(index + 1) ?: this
+    }
+
+    fun previous(): SpaceEditorStep {
+        return entries.getOrNull(index - 1) ?: this
+    }
+}
+
+

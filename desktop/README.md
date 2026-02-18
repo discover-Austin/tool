@@ -1,6 +1,7 @@
 # TradeSketch Desktop
 
 Compose Desktop target for TradeSketch Estimator.
+Shared business logic comes from the cross-platform `:core` module.
 
 ## What It Includes
 

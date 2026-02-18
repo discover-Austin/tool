@@ -1,5 +1,11 @@
 package com.tradesketch.estimator.ui.screens
 
+import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.SecondaryActionButton
+import com.tradesketch.estimator.ui.components.QuietActionButton
+import com.tradesketch.estimator.ui.components.DangerActionButton
+
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,63 +24,56 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TaskAlt
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.tradesketch.estimator.ui.components.AnimatedEntry
+import com.tradesketch.estimator.ui.displayLabel
+import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.utils.Formatters
+import kotlinx.coroutines.launch
 
 @Composable
 fun ExportScreen(
     projectId: String,
-    onOpenModel: () -> Unit = {},
-    onOpenBlueprint: () -> Unit = {},
-    onOpenTakeoff: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onOpenTakeoff: () -> Unit = {},
     viewModel: ExportViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val haptics = rememberAppHaptics()
     val context = LocalContext.current
-    val exportSteps = listOf(
-        ExportFlowStep(
-            label = "Scope",
-            detail = uiState.selectedType?.displayLabel ?: "Choose trade",
-            complete = uiState.selectedType != null
-        ),
-        ExportFlowStep(
-            label = "Preview",
-            detail = if (uiState.result != null) "Summary ready" else "Run takeoff first",
-            complete = uiState.result != null
-        ),
-        ExportFlowStep(
-            label = "Share",
-            detail = if (uiState.result != null) "Copy or send output" else "Awaiting data",
-            complete = uiState.result != null
-        )
-    )
+    val coroutineScope = rememberCoroutineScope()
+    var showScopeSelector by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
+        mutableStateOf(uiState.selectedType == null)
+    }
+    var isPreparingEstimatePdf by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(projectId) {
         viewModel.setProjectId(projectId)
+        viewModel.recordTap("export_screen_opened")
     }
 
     if (uiState.isLoading) {
@@ -95,112 +94,25 @@ fun ExportScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        AnimatedEntry(delayMs = 0) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                modifier = Modifier.animateContentSize()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Export Center",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = uiState.project?.name ?: "No project selected",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "Prepare a clean summary, full report, or CSV in one tap.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
+        TitledSectionCard(
+            title = "Estimate Type",
+            subtitle = "Set which trade this export represents.",
             modifier = Modifier.animateContentSize()
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            val selectedType = uiState.selectedType
+            if (selectedType != null && !showScopeSelector) {
                 Text(
-                    text = "Export Workflow",
-                    style = MaterialTheme.typography.titleSmall
+                    text = "Selected type: ${selectedType.displayLabel}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                SecondaryActionButton(
+                    onClick = { showScopeSelector = true },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    exportSteps.forEach { step ->
-                        ExportStepPill(
-                            step = step,
-                            modifier = Modifier.width(150.dp)
-                        )
-                    }
+                    Text("Change Type")
                 }
-            }
-        }
-
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            modifier = Modifier.animateContentSize()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "Flow Navigator",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onOpenModel,
-                        modifier = Modifier.width(105.dp)
-                    ) {
-                        Text("Model")
-                    }
-                    OutlinedButton(
-                        onClick = onOpenBlueprint,
-                        modifier = Modifier.width(120.dp)
-                    ) {
-                        Text("Blueprint")
-                    }
-                    OutlinedButton(
-                        onClick = onOpenTakeoff,
-                        modifier = Modifier.width(110.dp)
-                    ) {
-                        Text("Takeoff")
-                    }
-                }
-                Text(
-                    text = "Finalize outputs here, then share summary/report/CSV with confidence.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Card(modifier = Modifier.animateContentSize()) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = "Report Scope",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -212,11 +124,51 @@ fun ExportScreen(
                             selected = uiState.selectedType == type,
                             onClick = {
                                 haptics.tap()
+                                viewModel.recordTap("export_select_scope")
                                 viewModel.selectTakeoffType(type)
+                                showScopeSelector = false
                             },
                             label = { Text(type.displayLabel) }
                         )
                     }
+                }
+                if (selectedType != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    QuietActionButton(
+                        onClick = { showScopeSelector = false },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Done")
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Select an estimate type to continue.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Card(modifier = Modifier.animateContentSize()) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Need to retune quantities or pricing?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                SecondaryActionButton(
+                    onClick = {
+                        haptics.tap()
+                        viewModel.recordTap("export_open_takeoff")
+                        onOpenTakeoff()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open Takeoff")
                 }
             }
         }
@@ -230,7 +182,7 @@ fun ExportScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "${uiState.takeoffType} Export Snapshot",
+                        text = "${uiState.takeoffType} Estimate Summary",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -255,20 +207,6 @@ fun ExportScreen(
             }
 
             Card(modifier = Modifier.animateContentSize()) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "Summary Preview",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = uiState.summaryContent.ifBlank { "No summary generated yet." },
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-
-            Card(modifier = Modifier.animateContentSize()) {
                 Column(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -277,54 +215,17 @@ fun ExportScreen(
                         text = "Quick Actions",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Button(
+                    if (uiState.settings.businessName.isBlank()) {
+                        Text(
+                            text = "Tip: add your business identity in Settings -> Business Defaults for branded exports.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    PrimaryActionButton(
                         onClick = {
                             haptics.confirm()
-                            viewModel.copySummaryToClipboard()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Copy Summary")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            haptics.tap()
-                            viewModel.copyReportToClipboard()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Copy Full Report")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            haptics.tap()
-                            viewModel.copyCSVToClipboard()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Copy CSV")
-                    }
-                }
-            }
-
-            Card(modifier = Modifier.animateContentSize()) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Share",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Button(
-                        onClick = {
-                            haptics.confirm()
+                            viewModel.recordTap("export_share_full_report")
                             val intent = viewModel.createShareIntent(shareCsv = false)
                             context.startActivity(intent)
                         },
@@ -334,26 +235,79 @@ fun ExportScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Share Full Report")
                     }
-                    OutlinedButton(
+                    SecondaryActionButton(
                         onClick = {
-                            haptics.tap()
-                            val intent = viewModel.createShareIntent(shareCsv = true)
-                            context.startActivity(intent)
+                            haptics.confirm()
+                            isPreparingEstimatePdf = true
+                            coroutineScope.launch {
+                                try {
+                                    val uri = viewModel.saveEstimatePdfToDownloads()
+                                    if (uri == null) {
+                                        Toast.makeText(context, "Could not save estimate PDF.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Estimate PDF saved to TradeSketch folder.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } finally {
+                                    isPreparingEstimatePdf = false
+                                }
+                            }
                         },
+                        enabled = !isPreparingEstimatePdf,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Download Estimate PDF")
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.confirm()
+                            isPreparingEstimatePdf = true
+                            coroutineScope.launch {
+                                try {
+                                    val intent = viewModel.createEstimatePdfShareIntent()
+                                    if (intent == null) {
+                                        Toast.makeText(context, "Could not prepare estimate PDF.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        context.startActivity(intent)
+                                    }
+                                } finally {
+                                    isPreparingEstimatePdf = false
+                                }
+                            }
+                        },
+                        enabled = !isPreparingEstimatePdf,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share CSV")
+                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Estimate PDF")
                     }
                 }
             }
         } ?: Card {
-            Text(
-                text = "No data available for this takeoff type yet. Run a takeoff first.",
+            Column(
                 modifier = Modifier.padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "No estimate data for this estimate type yet. Run Takeoff first.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                SecondaryActionButton(
+                    onClick = {
+                        viewModel.recordTap("export_open_takeoff")
+                        onOpenTakeoff()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open Takeoff")
+                }
+            }
         }
 
         uiState.lastAction?.let { action ->
@@ -393,53 +347,4 @@ fun ExportScreen(
     }
 }
 
-private val TakeoffType.displayLabel: String
-    get() = when (this) {
-        TakeoffType.DRYWALL -> "Drywall"
-        TakeoffType.CONCRETE -> "Concrete"
-        TakeoffType.GRAVEL_MULCH -> "Gravel/Mulch"
-        TakeoffType.PAINT -> "Paint"
-    }
 
-@Composable
-private fun ExportStepPill(
-    step: ExportFlowStep,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = if (step.complete) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(
-                text = step.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (step.complete) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-            Text(
-                text = if (step.complete) "Ready" else "Pending",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = step.detail,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-}
-
-private data class ExportFlowStep(
-    val label: String,
-    val detail: String,
-    val complete: Boolean
-)

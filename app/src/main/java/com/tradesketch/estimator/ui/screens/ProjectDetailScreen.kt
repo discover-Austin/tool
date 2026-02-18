@@ -1,5 +1,10 @@
 package com.tradesketch.estimator.ui.screens
 
+import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.SecondaryActionButton
+import com.tradesketch.estimator.ui.components.QuietActionButton
+import com.tradesketch.estimator.ui.components.DangerActionButton
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,19 +27,16 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -51,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Space
+import com.tradesketch.estimator.domain.model.SpaceTransform
 import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.domain.model.openingsAreaSqFt
 import com.tradesketch.estimator.domain.model.volumeCuFt
@@ -58,14 +61,14 @@ import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ProjectDetailViewModel
 import com.tradesketch.estimator.utils.Formatters
 import com.tradesketch.estimator.utils.Validators
+import java.util.UUID
 
 @Composable
 fun ProjectDetailScreen(
     projectId: String,
+    modifier: Modifier = Modifier,
     onOpenBlueprint: () -> Unit = {},
     onOpenTakeoff: () -> Unit = {},
-    onOpenExport: () -> Unit = {},
-    modifier: Modifier = Modifier,
     viewModel: ProjectDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -80,6 +83,7 @@ fun ProjectDetailScreen(
 
     LaunchedEffect(projectId) {
         viewModel.setProjectId(projectId)
+        viewModel.recordTap("model_screen_opened")
     }
 
     Box(modifier = modifier) {
@@ -111,22 +115,72 @@ fun ProjectDetailScreen(
                 val project = uiState.project!!
                 ProjectContent(
                     project = project,
-                    onOpenBlueprint = onOpenBlueprint,
-                    onOpenTakeoff = onOpenTakeoff,
-                    onOpenExport = onOpenExport,
+                    onOpenBlueprint = {
+                        haptics.tap()
+                        viewModel.recordTap("detail_open_blueprint")
+                        onOpenBlueprint()
+                    },
+                    onOpenTakeoff = {
+                        haptics.tap()
+                        viewModel.recordTap("detail_open_takeoff")
+                        onOpenTakeoff()
+                    },
                     onRenameProject = {
+                        viewModel.recordTap("detail_open_rename")
                         projectNameDraft = project.name
                         showRenameDialog = true
                     },
                     onRequestAddSpace = {
+                        viewModel.recordTap("detail_open_add_space")
                         showAddMethodDialog = true
                     },
                     onEditSpace = { space ->
+                        viewModel.recordTap("detail_edit_space")
                         editingSpace = space
                         showSpaceEditor = true
                     },
                     onDuplicateSpace = { viewModel.duplicateSpace(it) },
                     onDeleteSpace = { viewModel.deleteSpace(it) },
+                    onQuickAddWall = {
+                        val wallCount = project.spaces.count { it.geometry is Geometry.Wall } + 1
+                        viewModel.addSpace(
+                            Space(
+                                id = UUID.randomUUID().toString(),
+                                name = "Wall $wallCount",
+                                geometry = Geometry.Wall(
+                                    length = mmFromFeet(12.0),
+                                    height = mmFromFeet(9.0)
+                                )
+                            )
+                        )
+                    },
+                    onQuickAddRoom = {
+                        val roomCount = project.spaces.count { it.geometry is Geometry.Rect } + 1
+                        viewModel.addSpace(
+                            Space(
+                                id = UUID.randomUUID().toString(),
+                                name = "Room $roomCount",
+                                geometry = Geometry.Rect(
+                                    length = mmFromFeet(12.0),
+                                    width = mmFromFeet(10.0)
+                                )
+                            )
+                        )
+                    },
+                    onQuickAddSlab = {
+                        val slabCount = project.spaces.count { it.geometry is Geometry.Slab } + 1
+                        viewModel.addSpace(
+                            Space(
+                                id = UUID.randomUUID().toString(),
+                                name = "Slab $slabCount",
+                                geometry = Geometry.Slab(
+                                    length = mmFromFeet(16.0),
+                                    width = mmFromFeet(12.0),
+                                    thickness = mmFromFeet(0.33)
+                                )
+                            )
+                        )
+                    },
                     onAutoLayout = { viewModel.autoLayoutSpaces() }
                 )
             }
@@ -203,15 +257,20 @@ private fun ProjectContent(
     project: Project,
     onOpenBlueprint: () -> Unit,
     onOpenTakeoff: () -> Unit,
-    onOpenExport: () -> Unit,
     onRenameProject: () -> Unit,
     onRequestAddSpace: () -> Unit,
     onEditSpace: (Space) -> Unit,
     onDuplicateSpace: (String) -> Unit,
     onDeleteSpace: (String) -> Unit,
+    onQuickAddWall: () -> Unit,
+    onQuickAddRoom: () -> Unit,
+    onQuickAddSlab: () -> Unit,
     onAutoLayout: () -> Unit
 ) {
     var detailMode by rememberSaveable(project.id) { mutableStateOf(ProjectDetailMode.OVERVIEW) }
+    var showWorkspaceTools by rememberSaveable(project.id) { mutableStateOf(false) }
+    var showQuickAddShortcuts by rememberSaveable(project.id) { mutableStateOf(false) }
+    var showListFilters by rememberSaveable(project.id) { mutableStateOf(false) }
     var listTradeFilter by rememberSaveable(project.id) { mutableStateOf(SpaceTradeFilter.ALL) }
     var listSearchQuery by rememberSaveable(project.id) { mutableStateOf("") }
     val haptics = rememberAppHaptics()
@@ -236,34 +295,10 @@ private fun ProjectContent(
             areaSqFt = laneSpaces.sumOf { it.geometry.areaSqFt() }
         )
     }
-    val workflowSteps = listOf(
-        WorkflowStepStatus(
-            label = "Model Ready",
-            detail = if (project.spaces.isNotEmpty()) "${project.spaces.size} spaces created" else "Add your first space",
-            complete = project.spaces.isNotEmpty()
-        ),
-        WorkflowStepStatus(
-            label = "Trade Mix",
-            detail = if ((spacesByLane[ProjectTradeLane.DRYWALL].orEmpty().size +
-                    spacesByLane[ProjectTradeLane.CONCRETE].orEmpty().size +
-                    spacesByLane[ProjectTradeLane.ROOMS].orEmpty().size) >= 2
-            ) {
-                "Multiple trade lanes present"
-            } else {
-                "Add at least one more lane"
-            },
-            complete = (spacesByLane[ProjectTradeLane.DRYWALL].orEmpty().isNotEmpty() &&
-                spacesByLane[ProjectTradeLane.CONCRETE].orEmpty().isNotEmpty()) ||
-                (spacesByLane[ProjectTradeLane.DRYWALL].orEmpty().isNotEmpty() &&
-                    spacesByLane[ProjectTradeLane.ROOMS].orEmpty().isNotEmpty()) ||
-                (spacesByLane[ProjectTradeLane.CONCRETE].orEmpty().isNotEmpty() &&
-                    spacesByLane[ProjectTradeLane.ROOMS].orEmpty().isNotEmpty())
-        ),
-        WorkflowStepStatus(
-            label = "Estimate Ready",
-            detail = if (netArea > 0.0) "Net area captured" else "Capture measurable area",
-            complete = netArea > 0.0
-        )
+    val projectHealth = buildProjectHealthInsight(
+        project = project,
+        netArea = netArea,
+        laneSummaries = laneSummaries
     )
     val visibleLaneGroups = if (listTradeFilter.lane == null) {
         ProjectTradeLane.entries.mapNotNull { lane ->
@@ -278,7 +313,6 @@ private fun ProjectContent(
     val visibleSpaces = visibleLaneGroups.sumOf { it.second.size }
     val filterScroll = rememberScrollState()
     val hasAtLeastOneSpace = project.spaces.isNotEmpty()
-    val hasTradeMix = workflowSteps[1].complete
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -319,7 +353,7 @@ private fun ProjectContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilledTonalButton(
+                PrimaryActionButton(
                     onClick = {
                         haptics.confirm()
                         onRequestAddSpace()
@@ -330,23 +364,94 @@ private fun ProjectContent(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Add Space / Room")
                 }
-                OutlinedButton(
+                SecondaryActionButton(
                     onClick = {
-                        haptics.tap()
-                        onAutoLayout()
+                        haptics.confirm()
+                        onOpenBlueprint()
                     },
-                    enabled = project.spaces.size > 1,
+                    enabled = hasAtLeastOneSpace,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Auto Arrange")
+                    Text("Open Blueprint")
                 }
             }
+            QuietActionButton(
+                onClick = {
+                    haptics.tap()
+                    showWorkspaceTools = !showWorkspaceTools
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (showWorkspaceTools) {
+                        "Hide Workspace Tools"
+                    } else {
+                        "Show Workspace Tools"
+                    }
+                )
+            }
+            if (showWorkspaceTools) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.tap()
+                            onAutoLayout()
+                        },
+                        enabled = project.spaces.size > 1,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Auto Arrange")
+                    }
+                }
 
-            Text(
-                text = "Follow the flow: Overview and Space List here, Blueprint tab for 3D layout, then Takeoff and Export.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                SecondaryActionButton(
+                    onClick = {
+                        haptics.tap()
+                        showQuickAddShortcuts = !showQuickAddShortcuts
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showQuickAddShortcuts) "Hide Quick Add" else "Show Quick Add")
+                }
+
+                if (showQuickAddShortcuts) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SecondaryActionButton(
+                            onClick = {
+                                haptics.tap()
+                                onQuickAddWall()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Quick Wall")
+                        }
+                        SecondaryActionButton(
+                            onClick = {
+                                haptics.tap()
+                                onQuickAddRoom()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Quick Room")
+                        }
+                        SecondaryActionButton(
+                            onClick = {
+                                haptics.tap()
+                                onQuickAddSlab()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Quick Slab")
+                        }
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -400,8 +505,8 @@ private fun ProjectContent(
                             modifier = Modifier.weight(1f)
                         )
                         SnapshotMetric(
-                            label = "Openings",
-                            value = totalOpenings.toString(),
+                            label = "Gross Area",
+                            value = Formatters.formatArea(totalArea),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -409,61 +514,39 @@ private fun ProjectContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SnapshotMetric(
-                            label = "Gross Area",
-                            value = Formatters.formatArea(totalArea),
-                            modifier = Modifier.weight(1f)
-                        )
                         SnapshotMetric(
                             label = "Net Area",
                             value = Formatters.formatArea(netArea),
                             modifier = Modifier.weight(1f)
                         )
+                        SnapshotMetric(
+                            label = "Openings",
+                            value = totalOpenings.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                    SnapshotMetric(
-                        label = "Volume",
-                        value = "${Formatters.formatQuantity(totalVolume)} cu ft",
-                        modifier = Modifier.fillMaxWidth()
+                    ProjectHealthCard(
+                        insight = projectHealth,
+                        onPrimaryAction = {
+                            when (projectHealth.primaryAction) {
+                                ProjectHealthAction.ADD_SPACE -> onRequestAddSpace()
+                                ProjectHealthAction.AUTO_LAYOUT -> onAutoLayout()
+                                ProjectHealthAction.OPEN_BLUEPRINT -> onOpenBlueprint()
+                                ProjectHealthAction.OPEN_TAKEOFF -> onOpenTakeoff()
+                                ProjectHealthAction.REVIEW_LIST -> detailMode = ProjectDetailMode.LIST
+                            }
+                        },
+                        onReviewList = { detailMode = ProjectDetailMode.LIST }
                     )
                     Text(
-                        text = "Trade Lanes",
+                        text = "Next Actions",
                         style = MaterialTheme.typography.titleSmall
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        laneSummaries.forEach { laneSummary ->
-                            TradeLaneMetric(
-                                summary = laneSummary,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    Text(
-                        text = "Workflow Readiness",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        workflowSteps.forEach { step ->
-                            WorkflowStepPill(
-                                status = step,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    Text(
-                        text = "Guided Flow",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
+                        SecondaryActionButton(
                             onClick = {
                                 haptics.tap()
                                 detailMode = ProjectDetailMode.LIST
@@ -472,7 +555,7 @@ private fun ProjectContent(
                         ) {
                             Text("Refine Space List")
                         }
-                        Button(
+                        PrimaryActionButton(
                             onClick = {
                                 haptics.confirm()
                                 onOpenBlueprint()
@@ -483,36 +566,21 @@ private fun ProjectContent(
                             Text("Continue to Blueprint")
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.confirm()
+                            onOpenTakeoff()
+                        },
+                        enabled = netArea > 0.0,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        OutlinedButton(
-                            onClick = {
-                                haptics.tap()
-                                onOpenTakeoff()
-                            },
-                            enabled = hasAtLeastOneSpace,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Go to Takeoff")
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                haptics.tap()
-                                onOpenExport()
-                            },
-                            enabled = hasAtLeastOneSpace && hasTradeMix,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Jump to Export")
-                        }
+                        Text("Jump to Takeoff")
                     }
                     Text(
                         text = if (hasAtLeastOneSpace) {
-                            "Recommended order: model setup -> blueprint layout -> takeoff -> export."
+                            "Lay out geometry in Blueprint, or jump to Takeoff when measurements are ready."
                         } else {
-                            "Add at least one space to unlock full flow."
+                            "Add at least one space to continue."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -546,29 +614,56 @@ private fun ProjectContent(
                                 text = "Space List Filters",
                                 style = MaterialTheme.typography.titleSmall
                             )
-                            OutlinedTextField(
-                                value = listSearchQuery,
-                                onValueChange = { listSearchQuery = it },
-                                label = { Text("Search spaces by name or geometry") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                SpaceTradeFilter.entries.forEach { filter ->
-                                    FilterChip(
-                                        selected = filter == listTradeFilter,
-                                        onClick = {
-                                            haptics.tap()
-                                            listTradeFilter = filter
-                                        },
-                                        label = { Text(filter.label) }
-                                    )
+                            QuietActionButton(
+                                onClick = {
+                                    haptics.tap()
+                                    showListFilters = !showListFilters
                                 }
+                            ) {
+                                Text(
+                                    if (showListFilters) {
+                                        "Hide Filters"
+                                    } else {
+                                        "Show Filters"
+                                    }
+                                )
+                            }
+                            if (showListFilters) {
+                                OutlinedTextField(
+                                    value = listSearchQuery,
+                                    onValueChange = { listSearchQuery = it },
+                                    label = { Text("Search spaces by name or geometry") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    SpaceTradeFilter.entries.forEach { filter ->
+                                        FilterChip(
+                                            selected = filter == listTradeFilter,
+                                            onClick = {
+                                                haptics.tap()
+                                                listTradeFilter = filter
+                                            },
+                                            label = { Text(filter.label) }
+                                        )
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = buildString {
+                                        append("Lane: ${listTradeFilter.label}")
+                                        if (listSearchQuery.isNotBlank()) {
+                                            append(" • Search active")
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                             Text(
                                 text = "$visibleSpaces visible space(s)",
@@ -792,43 +887,65 @@ private fun TradeLaneMetric(
 }
 
 @Composable
-private fun WorkflowStepPill(
-    status: WorkflowStepStatus,
-    modifier: Modifier = Modifier
+private fun ProjectHealthCard(
+    insight: ProjectHealthInsight,
+    onPrimaryAction: () -> Unit,
+    onReviewList: () -> Unit
 ) {
     Card(
-        modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = if (status.complete) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
-                text = status.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (status.complete) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                text = "Project Intelligence",
+                style = MaterialTheme.typography.titleSmall
+            )
+            LinearProgressIndicator(
+                progress = { (insight.score / 100f).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
             Text(
-                text = if (status.complete) "Ready" else "Pending",
+                text = "${insight.score}/100 • ${insight.level}",
                 style = MaterialTheme.typography.bodySmall,
-                color = if (status.complete) {
-                    MaterialTheme.colorScheme.onTertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            insight.highlights.take(2).forEach { highlight ->
+                Text(
+                    text = "Strength: $highlight",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            insight.risks.take(2).forEach { risk ->
+                Text(
+                    text = "Watch: $risk",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PrimaryActionButton(
+                    onClick = onPrimaryAction,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(insight.primaryActionLabel)
                 }
-            )
-            Text(
-                text = status.detail,
-                style = MaterialTheme.typography.bodySmall
-            )
+                SecondaryActionButton(
+                    onClick = onReviewList,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Review Space List")
+                }
+            }
         }
     }
 }
@@ -855,7 +972,7 @@ private fun RenameProjectDialog(
             )
         },
         confirmButton = {
-            Button(
+            PrimaryActionButton(
                 onClick = onConfirm,
                 enabled = Validators.isValidProjectName(value)
             ) {
@@ -863,7 +980,7 @@ private fun RenameProjectDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            QuietActionButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -886,19 +1003,19 @@ internal fun AddSpaceMethodDialog(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Custom Space opens the advanced geometry editor.",
+                    text = "Custom Space opens the full geometry editor.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onQuickRoom) {
+            PrimaryActionButton(onClick = onQuickRoom) {
                 Text("Quick Room")
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onCustomSpace) {
+            SecondaryActionButton(onClick = onCustomSpace) {
                 Text("Custom Space")
             }
         }
@@ -968,10 +1085,21 @@ private data class TradeLaneSummary(
     val areaSqFt: Double
 )
 
-private data class WorkflowStepStatus(
-    val label: String,
-    val detail: String,
-    val complete: Boolean
+private enum class ProjectHealthAction {
+    ADD_SPACE,
+    AUTO_LAYOUT,
+    OPEN_BLUEPRINT,
+    OPEN_TAKEOFF,
+    REVIEW_LIST
+}
+
+private data class ProjectHealthInsight(
+    val score: Int,
+    val level: String,
+    val highlights: List<String>,
+    val risks: List<String>,
+    val primaryAction: ProjectHealthAction,
+    val primaryActionLabel: String
 )
 
 private fun tradeLaneForSpace(space: Space): ProjectTradeLane {
@@ -987,3 +1115,89 @@ private fun spaceMatchesQuery(space: Space, normalizedQuery: String): Boolean {
     return space.name.lowercase().contains(normalizedQuery) ||
         geometryDescription(space.geometry).lowercase().contains(normalizedQuery)
 }
+
+private fun buildProjectHealthInsight(
+    project: Project,
+    netArea: Double,
+    laneSummaries: List<TradeLaneSummary>
+): ProjectHealthInsight {
+    var score = 0
+    val highlights = mutableListOf<String>()
+    val risks = mutableListOf<String>()
+    val lanesWithData = laneSummaries.count { it.count > 0 }
+    val placedCount = project.spaces.count { it.transform != SpaceTransform() }
+
+    if (project.spaces.isNotEmpty()) {
+        score += 28
+        highlights += "${project.spaces.size} spaces created"
+    } else {
+        risks += "No spaces added yet."
+    }
+
+    if (netArea > 0.0) {
+        score += 24
+        highlights += "${Formatters.formatArea(netArea)} measurable net area captured"
+    } else {
+        risks += "Net measurable area is zero."
+    }
+
+    if (lanesWithData >= 2) {
+        score += 18
+        highlights += "Multiple trade lanes modeled"
+    } else {
+        risks += "Only one trade lane is represented."
+    }
+
+    val openingCount = project.spaces.sumOf { it.openings.sumOf { opening -> opening.count } }
+    if (openingCount > 0) {
+        score += 12
+        highlights += "$openingCount opening(s) accounted for"
+    } else {
+        risks += "No door/window openings captured yet."
+    }
+
+    if (project.spaces.isNotEmpty()) {
+        val placementRatio = placedCount.toDouble() / project.spaces.size.toDouble()
+        if (placementRatio >= 0.6) {
+            score += 18
+            highlights += "Layout positions are mostly arranged"
+        } else {
+            risks += "Space layout is still rough. Auto-arrange can speed this up."
+        }
+    }
+
+    score = score.coerceIn(0, 100)
+    val level = when {
+        score >= 85 -> "Bid-Ready"
+        score >= 65 -> "Strong Progress"
+        score >= 40 -> "In Progress"
+        else -> "Needs Setup"
+    }
+
+    val action = when {
+        project.spaces.isEmpty() ->
+            ProjectHealthAction.ADD_SPACE to "Add First Space"
+        lanesWithData < 2 ->
+            ProjectHealthAction.ADD_SPACE to "Add Cross-Trade Space"
+        placedCount < maxOf(1, project.spaces.size / 2) ->
+            ProjectHealthAction.AUTO_LAYOUT to "Auto Arrange Layout"
+        netArea <= 0.0 ->
+            ProjectHealthAction.REVIEW_LIST to "Review Space Metrics"
+        else ->
+            ProjectHealthAction.OPEN_TAKEOFF to "Run Takeoff"
+    }
+
+    return ProjectHealthInsight(
+        score = score,
+        level = level,
+        highlights = highlights,
+        risks = risks,
+        primaryAction = action.first,
+        primaryActionLabel = action.second
+    )
+}
+
+private fun mmFromFeet(feet: Double): com.tradesketch.estimator.domain.model.Millimeters {
+    return com.tradesketch.estimator.domain.model.Millimeters.fromFeet(feet)
+}
+

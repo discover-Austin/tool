@@ -267,19 +267,34 @@ class DesktopAppState(
     fun exportSummary(): String {
         val project = selectedProject ?: return ""
         val result = currentTakeoffResult ?: return ""
-        return ExportFormatter.formatAsSummary(project, selectedTakeoffType.label, result)
+        return ExportFormatter.formatAsSummary(
+            project = project,
+            settings = settings,
+            takeoffType = selectedTakeoffType.label,
+            result = result
+        )
     }
 
     fun exportTextReport(): String {
         val project = selectedProject ?: return ""
         val result = currentTakeoffResult ?: return ""
-        return ExportFormatter.formatAsText(project, selectedTakeoffType.label, result)
+        return ExportFormatter.formatAsText(
+            project = project,
+            settings = settings,
+            takeoffType = selectedTakeoffType.label,
+            result = result
+        )
     }
 
     fun exportCsv(): String {
         val project = selectedProject ?: return ""
         val result = currentTakeoffResult ?: return ""
-        return ExportFormatter.formatAsCSV(project, selectedTakeoffType.label, result)
+        return ExportFormatter.formatAsCSV(
+            project = project,
+            settings = settings,
+            takeoffType = selectedTakeoffType.label,
+            result = result
+        )
     }
 
     private fun calculateTakeoff(): TakeoffResult? {

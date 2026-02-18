@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.ui.screens
 
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,16 +17,16 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -44,14 +45,16 @@ import com.tradesketch.estimator.domain.model.SpaceTransform
 import com.tradesketch.estimator.utils.Validators
 import java.util.UUID
 import java.util.Locale
+import kotlin.math.atan2
 
 @Composable
 internal fun QuickRoomDialog(
     dialogKey: Int,
+    suggestedRoomName: String = "Room 1",
     onDismiss: () -> Unit,
     onSave: (List<Space>, Boolean) -> Unit
 ) {
-    var roomName by remember(dialogKey) { mutableStateOf("Room") }
+    var roomName by remember(dialogKey, suggestedRoomName) { mutableStateOf(suggestedRoomName) }
     var lengthFt by remember(dialogKey) { mutableStateOf("12") }
     var widthFt by remember(dialogKey) { mutableStateOf("10") }
     var wallHeightFt by remember(dialogKey) { mutableStateOf("8") }
@@ -80,13 +83,8 @@ internal fun QuickRoomDialog(
     var includeCeiling by remember(dialogKey) { mutableStateOf(true) }
     var continueToNextRoom by remember(dialogKey) { mutableStateOf(false) }
     var validationError by remember(dialogKey) { mutableStateOf<String?>(null) }
-    val presets = remember {
-        listOf(
-            RoomPreset(label = "Small", lengthFt = "10", widthFt = "10", heightFt = "8", doors = "1", windows = "1"),
-            RoomPreset(label = "Standard", lengthFt = "12", widthFt = "10", heightFt = "8", doors = "1", windows = "2"),
-            RoomPreset(label = "Large", lengthFt = "16", widthFt = "14", heightFt = "9", doors = "2", windows = "3")
-        )
-    }
+    var showSummaryCard by remember(dialogKey) { mutableStateOf(false) }
+    var currentStep by remember(dialogKey) { mutableStateOf(QuickRoomStep.SHELL) }
 
     val previewLength = Validators.parsePositiveDouble(lengthFt)
     val previewWidth = Validators.parsePositiveDouble(widthFt)
@@ -112,7 +110,7 @@ internal fun QuickRoomDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Quick Room Wizard") },
+        title = { Text("Quick Room") },
         text = {
             Column(
                 modifier = Modifier
@@ -120,45 +118,60 @@ internal fun QuickRoomDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
+                TextButton(
+                    onClick = { showSummaryCard = !showSummaryCard },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = "Live Room Summary",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (previewLength != null && previewWidth != null && previewHeight != null) {
-                                "${"%.1f".format(Locale.US, previewLength)}' x ${"%.1f".format(Locale.US, previewWidth)}' x ${"%.1f".format(Locale.US, previewHeight)}'"
-                            } else {
-                                "Enter length, width, and height"
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = "$previewDoorCount door(s), $previewWindowCount window(s), " +
-                                if (includeCeiling) "ceiling included" else "no ceiling",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        previewWallArea?.let {
-                            Text(
-                                text = "Estimated wall area: ${"%.1f".format(Locale.US, it)} sq ft",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                    Text(
+                        if (showSummaryCard) {
+                            "Hide Live Summary"
+                        } else {
+                            "Show Live Summary"
                         }
-                        previewCeilingArea?.let {
+                    )
+                }
+                if (showSummaryCard) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                text = "Estimated ceiling area: ${"%.1f".format(Locale.US, it)} sq ft",
+                                text = "Live Room Summary",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (previewLength != null && previewWidth != null && previewHeight != null) {
+                                    "${"%.1f".format(Locale.US, previewLength)}' x ${"%.1f".format(Locale.US, previewWidth)}' x ${"%.1f".format(Locale.US, previewHeight)}'"
+                                } else {
+                                    "Enter length, width, and height"
+                                },
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            Text(
+                                text = "$previewDoorCount door(s), $previewWindowCount window(s), " +
+                                    if (includeCeiling) "ceiling included" else "no ceiling",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            previewWallArea?.let {
+                                Text(
+                                    text = "Estimated wall area: ${"%.1f".format(Locale.US, it)} sq ft",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            previewCeilingArea?.let {
+                                Text(
+                                    text = "Estimated ceiling area: ${"%.1f".format(Locale.US, it)} sq ft",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }
 
+                if (currentStep == QuickRoomStep.SHELL) {
                 OutlinedTextField(
                     value = roomName,
                     onValueChange = { roomName = it },
@@ -166,39 +179,13 @@ internal fun QuickRoomDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Text(
-                    text = "Quick Presets",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    presets.forEach { preset ->
-                        OutlinedButton(
-                            onClick = {
-                                lengthFt = preset.lengthFt
-                                widthFt = preset.widthFt
-                                wallHeightFt = preset.heightFt
-                                wall1Ft = preset.lengthFt
-                                wall2Ft = preset.widthFt
-                                wall3Ft = preset.lengthFt
-                                wall4Ft = preset.widthFt
-                                doorCount = preset.doors
-                                windowCount = preset.windows
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(preset.label)
-                        }
-                    }
                 }
 
+                if (currentStep == QuickRoomStep.SHELL) {
                 Card {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "1. Room Shell",
+                            text = "Room Shell",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
@@ -229,15 +216,16 @@ internal fun QuickRoomDialog(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        TextButton(
+                            onClick = { editWalls = !editWalls },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Edit walls?")
-                            Switch(
-                                checked = editWalls,
-                                onCheckedChange = { editWalls = it }
+                            Text(
+                                if (editWalls) {
+                                    "Hide Wall Overrides"
+                                } else {
+                                    "Show Wall Overrides"
+                                }
                             )
                         }
                         if (editWalls) {
@@ -252,11 +240,13 @@ internal fun QuickRoomDialog(
                         }
                     }
                 }
+                }
 
+                if (currentStep == QuickRoomStep.DOORS) {
                 Card {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "2. Doors",
+                            text = "Doors",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
@@ -282,47 +272,48 @@ internal fun QuickRoomDialog(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        TextButton(
+                            onClick = { editDoors = !editDoors },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Edit doors?")
-                            Switch(
-                                checked = editDoors,
-                                onCheckedChange = { editDoors = it }
+                            Text(
+                                if (editDoors) {
+                                    "Hide Door Overrides"
+                                } else {
+                                    "Show Door Overrides"
+                                }
                             )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Optional extended closet door")
-                            Switch(
-                                checked = includeExtendedClosetDoor,
-                                onCheckedChange = { includeExtendedClosetDoor = it }
-                            )
-                        }
-                        if (includeExtendedClosetDoor) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                NumberField(
-                                    label = "Closet Door Width (ft)",
-                                    value = closetDoorWidthFt,
-                                    onValueChange = { closetDoorWidthFt = it },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                NumberField(
-                                    label = "Closet Door Height (ft)",
-                                    value = closetDoorHeightFt,
-                                    onValueChange = { closetDoorHeightFt = it },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
                         }
                         if (editDoors) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Optional extended closet door")
+                                Switch(
+                                    checked = includeExtendedClosetDoor,
+                                    onCheckedChange = { includeExtendedClosetDoor = it }
+                                )
+                            }
+                            if (includeExtendedClosetDoor) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    NumberField(
+                                        label = "Closet Door Width (ft)",
+                                        value = closetDoorWidthFt,
+                                        onValueChange = { closetDoorWidthFt = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    NumberField(
+                                        label = "Closet Door Height (ft)",
+                                        value = closetDoorHeightFt,
+                                        onValueChange = { closetDoorHeightFt = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = "Additional custom-sized doors",
@@ -350,11 +341,13 @@ internal fun QuickRoomDialog(
                         }
                     }
                 }
+                }
 
+                if (currentStep == QuickRoomStep.WINDOWS) {
                 Card {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "3. Windows",
+                            text = "Windows",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
@@ -380,15 +373,16 @@ internal fun QuickRoomDialog(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        TextButton(
+                            onClick = { editWindows = !editWindows },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Edit windows? (multi-sized)")
-                            Switch(
-                                checked = editWindows,
-                                onCheckedChange = { editWindows = it }
+                            Text(
+                                if (editWindows) {
+                                    "Hide Window Overrides"
+                                } else {
+                                    "Show Window Overrides"
+                                }
                             )
                         }
                         if (editWindows) {
@@ -413,11 +407,13 @@ internal fun QuickRoomDialog(
                         }
                     }
                 }
+                }
 
+                if (currentStep == QuickRoomStep.FINISH) {
                 Card {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "4. Finish",
+                            text = "Finish",
                             style = MaterialTheme.typography.titleSmall
                         )
                         Spacer(modifier = Modifier.height(6.dp))
@@ -452,6 +448,7 @@ internal fun QuickRoomDialog(
                         )
                     }
                 }
+                }
 
                 validationError?.let { error ->
                     Text(
@@ -466,6 +463,10 @@ internal fun QuickRoomDialog(
             Button(
                 onClick = {
                     validationError = null
+                    if (currentStep != QuickRoomStep.FINISH) {
+                        currentStep = currentStep.next()
+                        return@Button
+                    }
 
                     val normalizedName = roomName.trim().ifBlank { "Room" }
                     val length = Validators.parsePositiveDouble(lengthFt)
@@ -608,6 +609,7 @@ internal fun QuickRoomDialog(
                     }
 
                     val spaces = mutableListOf<Space>()
+                    val wallLayout = layoutRoomWalls(wallLengths)
                     wallLengths.forEachIndexed { index, wallLength ->
                         spaces += Space(
                             id = UUID.randomUUID().toString(),
@@ -617,32 +619,46 @@ internal fun QuickRoomDialog(
                                 height = Millimeters.fromFeet(height)
                             ),
                             openings = mergeOpenings(openingsByWall[index]),
-                            transform = SpaceTransform()
+                            transform = wallLayout.wallTransforms[index]
                         )
                     }
 
                     if (includeCeiling) {
+                        val ceilingLengthFeet = wallLayout.roomLengthFeet.coerceAtLeast(1.0)
+                        val ceilingWidthFeet = wallLayout.roomWidthFeet.coerceAtLeast(1.0)
                         spaces += Space(
                             id = UUID.randomUUID().toString(),
                             name = "$normalizedName Ceiling",
                             geometry = Geometry.Rect(
-                                length = Millimeters.fromFeet(length),
-                                width = Millimeters.fromFeet(width)
+                                length = Millimeters.fromFeet(ceilingLengthFeet),
+                                width = Millimeters.fromFeet(ceilingWidthFeet)
                             ),
-                            transform = SpaceTransform()
+                            transform = SpaceTransform(
+                                xFeet = wallLayout.centerXFeet,
+                                zFeet = wallLayout.centerZFeet
+                            )
                         )
                     }
 
                     onSave(spaces, continueToNextRoom)
                 },
-                enabled = roomName.isNotBlank()
+                enabled = if (currentStep == QuickRoomStep.FINISH) roomName.isNotBlank() else true
             ) {
-                Text("Create Room")
+                Text(if (currentStep == QuickRoomStep.FINISH) "Create Room" else "Continue")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(
+                onClick = {
+                    if (currentStep == QuickRoomStep.SHELL) {
+                        onDismiss()
+                    } else {
+                        validationError = null
+                        currentStep = currentStep.previous()
+                    }
+                }
+            ) {
+                Text(if (currentStep == QuickRoomStep.SHELL) "Cancel" else "Back")
             }
         }
     )
@@ -743,11 +759,94 @@ private fun mergeOpenings(openings: List<Opening>): List<Opening> {
         }
 }
 
-private data class RoomPreset(
-    val label: String,
-    val lengthFt: String,
-    val widthFt: String,
-    val heightFt: String,
-    val doors: String,
-    val windows: String
+private data class RoomWallLayout(
+    val wallTransforms: List<SpaceTransform>,
+    val centerXFeet: Double,
+    val centerZFeet: Double,
+    val roomLengthFeet: Double,
+    val roomWidthFeet: Double
 )
+
+private fun layoutRoomWalls(wallLengths: List<Double>): RoomWallLayout {
+    if (wallLengths.size != 4) {
+        return RoomWallLayout(
+            wallTransforms = List(4) { SpaceTransform() },
+            centerXFeet = 0.0,
+            centerZFeet = 0.0,
+            roomLengthFeet = wallLengths.getOrNull(0) ?: 10.0,
+            roomWidthFeet = wallLengths.getOrNull(1) ?: 10.0
+        )
+    }
+
+    val safeLengths = wallLengths.map { it.coerceAtLeast(1.0) }
+    val directions = listOf(
+        RoomVector2(1.0, 0.0),   // Wall 1: east
+        RoomVector2(0.0, 1.0),   // Wall 2: north
+        RoomVector2(-1.0, 0.0),  // Wall 3: west
+        RoomVector2(0.0, -1.0)   // Wall 4: south
+    )
+    val pathPoints = mutableListOf(RoomPoint2(0.0, 0.0))
+    safeLengths.forEachIndexed { index, lengthFeet ->
+        val start = pathPoints.last()
+        val dir = directions[index]
+        pathPoints += RoomPoint2(
+            xFeet = start.xFeet + (dir.x * lengthFeet),
+            zFeet = start.zFeet + (dir.z * lengthFeet)
+        )
+    }
+
+    val minX = pathPoints.minOf { it.xFeet }
+    val maxX = pathPoints.maxOf { it.xFeet }
+    val minZ = pathPoints.minOf { it.zFeet }
+    val maxZ = pathPoints.maxOf { it.zFeet }
+    val centerX = (minX + maxX) / 2.0
+    val centerZ = (minZ + maxZ) / 2.0
+
+    val wallTransforms = safeLengths.indices.map { index ->
+        val start = pathPoints[index]
+        val end = pathPoints[index + 1]
+        val midX = ((start.xFeet + end.xFeet) / 2.0) - centerX
+        val midZ = ((start.zFeet + end.zFeet) / 2.0) - centerZ
+        val yawDegrees = Math.toDegrees(atan2(end.zFeet - start.zFeet, end.xFeet - start.xFeet))
+        SpaceTransform(
+            xFeet = midX,
+            zFeet = midZ,
+            yawDegrees = yawDegrees
+        )
+    }
+
+    return RoomWallLayout(
+        wallTransforms = wallTransforms,
+        centerXFeet = 0.0,
+        centerZFeet = 0.0,
+        roomLengthFeet = (maxX - minX).coerceAtLeast(1.0),
+        roomWidthFeet = (maxZ - minZ).coerceAtLeast(1.0)
+    )
+}
+
+private data class RoomPoint2(
+    val xFeet: Double,
+    val zFeet: Double
+)
+
+private data class RoomVector2(
+    val x: Double,
+    val z: Double
+)
+
+private enum class QuickRoomStep(val index: Int, val label: String) {
+    SHELL(0, "Room Shell"),
+    DOORS(1, "Doors"),
+    WINDOWS(2, "Windows"),
+    FINISH(3, "Finish");
+
+    fun next(): QuickRoomStep {
+        return entries.getOrNull(index + 1) ?: this
+    }
+
+    fun previous(): QuickRoomStep {
+        return entries.getOrNull(index - 1) ?: this
+    }
+}
+
+
