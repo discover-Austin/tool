@@ -2,6 +2,8 @@ package com.tradesketch.estimator.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -123,6 +125,12 @@ fun BlueprintScreen(
     var customWidthFeet by remember { mutableStateOf("3.0") }
     var customHeightFeet by remember { mutableStateOf("7.0") }
     var customSillFeet by remember { mutableStateOf("0.0") }
+    
+    // Drag-drop state for add-ons
+    var draggedPreset by remember { mutableStateOf<OpeningPreset?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var dragGhostWallId by remember { mutableStateOf<String?>(null) }
+    var dragGhostT by remember { mutableStateOf(0.0) }
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
     if (uiState.isLoading || uiState.document == null) {
@@ -318,6 +326,10 @@ fun BlueprintScreen(
             onSelectPreset = {
                 selectedPreset = it
                 tool = if (it.type == OpeningType.DOOR) BlueprintDraftTool.PLACE_DOOR else BlueprintDraftTool.PLACE_WINDOW
+            },
+            onStartDrag = { preset ->
+                draggedPreset = preset
+                tool = BlueprintDraftTool.PAN // Switch to PAN to avoid conflicts
             },
             customWidthFeet = customWidthFeet,
             customHeightFeet = customHeightFeet,
@@ -568,6 +580,7 @@ private fun AddonsDrawer(
     selectedPreset: OpeningPreset?,
     onToggle: () -> Unit,
     onSelectPreset: (OpeningPreset) -> Unit,
+    onStartDrag: (OpeningPreset) -> Unit,
     customWidthFeet: String,
     customHeightFeet: String,
     customSillFeet: String,
@@ -586,8 +599,20 @@ private fun AddonsDrawer(
                     Button(onClick = onToggle) { Text("Hide") }
                 }
                 Text("Choose preset, set size, then tap or drag onto a wall.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                AddonPresetCard(doorPreset, selectedPreset == doorPreset, { Icon(Icons.Filled.DoorFront, contentDescription = null) }) { onSelectPreset(doorPreset) }
-                AddonPresetCard(windowPreset, selectedPreset == windowPreset, { Icon(Icons.Filled.Window, contentDescription = null) }) { onSelectPreset(windowPreset) }
+                AddonPresetCard(
+                    preset = doorPreset,
+                    selected = selectedPreset == doorPreset,
+                    icon = { Icon(Icons.Filled.DoorFront, contentDescription = null) },
+                    onClick = { onSelectPreset(doorPreset) },
+                    onStartDrag = { onStartDrag(doorPreset) }
+                )
+                AddonPresetCard(
+                    preset = windowPreset,
+                    selected = selectedPreset == windowPreset,
+                    icon = { Icon(Icons.Filled.Window, contentDescription = null) },
+                    onClick = { onSelectPreset(windowPreset) },
+                    onStartDrag = { onStartDrag(windowPreset) }
+                )
                 OutlinedTextField(
                     value = customWidthFeet,
                     onValueChange = onCustomWidthChange,
@@ -618,8 +643,25 @@ private fun AddonsDrawer(
 }
 
 @Composable
-private fun AddonPresetCard(preset: OpeningPreset, selected: Boolean, icon: @Composable () -> Unit, onClick: () -> Unit) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+private fun AddonPresetCard(
+    preset: OpeningPreset,
+    selected: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    onStartDrag: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.pointerInput(Unit) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { onStartDrag() },
+                onDrag = { _, _ -> /* Drag handled at screen level */ },
+                onDragEnd = { /* End handled at screen level */ },
+                onDragCancel = { /* Cancel handled at screen level */ }
+            )
+        }
+    ) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
             Column {
