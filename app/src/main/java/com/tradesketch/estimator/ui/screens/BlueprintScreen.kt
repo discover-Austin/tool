@@ -147,6 +147,8 @@ fun BlueprintScreen(
             pan = pan,
             drawingStart = drawingStart,
             drawingPreview = drawingPreview,
+            selectedWallId = uiState.selectedWallId,
+            selectedOpeningId = uiState.selectedOpeningId,
             onPanScaleChange = { updatedPan, updatedScale ->
                 pan = updatedPan
                 scale = updatedScale.coerceIn(0.2f, 7.5f)
@@ -243,6 +245,35 @@ fun BlueprintScreen(
                             )
                         }
                     }
+                    BlueprintDraftTool.SELECT -> {
+                        // Find nearest wall or opening
+                        val nearestWall = doc.walls
+                            .map { it to BlueprintSnapMath.pointToWallDistanceMm(tap, it) }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= Millimeters.fromFeet(1.0).value }
+                            ?.first
+                        
+                        val nearestOpening = doc.openings
+                            .mapNotNull { opening ->
+                                val wall = doc.walls.find { it.id == opening.wallId } ?: return@mapNotNull null
+                                val openingCenter = pointOnWall(wall, opening.t)
+                                val distance = BlueprintSnapMath.distanceMillimeters(tap, openingCenter)
+                                opening to distance
+                            }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= Millimeters.fromFeet(2.0).value }
+                            ?.first
+                        
+                        when {
+                            nearestOpening != null -> viewModel.selectOpening(nearestOpening.id)
+                            nearestWall != null -> viewModel.selectWall(nearestWall.id)
+                            else -> {
+                                viewModel.selectWall(null)
+                                viewModel.selectOpening(null)
+                                viewModel.selectRoom(null)
+                            }
+                        }
+                    }
                     else -> Unit
                 }
             }
@@ -297,6 +328,18 @@ fun BlueprintScreen(
             modifier = Modifier.align(Alignment.CenterEnd).padding(12.dp)
         )
 
+        // Selection Panel - show when an item is selected
+        if (uiState.selectedWallId != null || uiState.selectedOpeningId != null) {
+            SelectionPanel(
+                selectedWall = uiState.selectedWallId?.let { id -> doc.walls.find { it.id == id } },
+                selectedOpening = uiState.selectedOpeningId?.let { id -> doc.openings.find { it.id == id } },
+                onDeleteWall = viewModel::deleteSelectedWall,
+                onDeleteOpening = viewModel::deleteSelectedOpening,
+                onDeselect = { viewModel.selectWall(null); viewModel.selectOpening(null) },
+                modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+            )
+        }
+
         Toolbar(
             tool = tool,
             canUndo = uiState.canUndo,
@@ -324,6 +367,8 @@ private fun BlueprintCanvas(
     pan: Offset,
     drawingStart: PointMm?,
     drawingPreview: PointMm?,
+    selectedWallId: String?,
+    selectedOpeningId: String?,
     onPanScaleChange: (Offset, Float) -> Unit,
     onLivePointerWorld: (PointMm) -> Unit,
     onTapWorld: (PointMm) -> Unit
@@ -371,24 +416,29 @@ private fun BlueprintCanvas(
         drawLine(Color(0xFF2C5072), worldToScreen(PointMm(-70_000, 0)), worldToScreen(PointMm(70_000, 0)), strokeWidth = 1.4f)
         drawLine(Color(0xFF2C5072), worldToScreen(PointMm(0, -70_000)), worldToScreen(PointMm(0, 70_000)), strokeWidth = 1.4f)
         document.walls.forEach { wall ->
-            drawLine(Color(0xFFA2D6FF), worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = 3f, cap = StrokeCap.Round)
+            val isSelected = wall.id == selectedWallId
+            val color = if (isSelected) Color(0xFFFFD700) else Color(0xFFA2D6FF)
+            val strokeWidth = if (isSelected) 5f else 3f
+            drawLine(color, worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = strokeWidth, cap = StrokeCap.Round)
         }
         document.openings.forEach { opening ->
             val wall = document.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
             val center = pointOnWall(wall, opening.t)
             val c = worldToScreen(center)
             val w = opening.widthMm * (basePxPerMm * scale)
+            val isSelected = opening.id == selectedOpeningId
+            val color = if (isSelected) Color(0xFFFFD700) else if (opening.type == OpeningType.DOOR) Color(0xFFE7BE73) else Color(0xFFC5F5FF)
             if (opening.type == OpeningType.DOOR) {
-                drawArc(Color(0xFFE7BE73), -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = 2f))
+                drawArc(color, -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = if (isSelected) 3f else 2f))
             } else {
-                drawLine(Color(0xFFC5F5FF), Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = 3f)
+                drawLine(color, Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = if (isSelected) 4f else 3f)
                 drawPath(
                     path = Path().apply {
                         moveTo(c.x - w / 6f, c.y - 6f)
                         lineTo(c.x + w / 6f, c.y + 6f)
                     },
-                    color = Color(0xFFC5F5FF),
-                    style = Stroke(width = 2f)
+                    color = color,
+                    style = Stroke(width = if (isSelected) 3f else 2f)
                 )
             }
         }
@@ -575,6 +625,40 @@ private fun AddonPresetCard(preset: OpeningPreset, selected: Boolean, icon: @Com
             Column {
                 Text(preset.name)
                 Text(if (preset.type == OpeningType.DOOR) "Door swing arc" else "Window break", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionPanel(
+    selectedWall: WallSegment?,
+    selectedOpening: BlueprintOpening?,
+    onDeleteWall: () -> Unit,
+    onDeleteOpening: () -> Unit,
+    onDeselect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Selection", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Button(onClick = onDeselect, modifier = Modifier.padding(0.dp)) { Text("×") }
+            }
+            
+            when {
+                selectedWall != null -> {
+                    Text("Wall", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text("Length: ${"%.2f".format(Millimeters(selectedWall.lengthMillimeters()).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Text("Height: ${"%.2f".format(selectedWall.height.toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onDeleteWall, modifier = Modifier.fillMaxWidth()) { Text("Delete Wall") }
+                }
+                selectedOpening != null -> {
+                    Text("${selectedOpening.type.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text("Width: ${"%.2f".format(Millimeters(selectedOpening.widthMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Text("Height: ${"%.2f".format(Millimeters(selectedOpening.heightMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = onDeleteOpening, modifier = Modifier.fillMaxWidth()) { Text("Delete Opening") }
+                }
             }
         }
     }
