@@ -1,6 +1,7 @@
 package com.tradesketch.estimator.utils
 
 import com.tradesketch.estimator.domain.model.Project
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
 
 /**
@@ -13,9 +14,16 @@ object ExportFormatter {
     /**
      * Format takeoff results as plain text for sharing or copying.
      */
-    fun formatAsText(project: Project, takeoffType: String, result: TakeoffResult): String {
+    fun formatAsText(
+        project: Project,
+        settings: Settings,
+        takeoffType: String,
+        result: TakeoffResult
+    ): String {
+        val header = buildBusinessHeader(settings)
         return buildString {
-            appendLine("TradeSketch Estimator")
+            appendLine(header.name)
+            header.contactLines.forEach { appendLine(it) }
             appendLine("=" .repeat(50))
             appendLine()
             appendLine("Project: ${project.name}")
@@ -58,8 +66,20 @@ object ExportFormatter {
     /**
      * Format takeoff results as CSV.
      */
-    fun formatAsCSV(project: Project, takeoffType: String, result: TakeoffResult): String {
+    fun formatAsCSV(
+        project: Project,
+        settings: Settings,
+        takeoffType: String,
+        result: TakeoffResult
+    ): String {
+        val header = buildBusinessHeader(settings)
         return buildString {
+            appendLine("Company,Phone,Email,Address,License")
+            appendLine(
+                "\"${header.name}\",\"${settings.businessPhone}\",\"${settings.businessEmail}\"," +
+                    "\"${settings.businessAddress}\",\"${settings.businessLicense}\""
+            )
+            appendLine()
             appendLine("Project,Takeoff Type,Date")
             appendLine("\"${project.name}\",\"$takeoffType\",\"${Formatters.formatDate(System.currentTimeMillis())}\"")
             appendLine()
@@ -93,8 +113,15 @@ object ExportFormatter {
     /**
      * Format takeoff results summary (short version for copy).
      */
-    fun formatAsSummary(project: Project, takeoffType: String, result: TakeoffResult): String {
+    fun formatAsSummary(
+        project: Project,
+        settings: Settings,
+        takeoffType: String,
+        result: TakeoffResult
+    ): String {
+        val header = buildBusinessHeader(settings)
         return buildString {
+            appendLine(header.name)
             appendLine("${project.name} - $takeoffType")
             result.items.forEach { item ->
                 append("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
@@ -122,4 +149,31 @@ object ExportFormatter {
     }
     
     fun getDisclaimer(): String = DISCLAIMER
+
+    private fun buildBusinessHeader(settings: Settings): BusinessHeader {
+        val businessName = settings.businessName.trim().ifBlank { "TradeSketch Estimator" }
+        val contactLines = buildList {
+            settings.businessPhone.trim().takeIf { it.isNotBlank() }?.let { phone ->
+                add("Phone: $phone")
+            }
+            settings.businessEmail.trim().takeIf { it.isNotBlank() }?.let { email ->
+                add("Email: $email")
+            }
+            settings.businessAddress.trim().takeIf { it.isNotBlank() }?.let { address ->
+                add("Address: $address")
+            }
+            settings.businessLicense.trim().takeIf { it.isNotBlank() }?.let { license ->
+                add("License: $license")
+            }
+        }
+        return BusinessHeader(
+            name = businessName,
+            contactLines = contactLines
+        )
+    }
+
+    private data class BusinessHeader(
+        val name: String,
+        val contactLines: List<String>
+    )
 }

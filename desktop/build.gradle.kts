@@ -8,19 +8,10 @@ plugins {
 
 kotlin {
     jvmToolchain(17)
-    sourceSets {
-        val main by getting {
-            kotlin.srcDirs(
-                "src/main/kotlin",
-                "../app/src/main/java/com/tradesketch/estimator/domain/model",
-                "../app/src/main/java/com/tradesketch/estimator/domain/calc",
-                "../app/src/main/java/com/tradesketch/estimator/utils"
-            )
-        }
-    }
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation(compose.materialIconsExtended)

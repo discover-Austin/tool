@@ -71,11 +71,184 @@ private data class ProjectJson(
     val name: String,
     val spaces: List<SpaceJson>,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val takeoffSession: ProjectTakeoffSessionJson? = null
 ) {
-    fun toProject() = Project(id, name, spaces.map { it.toSpace() }, createdAt, updatedAt)
+    fun toProject() = Project(
+        id = id,
+        name = name,
+        spaces = spaces.map { it.toSpace() },
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession()
+    )
+
     companion object {
-        fun fromProject(p: Project) = ProjectJson(p.id, p.name, p.spaces.map { SpaceJson.fromSpace(it) }, p.createdAt, p.updatedAt)
+        fun fromProject(p: Project) = ProjectJson(
+            id = p.id,
+            name = p.name,
+            spaces = p.spaces.map { SpaceJson.fromSpace(it) },
+            createdAt = p.createdAt,
+            updatedAt = p.updatedAt,
+            takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession)
+        )
+    }
+}
+
+private data class ProjectTakeoffSessionJson(
+    val selectedScope: String,
+    val selectedPlaybook: String,
+    val drywall: DrywallSessionParamsJson,
+    val concrete: ConcreteSessionParamsJson,
+    val gravel: GravelSessionParamsJson,
+    val paint: PaintSessionParamsJson,
+    val pricing: PricingSessionParamsJson
+) {
+    fun toTakeoffSession() = ProjectTakeoffSession(
+        selectedScope = runCatching { TakeoffScope.valueOf(selectedScope) }
+            .getOrDefault(TakeoffScope.DRYWALL),
+        selectedPlaybook = selectedPlaybook,
+        drywall = drywall.toDomain(),
+        concrete = concrete.toDomain(),
+        gravel = gravel.toDomain(),
+        paint = paint.toDomain(),
+        pricing = pricing.toDomain()
+    )
+
+    companion object {
+        fun fromTakeoffSession(session: ProjectTakeoffSession) = ProjectTakeoffSessionJson(
+            selectedScope = session.selectedScope.name,
+            selectedPlaybook = session.selectedPlaybook,
+            drywall = DrywallSessionParamsJson.fromDomain(session.drywall),
+            concrete = ConcreteSessionParamsJson.fromDomain(session.concrete),
+            gravel = GravelSessionParamsJson.fromDomain(session.gravel),
+            paint = PaintSessionParamsJson.fromDomain(session.paint),
+            pricing = PricingSessionParamsJson.fromDomain(session.pricing)
+        )
+    }
+}
+
+private data class DrywallSessionParamsJson(
+    val sheetAreaSqFt: Double,
+    val wastePercent: Double,
+    val screwsPerSheet: Int,
+    val mudGallonsPer100SqFt: Double,
+    val includeCeilings: Boolean? = null
+) {
+    fun toDomain() = DrywallSessionParams(
+        sheetAreaSqFt = sheetAreaSqFt,
+        wastePercent = wastePercent,
+        screwsPerSheet = screwsPerSheet,
+        mudGallonsPer100SqFt = mudGallonsPer100SqFt,
+        includeCeilings = includeCeilings ?: true
+    )
+
+    companion object {
+        fun fromDomain(params: DrywallSessionParams) = DrywallSessionParamsJson(
+            sheetAreaSqFt = params.sheetAreaSqFt,
+            wastePercent = params.wastePercent,
+            screwsPerSheet = params.screwsPerSheet,
+            mudGallonsPer100SqFt = params.mudGallonsPer100SqFt,
+            includeCeilings = params.includeCeilings
+        )
+    }
+}
+
+private data class ConcreteSessionParamsJson(
+    val thicknessFeet: Double,
+    val wastePercent: Double
+) {
+    fun toDomain() = ConcreteSessionParams(
+        thicknessFeet = thicknessFeet,
+        wastePercent = wastePercent
+    )
+
+    companion object {
+        fun fromDomain(params: ConcreteSessionParams) = ConcreteSessionParamsJson(
+            thicknessFeet = params.thicknessFeet,
+            wastePercent = params.wastePercent
+        )
+    }
+}
+
+private data class GravelSessionParamsJson(
+    val depthFeet: Double,
+    val densityTonsPerYard: Double,
+    val wastePercent: Double
+) {
+    fun toDomain() = GravelSessionParams(
+        depthFeet = depthFeet,
+        densityTonsPerYard = densityTonsPerYard,
+        wastePercent = wastePercent
+    )
+
+    companion object {
+        fun fromDomain(params: GravelSessionParams) = GravelSessionParamsJson(
+            depthFeet = params.depthFeet,
+            densityTonsPerYard = params.densityTonsPerYard,
+            wastePercent = params.wastePercent
+        )
+    }
+}
+
+private data class PaintSessionParamsJson(
+    val coverageSqFtPerGallon: Double,
+    val coats: Int,
+    val wastePercent: Double
+) {
+    fun toDomain() = PaintSessionParams(
+        coverageSqFtPerGallon = coverageSqFtPerGallon,
+        coats = coats,
+        wastePercent = wastePercent
+    )
+
+    companion object {
+        fun fromDomain(params: PaintSessionParams) = PaintSessionParamsJson(
+            coverageSqFtPerGallon = params.coverageSqFtPerGallon,
+            coats = params.coats,
+            wastePercent = params.wastePercent
+        )
+    }
+}
+
+private data class PricingSessionParamsJson(
+    val drywallSheetCost: Double,
+    val drywallScrewCost: Double,
+    val drywallMudCost: Double,
+    val concreteYardCost: Double,
+    val gravelYardCost: Double,
+    val gravelTonCost: Double,
+    val paintGallonCost: Double,
+    val laborPercent: Double,
+    val markupPercent: Double,
+    val taxPercent: Double
+) {
+    fun toDomain() = PricingSessionParams(
+        drywallSheetCost = drywallSheetCost,
+        drywallScrewCost = drywallScrewCost,
+        drywallMudCost = drywallMudCost,
+        concreteYardCost = concreteYardCost,
+        gravelYardCost = gravelYardCost,
+        gravelTonCost = gravelTonCost,
+        paintGallonCost = paintGallonCost,
+        laborPercent = laborPercent,
+        markupPercent = markupPercent,
+        taxPercent = taxPercent
+    )
+
+    companion object {
+        fun fromDomain(params: PricingSessionParams) = PricingSessionParamsJson(
+            drywallSheetCost = params.drywallSheetCost,
+            drywallScrewCost = params.drywallScrewCost,
+            drywallMudCost = params.drywallMudCost,
+            concreteYardCost = params.concreteYardCost,
+            gravelYardCost = params.gravelYardCost,
+            gravelTonCost = params.gravelTonCost,
+            paintGallonCost = params.paintGallonCost,
+            laborPercent = params.laborPercent,
+            markupPercent = params.markupPercent,
+            taxPercent = params.taxPercent
+        )
     }
 }
 

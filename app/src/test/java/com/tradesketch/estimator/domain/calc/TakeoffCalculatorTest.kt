@@ -68,6 +68,60 @@ class TakeoffCalculatorTest {
     }
 
     @Test
+    fun `drywall takeoff for 10x10 room returns practical sheet and screw counts`() {
+        val wallHeight = Millimeters.fromFeet(8.0)
+        val wallLength = Millimeters.fromFeet(10.0)
+        val walls = listOf(
+            Space(
+                id = "room-wall-1",
+                name = "Wall 1",
+                geometry = Geometry.Wall(length = wallLength, height = wallHeight),
+                openings = listOf(
+                    Opening(
+                        width = Millimeters.fromFeet(3.0),
+                        height = Millimeters.fromFeet(7.0),
+                        count = 1
+                    ),
+                    Opening(
+                        width = Millimeters.fromFeet(4.0),
+                        height = Millimeters.fromFeet(3.0),
+                        count = 1
+                    )
+                )
+            ),
+            Space(
+                id = "room-wall-2",
+                name = "Wall 2",
+                geometry = Geometry.Wall(length = wallLength, height = wallHeight)
+            ),
+            Space(
+                id = "room-wall-3",
+                name = "Wall 3",
+                geometry = Geometry.Wall(length = wallLength, height = wallHeight)
+            ),
+            Space(
+                id = "room-wall-4",
+                name = "Wall 4",
+                geometry = Geometry.Wall(length = wallLength, height = wallHeight)
+            )
+        )
+
+        val result = TakeoffCalculator.drywallTakeoff(
+            walls = walls,
+            sheetAreaSqFt = 32.0,
+            wastePercent = 10.0,
+            screwsPerSheet = 32,
+            mudGallonsPer100SqFt = 0.5
+        )
+
+        val sheets = result.items.first { it.name == "Drywall sheets" }.quantity
+        val screws = result.items.first { it.name == "Drywall screws" }.quantity
+
+        assertEquals(10.0, sheets)
+        assertEquals(320.0, screws)
+    }
+
+    @Test
     fun `concrete takeoff returns cubic yards`() {
         val slab = Space(
             id = "slab-1",

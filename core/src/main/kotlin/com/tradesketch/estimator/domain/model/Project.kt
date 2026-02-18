@@ -8,7 +8,8 @@ data class Project(
     val name: String,
     val spaces: List<Space> = emptyList(),
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val takeoffSession: ProjectTakeoffSession = ProjectTakeoffSession()
 )
 
 /**

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,13 +11,26 @@ plugins {
 android {
     namespace = "com.tradesketch.estimator"
     compileSdk = 35
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { input ->
+            localProperties.load(input)
+        }
+    }
+    fun signingValue(key: String): String? {
+        return System.getenv(key)
+            ?.takeIf { value -> value.isNotBlank() }
+            ?: localProperties.getProperty(key)
+                ?.takeIf { value -> value.isNotBlank() }
+    }
 
     defaultConfig {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 4
+        versionName = "1.0.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -24,16 +39,15 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystoreFilePath = System.getenv("KEYSTORE_FILE")
-                ?: project.findProperty("KEYSTORE_FILE") as String?
+            val keystoreFilePathRaw = signingValue("KEYSTORE_FILE")
+            val keystoreFilePath = keystoreFilePathRaw
+                ?.replace("\\\\:", ":")
+                ?.replace("\\\\", "\\")
             if (keystoreFilePath != null) {
                 storeFile = file(keystoreFilePath)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                    ?: project.findProperty("KEYSTORE_PASSWORD") as String?
-                keyAlias = System.getenv("KEY_ALIAS")
-                    ?: project.findProperty("KEY_ALIAS") as String?
-                keyPassword = System.getenv("KEY_PASSWORD")
-                    ?: project.findProperty("KEY_PASSWORD") as String?
+                storePassword = signingValue("KEYSTORE_PASSWORD")
+                keyAlias = signingValue("KEY_ALIAS")
+                keyPassword = signingValue("KEY_PASSWORD")
             }
         }
     }
@@ -80,6 +94,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.09.03")
     implementation(composeBom)
     androidTestImplementation(composeBom)
+    implementation(project(":core"))
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")

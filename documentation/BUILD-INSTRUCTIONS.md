@@ -51,19 +51,25 @@ Debug build:
 Unit tests:
 
 ```powershell
-./gradlew.bat testDebugUnitTest
+./gradlew.bat :app:testDebugUnitTest
 ```
 
 Lint:
 
 ```powershell
-./gradlew.bat lint
+./gradlew.bat :app:lint
 ```
 
 Release bundle:
 
 ```powershell
-./gradlew.bat bundleRelease
+./gradlew.bat :app:bundleRelease
+```
+
+Desktop build (separate pipeline):
+
+```powershell
+./gradlew.bat :desktop:build
 ```
 
 Expected release output:

@@ -108,7 +108,7 @@ if ($rebuild -eq "yes") {
     Write-Host "  Building release bundle..." -ForegroundColor Yellow
     Push-Location $projectRoot
     try {
-        & $gradlew clean bundleRelease --no-daemon 2>&1 | ForEach-Object {
+        & $gradlew :app:clean :app:bundleRelease --no-daemon 2>&1 | ForEach-Object {
             if ($_ -match "BUILD SUCCESSFUL") {
                 Write-Host "  $_" -ForegroundColor Green
             } else {

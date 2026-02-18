@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "TradeSketchEstimator"
 include(":app")
 include(":desktop")
+include(":core")

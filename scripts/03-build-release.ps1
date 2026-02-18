@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    TradeSketch Estimator - Release Builder
-    Runs tests, lint, and builds the signed release .aab bundle.
+    TradeSketch Estimator - Android Release Builder
+    Runs Android app tests/lint and builds the signed release .aab bundle.
 
 .DESCRIPTION
     This script:
       1. Verifies signing config exists (local.properties or env vars)
-      2. Runs all unit tests
-      3. Runs Android lint checks
+      2. Runs Android app unit tests
+      3. Runs Android app lint checks
       4. Builds the signed release App Bundle (.aab)
       5. Shows you the file size and location
       6. Optionally builds a universal APK for device testing
@@ -90,7 +90,7 @@ Write-Host ""
 
 Push-Location $projectRoot
 try {
-    & $gradlew test --no-daemon 2>&1 | ForEach-Object {
+    & $gradlew :app:testDebugUnitTest --no-daemon 2>&1 | ForEach-Object {
         if ($_ -match "FAIL|ERROR|Exception") {
             Write-Host "  $_" -ForegroundColor Red
         } elseif ($_ -match "PASS|SUCCESS|BUILD SUCCESSFUL") {
@@ -118,7 +118,7 @@ Write-Host "[3/4] Running lint checks..." -ForegroundColor Yellow
 
 Push-Location $projectRoot
 try {
-    & $gradlew lint --no-daemon 2>&1 | ForEach-Object {
+    & $gradlew :app:lint --no-daemon 2>&1 | ForEach-Object {
         if ($_ -match "error:|Error:") {
             Write-Host "  $_" -ForegroundColor Red
         } elseif ($_ -match "BUILD SUCCESSFUL") {
@@ -127,7 +127,13 @@ try {
             Write-Host "  $_" -ForegroundColor DarkGray
         }
     }
-    # Lint warnings are OK, only errors stop the build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "  LINT FAILED. Fix lint errors before building a release." -ForegroundColor Red
+        Write-Host "  Lint report: app\build\reports\lint-results-debug.html" -ForegroundColor Red
+        exit 1
+    }
+    # Lint warnings are OK, only lint task failure should stop the build.
     Write-Host "  PASS: Lint complete." -ForegroundColor Green
 } finally {
     Pop-Location
@@ -143,7 +149,7 @@ Write-Host ""
 
 Push-Location $projectRoot
 try {
-    & $gradlew clean bundleRelease --no-daemon 2>&1 | ForEach-Object {
+    & $gradlew :app:clean :app:bundleRelease --no-daemon 2>&1 | ForEach-Object {
         if ($_ -match "FAIL|ERROR|Exception") {
             Write-Host "  $_" -ForegroundColor Red
         } elseif ($_ -match "BUILD SUCCESSFUL") {
@@ -157,7 +163,7 @@ try {
         Write-Host ""
         Write-Host "  BUILD FAILED." -ForegroundColor Red
         Write-Host "  Run with --stacktrace for details:" -ForegroundColor Red
-        Write-Host "  .\gradlew.bat bundleRelease --stacktrace" -ForegroundColor Red
+        Write-Host "  .\gradlew.bat :app:bundleRelease --stacktrace" -ForegroundColor Red
         exit 1
     }
 } finally {
