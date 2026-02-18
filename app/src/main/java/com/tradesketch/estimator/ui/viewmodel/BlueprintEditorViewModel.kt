@@ -199,6 +199,80 @@ class BlueprintEditorViewModel @Inject constructor(
         _uiState.update { it.copy(activeTool = tool) }
     }
 
+    fun selectWall(wallId: String?) {
+        _uiState.update { it.copy(selectedWallId = wallId, selectedOpeningId = null, selectedRoomId = null) }
+    }
+
+    fun selectOpening(openingId: String?) {
+        _uiState.update { it.copy(selectedOpeningId = openingId, selectedWallId = null, selectedRoomId = null) }
+    }
+
+    fun selectRoom(roomId: String?) {
+        _uiState.update { it.copy(selectedRoomId = roomId, selectedWallId = null, selectedOpeningId = null) }
+    }
+
+    fun deleteSelectedWall() {
+        val wallId = _uiState.value.selectedWallId ?: return
+        updateDocument { document ->
+            val updatedWalls = document.walls.filterNot { it.id == wallId }
+            val rooms = RoomLoopDetector.detectRooms(updatedWalls)
+            document.copy(
+                walls = updatedWalls,
+                rooms = mergeRoomNames(existing = document.rooms, detected = rooms),
+                openings = document.openings.filterNot { it.wallId == wallId },
+                undoStackMeta = document.undoStackMeta.copy(
+                    undoDepth = undoStack.size + 1,
+                    redoDepth = 0,
+                    revision = document.undoStackMeta.revision + 1
+                )
+            )
+        }
+        _uiState.update { it.copy(selectedWallId = null) }
+    }
+
+    fun deleteSelectedOpening() {
+        val openingId = _uiState.value.selectedOpeningId ?: return
+        removeOpening(openingId)
+        _uiState.update { it.copy(selectedOpeningId = null) }
+    }
+
+    fun updateWall(wallId: String, updatedWall: WallSegment) {
+        updateDocument { document ->
+            val updatedWalls = document.walls.map { if (it.id == wallId) updatedWall else it }
+            val rooms = RoomLoopDetector.detectRooms(updatedWalls)
+            document.copy(
+                walls = updatedWalls,
+                rooms = mergeRoomNames(existing = document.rooms, detected = rooms),
+                undoStackMeta = document.undoStackMeta.copy(
+                    undoDepth = undoStack.size + 1,
+                    redoDepth = 0,
+                    revision = document.undoStackMeta.revision + 1
+                )
+            )
+        }
+    }
+
+    fun splitWall(wallId: String, splitPoint: com.tradesketch.estimator.domain.model.PointMm) {
+        updateDocument { document ->
+            val wall = document.walls.find { it.id == wallId } ?: return@updateDocument document
+            val wall1 = wall.copy(id = java.util.UUID.randomUUID().toString(), end = splitPoint)
+            val wall2 = wall.copy(id = java.util.UUID.randomUUID().toString(), start = splitPoint)
+            val updatedWalls = document.walls.filterNot { it.id == wallId } + wall1 + wall2
+            val rooms = RoomLoopDetector.detectRooms(updatedWalls)
+            document.copy(
+                walls = updatedWalls,
+                rooms = mergeRoomNames(existing = document.rooms, detected = rooms),
+                openings = document.openings.filterNot { it.wallId == wallId },
+                undoStackMeta = document.undoStackMeta.copy(
+                    undoDepth = undoStack.size + 1,
+                    redoDepth = 0,
+                    revision = document.undoStackMeta.revision + 1
+                )
+            )
+        }
+        _uiState.update { it.copy(selectedWallId = null) }
+    }
+
     private fun updateDocument(
         trackUndo: Boolean = true,
         transform: (BlueprintDocument) -> BlueprintDocument
@@ -281,6 +355,9 @@ data class BlueprintEditorUiState(
     val project: Project? = null,
     val document: BlueprintDocument? = null,
     val activeTool: BlueprintDraftTool = BlueprintDraftTool.DRAW_WALL,
+    val selectedWallId: String? = null,
+    val selectedOpeningId: String? = null,
+    val selectedRoomId: String? = null,
     val isLoading: Boolean = true,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
