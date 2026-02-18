@@ -43,10 +43,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Project
-import com.tradesketch.estimator.domain.model.areaSqFt
-import com.tradesketch.estimator.domain.model.openingsAreaSqFt
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
@@ -55,9 +54,6 @@ import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
-import com.tradesketch.estimator.ui.viewmodel.concreteSpaces
-import com.tradesketch.estimator.ui.viewmodel.drywallSpaces
-import com.tradesketch.estimator.ui.viewmodel.paintableSpaces
 import com.tradesketch.estimator.utils.Formatters
 
 @Composable
@@ -955,17 +951,36 @@ private fun scopeSummaryForType(
         )
     }
 
+    val blueprint = project.authoritativeBlueprint()
+
     return when (type) {
         TakeoffType.DRYWALL -> {
-            val spaces = project.drywallSpaces(includeDrywallCeilings)
-            val netArea = spaces.sumOf { (it.geometry.areaSqFt() - it.openingsAreaSqFt()).coerceAtLeast(0.0) }
+            val wallCount = blueprint.walls.size
+            val ceilingCount = if (includeDrywallCeilings) blueprint.rooms.size else 0
+            val totalCount = wallCount + ceilingCount
+            
+            val wallArea = blueprint.walls.sumOf {
+                val length = Millimeters(it.lengthMillimeters()).toFeet()
+                val height = Millimeters(it.heightMm).toFeet()
+                length * height
+            }
+            val openingArea = blueprint.openings.sumOf {
+                Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet()
+            }
+            val ceilingArea = if (includeDrywallCeilings) {
+                blueprint.rooms.sumOf { it.areaSqFt() }
+            } else {
+                0.0
+            }
+            val netArea = (wallArea - openingArea + ceilingArea).coerceAtLeast(0.0)
+            
             ScopeSummary(
-                spaceCount = spaces.size,
+                spaceCount = totalCount,
                 measuredQuantity = netArea,
                 unit = "sq ft",
                 quantityLabel = if (includeDrywallCeilings) "Net drywall area" else "Net wall area",
                 guidance = if (includeDrywallCeilings) {
-                    "Walls plus ceilings (rect surfaces) with openings removed are used for drywall quantity."
+                    "Walls plus ceilings with openings removed are used for drywall quantity."
                 } else {
                     "Walls with openings removed are used for drywall quantity."
                 }
@@ -973,38 +988,51 @@ private fun scopeSummaryForType(
         }
 
         TakeoffType.CONCRETE -> {
-            val spaces = project.concreteSpaces()
-            val area = spaces.sumOf { it.geometry.areaSqFt() }
+            val roomCount = blueprint.rooms.size
+            val area = blueprint.rooms.sumOf { it.areaSqFt() }
             ScopeSummary(
-                spaceCount = spaces.size,
+                spaceCount = roomCount,
                 measuredQuantity = area,
                 unit = "sq ft",
                 quantityLabel = "Slab footprint",
-                guidance = "Slab footprint and thickness determine concrete volume."
+                guidance = "Room footprint and thickness determine concrete volume."
             )
         }
 
         TakeoffType.GRAVEL_MULCH -> {
-            val spaces = project.spaces.filter { it.geometry !is Geometry.Wall }
-            val area = spaces.sumOf { it.geometry.areaSqFt() }
+            val roomCount = blueprint.rooms.size
+            val area = blueprint.rooms.sumOf { it.areaSqFt() }
             ScopeSummary(
-                spaceCount = spaces.size,
+                spaceCount = roomCount,
                 measuredQuantity = area,
                 unit = "sq ft",
                 quantityLabel = "Ground coverage",
-                guidance = "All non-wall surfaces are treated as coverage area."
+                guidance = "All room surfaces are treated as coverage area."
             )
         }
 
         TakeoffType.PAINT -> {
-            val spaces = project.paintableSpaces()
-            val netArea = spaces.sumOf { (it.geometry.areaSqFt() - it.openingsAreaSqFt()).coerceAtLeast(0.0) }
+            val wallCount = blueprint.walls.size
+            val ceilingCount = blueprint.rooms.size
+            val totalCount = wallCount + ceilingCount
+            
+            val wallArea = blueprint.walls.sumOf {
+                val length = Millimeters(it.lengthMillimeters()).toFeet()
+                val height = Millimeters(it.heightMm).toFeet()
+                length * height
+            }
+            val openingArea = blueprint.openings.sumOf {
+                Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet()
+            }
+            val ceilingArea = blueprint.rooms.sumOf { it.areaSqFt() }
+            val netArea = (wallArea - openingArea + ceilingArea).coerceAtLeast(0.0)
+            
             ScopeSummary(
-                spaceCount = spaces.size,
+                spaceCount = totalCount,
                 measuredQuantity = netArea,
                 unit = "sq ft",
                 quantityLabel = "Paintable area",
-                guidance = "Walls and rectangular surfaces are included with openings deducted."
+                guidance = "Walls and ceilings are included with openings deducted."
             )
         }
     }
