@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
 import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
@@ -201,6 +202,10 @@ fun BlueprintScreen(
                     onOptimizeLayout = { viewModel.optimizeBlueprintLayout(snapStepFeet) },
                     onCenterLayout = { viewModel.centerLayoutAtOrigin() },
                     onAlignNorth = { viewModel.alignLayoutToCardinal() },
+                    onExpandScopePainting = { viewModel.expandScopeWithPainting() },
+                    onUpdateSnapSettings = { snapSettings ->
+                        viewModel.updateBlueprintSnapSettings(snapSettings)
+                    },
                     snapStepFeet = snapStepFeet,
                     onSnapStepChange = { snapStepFeet = it },
                     layerFilter = layerFilter,
@@ -405,6 +410,8 @@ private fun BlueprintContent(
     onOptimizeLayout: () -> Unit,
     onCenterLayout: () -> Unit,
     onAlignNorth: () -> Unit,
+    onExpandScopePainting: () -> Unit,
+    onUpdateSnapSettings: (BlueprintSnapSettings) -> Unit,
     snapStepFeet: Double,
     onSnapStepChange: (Double) -> Unit,
     layerFilter: BlueprintLayerFilter,
@@ -474,6 +481,7 @@ private fun BlueprintContent(
                 onQuickAddSlab = onQuickAddSlab,
                 onQuickAddBed = onQuickAddBed,
                 onBlueprintLayerFilterChange = onLayerFilterChange,
+                onUpdateSnapSettings = onUpdateSnapSettings,
                 onDrawWallSegment = { startX, startZ, endX, endZ ->
                     val lengthFeet = hypot(endX - startX, endZ - startZ)
                     if (lengthFeet < 1.0) return@ModelBuilder3DPanel
@@ -609,6 +617,7 @@ private fun BlueprintContent(
                         onSnapToGrid = onSnapToGrid,
                         onCenterLayout = onCenterLayout,
                         onAlignNorth = onAlignNorth,
+                        onExpandScopePainting = onExpandScopePainting,
                         canUndo = canUndo,
                         canRedo = canRedo,
                         undoCount = undoCount,
@@ -646,6 +655,7 @@ private fun BlueprintContent(
                     onQuickAddSlab = onQuickAddSlab,
                     onQuickAddBed = onQuickAddBed,
                     onBlueprintLayerFilterChange = onLayerFilterChange,
+                    onUpdateSnapSettings = onUpdateSnapSettings,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
@@ -708,6 +718,7 @@ private fun BlueprintContent(
                     onSnapToGrid = onSnapToGrid,
                     onCenterLayout = onCenterLayout,
                     onAlignNorth = onAlignNorth,
+                    onExpandScopePainting = onExpandScopePainting,
                     canUndo = canUndo,
                     canRedo = canRedo,
                     undoCount = undoCount,
@@ -746,6 +757,7 @@ private fun BlueprintContent(
                     onQuickAddSlab = onQuickAddSlab,
                     onQuickAddBed = onQuickAddBed,
                     onBlueprintLayerFilterChange = onLayerFilterChange,
+                    onUpdateSnapSettings = onUpdateSnapSettings,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -784,6 +796,7 @@ private fun BlueprintCommandCenterCard(
     onSnapToGrid: (Double) -> Unit,
     onCenterLayout: () -> Unit,
     onAlignNorth: () -> Unit,
+    onExpandScopePainting: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     undoCount: Int,
@@ -964,6 +977,13 @@ private fun BlueprintCommandCenterCard(
                 ) {
                     Text("Add Space")
                 }
+            }
+            SecondaryActionButton(
+                onClick = onExpandScopePainting,
+                enabled = project.spaces.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Add Painting To Scope")
             }
 
             if (compactControls) {

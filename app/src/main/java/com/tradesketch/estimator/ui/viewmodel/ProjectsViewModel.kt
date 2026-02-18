@@ -79,6 +79,7 @@ class ProjectsViewModel @Inject constructor(
                 current.copy(
                     primaryTrade = primaryTrade,
                     simplifiedHome = true,
+                    firstRun = false,
                     hasCompletedTradeOnboarding = true
                 )
             )
@@ -91,6 +92,7 @@ class ProjectsViewModel @Inject constructor(
             saveSettingsUseCase(
                 current.copy(
                     primaryTrade = primaryTrade,
+                    firstRun = false,
                     hasCompletedTradeOnboarding = true
                 )
             )

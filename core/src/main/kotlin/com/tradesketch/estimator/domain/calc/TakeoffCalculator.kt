@@ -4,6 +4,7 @@ import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.domain.model.openingsAreaSqFt
 import kotlin.math.ceil
@@ -79,7 +80,14 @@ object TakeoffCalculator {
         wastePercent: Double,
         costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
-        val areaSqFt = spaces.sumOf { it.geometry.areaSqFt() }.coerceAtLeast(0.0)
+        val areaSqFt = spaces.sumOf { space ->
+            val openingDeduction = if (space.geometry is Geometry.Wall) {
+                space.openingsAreaSqFt()
+            } else {
+                0.0
+            }
+            (space.geometry.areaSqFt() - openingDeduction).coerceAtLeast(0.0)
+        }.coerceAtLeast(0.0)
         val coatsSafe = coats.coerceAtLeast(0)
         val coverage = coverageSqFtPerGallon.coerceAtLeast(1.0)
         val totalCoverage = applyWaste(areaSqFt * coatsSafe, wastePercent)

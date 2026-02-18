@@ -24,6 +24,7 @@ class SettingsDataStore @Inject constructor(
         private val CALM_MODE_ENABLED = booleanPreferencesKey("calm_mode_enabled")
         private val WORKFLOW_AIDS_ENABLED = booleanPreferencesKey("workflow_aids_enabled")
         private val REDUCED_MOTION_ENABLED = booleanPreferencesKey("reduced_motion_enabled")
+        private val FIRST_RUN = booleanPreferencesKey("first_run")
         private val HAS_COMPLETED_TRADE_ONBOARDING = booleanPreferencesKey("has_completed_trade_onboarding")
         private val DEFAULT_WASTE_PERCENT = doublePreferencesKey("default_waste_percent")
         private val USE_METRIC = booleanPreferencesKey("use_metric")
@@ -61,6 +62,7 @@ class SettingsDataStore @Inject constructor(
                 calmModeEnabled = preferences[CALM_MODE_ENABLED] ?: true,
                 workflowAidsEnabled = preferences[WORKFLOW_AIDS_ENABLED] ?: false,
                 reducedMotionEnabled = preferences[REDUCED_MOTION_ENABLED] ?: true,
+                firstRun = preferences[FIRST_RUN] ?: true,
                 hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING] ?: false,
                 defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: 10.0,
                 useMetric = preferences[USE_METRIC] ?: false,
@@ -94,6 +96,7 @@ class SettingsDataStore @Inject constructor(
             preferences[CALM_MODE_ENABLED] = settings.calmModeEnabled
             preferences[WORKFLOW_AIDS_ENABLED] = settings.workflowAidsEnabled
             preferences[REDUCED_MOTION_ENABLED] = settings.reducedMotionEnabled
+            preferences[FIRST_RUN] = settings.firstRun
             preferences[HAS_COMPLETED_TRADE_ONBOARDING] = settings.hasCompletedTradeOnboarding
             preferences[DEFAULT_WASTE_PERCENT] = settings.defaultWastePercent
             preferences[USE_METRIC] = settings.useMetric

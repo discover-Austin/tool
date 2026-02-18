@@ -18,6 +18,7 @@ data class Settings(
     val calmModeEnabled: Boolean = true,
     val workflowAidsEnabled: Boolean = false,
     val reducedMotionEnabled: Boolean = true,
+    val firstRun: Boolean = true,
     val hasCompletedTradeOnboarding: Boolean = false,
     val defaultWastePercent: Double = 10.0,
     val useMetric: Boolean = false,

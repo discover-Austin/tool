@@ -42,10 +42,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Architecture
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -154,7 +157,7 @@ private fun TradeSketchRoot() {
         onRecordTap = settingsViewModel::recordTap,
         onUpdatePrimaryTrade = settingsViewModel::updatePrimaryTrade,
         onCompleteWelcome = {
-            settingsViewModel.updatePrimaryTrade(settingsUiState.settings.primaryTrade)
+            settingsViewModel.completeWelcomeOnboarding()
         }
     )
 }
@@ -171,10 +174,10 @@ private fun AppNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = if (appSettings.hasCompletedTradeOnboarding) {
-            Route.Projects.route
-        } else {
+        startDestination = if (appSettings.firstRun) {
             Route.Welcome.route
+        } else {
+            Route.Workspace.route
         },
         modifier = modifier
     ) {
@@ -183,7 +186,7 @@ private fun AppNavHost(
                 onBeginWorkspace = {
                     onRecordTap("welcome_begin_workspace")
                     onCompleteWelcome()
-                    navController.navigate(Route.Projects.route) {
+                    navController.navigate(Route.Workspace.route) {
                         popUpTo(Route.Welcome.route) {
                             inclusive = true
                         }
@@ -195,70 +198,15 @@ private fun AppNavHost(
                     .windowInsetsPadding(WindowInsets.safeDrawing)
             )
         }
-        composable(Route.Projects.route) {
-            ProjectsScreen(
-                onNavigateToProject = { projectId ->
-                    navController.navigate("${Route.ProjectDetail.route}/$projectId")
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Route.Settings.route)
-                },
+        composable(Route.Workspace.route) {
+            WorkspaceShell(
+                appSettings = appSettings,
+                onRecordTap = onRecordTap,
+                onUpdatePrimaryTrade = onUpdatePrimaryTrade,
                 modifier = Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(WindowInsets.safeDrawing)
             )
-        }
-        composable(
-            route = "${Route.ProjectDetail.route}/{projectId}",
-            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val projectId = backStackEntry.arguments?.getString("projectId") ?: return@composable
-            ProjectDetailWithTabs(
-                projectId = projectId,
-                appSettings = appSettings,
-                onRecordTap = onRecordTap,
-                onUpdatePrimaryTrade = onUpdatePrimaryTrade,
-                onNavigateToSettings = { navController.navigate(Route.Settings.route) },
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(Route.Settings.route) {
-            Scaffold(
-                contentWindowInsets = WindowInsets.safeDrawing.only(
-                    WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
-                ),
-                topBar = {
-                    TopAppBar(
-                        windowInsets = WindowInsets.safeDrawing.only(
-                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
-                        ),
-                        title = {
-                            Text(
-                                text = "App Settings",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        navigationIcon = {
-                            IconButton(onClick = { navController.popBackStack() }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back"
-                                )
-                            }
-                        }
-                    )
-                }
-            ) { padding ->
-                SettingsScreen(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                )
-            }
         }
     }
 }
@@ -437,56 +385,169 @@ private fun WelcomeDetailCard(
 }
 
 @Composable
-private fun ProjectDetailWithTabs(
-    projectId: String,
+private fun WorkspaceShell(
     appSettings: Settings,
     onRecordTap: (String) -> Unit,
     onUpdatePrimaryTrade: (PrimaryTrade) -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateBack: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-    val selectedTab = DetailTab.entries.find { it.route == currentRoute } ?: DetailTab.PROJECTS
+    var selectedTab by rememberSaveable { mutableStateOf(DetailTab.PROJECTS) }
+    var selectedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     val navigateToTab: (DetailTab) -> Unit = { tab ->
-        onRecordTap("tab_nav_${selectedTab.route}_to_${tab.route}")
-        navController.navigate(tab.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
+        if (selectedTab != tab) {
+            onRecordTap("workspace_tab_${selectedTab.route}_to_${tab.route}")
         }
+        selectedTab = tab
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-    ) {
+    Row(modifier = modifier.fillMaxSize()) {
         WorkspaceLeftRail(
             currentTab = selectedTab,
             onSelectTab = navigateToTab,
-            onNavigateBack = onNavigateBack,
-            onNavigateToSettings = onNavigateToSettings,
             modifier = Modifier.fillMaxHeight()
         )
         VerticalDivider(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
         )
-        WorkspaceNavHost(
-            navController = navController,
-            projectId = projectId,
-            appSettings = appSettings,
-            onRecordTap = onRecordTap,
-            onUpdatePrimaryTrade = onUpdatePrimaryTrade,
-            onNavigateToTab = navigateToTab,
-            onBlueprintFullscreenChanged = {},
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-        )
+        ) {
+            when (selectedTab) {
+                DetailTab.PROJECTS -> {
+                    if (selectedProjectId == null) {
+                        ProjectsScreen(
+                            onNavigateToProject = { projectId ->
+                                selectedProjectId = projectId
+                                navigateToTab(DetailTab.BLUEPRINT)
+                            },
+                            onNavigateToSettings = { navigateToTab(DetailTab.SETTINGS_ABOUT) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Project Ritual",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                SecondaryActionButton(
+                                    onClick = { selectedProjectId = null }
+                                ) {
+                                    Text("Switch Project")
+                                }
+                            }
+                            ProjectSetupScreen(
+                                projectId = selectedProjectId!!,
+                                selectedTrade = appSettings.primaryTrade,
+                                onSelectTrade = { trade ->
+                                    onRecordTap("workspace_select_estimate_${trade.name.lowercase()}")
+                                    if (trade != appSettings.primaryTrade) {
+                                        onUpdatePrimaryTrade(trade)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+
+                DetailTab.BLUEPRINT -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        BlueprintScreen(
+                            projectId = projectId,
+                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.MATERIALS -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        TakeoffScreen(
+                            projectId = projectId,
+                            onOpenModel = { navigateToTab(DetailTab.REVIEW) },
+                            onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
+                            onOpenExport = { navigateToTab(DetailTab.EXPORT) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.QUANTITIES -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        TakeoffScreen(
+                            projectId = projectId,
+                            onOpenModel = { navigateToTab(DetailTab.REVIEW) },
+                            onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
+                            onOpenExport = { navigateToTab(DetailTab.EXPORT) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.ADDONS -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        BlueprintScreen(
+                            projectId = projectId,
+                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.REVIEW -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        ProjectDetailScreen(
+                            projectId = projectId,
+                            onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
+                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.EXPORT -> {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onOpenProjects = { navigateToTab(DetailTab.PROJECTS) }
+                    ) { projectId ->
+                        ExportScreen(
+                            projectId = projectId,
+                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                DetailTab.SETTINGS_ABOUT -> {
+                    SettingsScreen(modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
     }
 }
 
@@ -494,32 +555,24 @@ private fun ProjectDetailWithTabs(
 private fun WorkspaceLeftRail(
     currentTab: DetailTab,
     onSelectTab: (DetailTab) -> Unit,
-    onNavigateBack: () -> Unit,
-    onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavigationRail(
-        modifier = modifier.width(74.dp),
+        modifier = modifier.width(62.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f),
         header = {
             Column(
-                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to projects"
-                    )
-                }
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.AutoFixHigh,
-                        contentDescription = null,
+                        imageVector = Icons.Filled.Architecture,
+                        contentDescription = "TradeSketch",
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(8.dp)
                     )
@@ -546,24 +599,48 @@ private fun WorkspaceLeftRail(
                 alwaysShowLabel = false
             )
         }
-        Spacer(modifier = Modifier.weight(1f))
-        NavigationRailItem(
-            selected = false,
-            onClick = onNavigateToSettings,
-            icon = {
-                Icon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = "Settings"
+    }
+}
+
+@Composable
+private fun ProjectScopedTab(
+    selectedProjectId: String?,
+    onOpenProjects: () -> Unit,
+    content: @Composable (String) -> Unit
+) {
+    if (selectedProjectId == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                 )
-            },
-            label = {
-                Text(
-                    text = "Settings",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            },
-            alwaysShowLabel = false
-        )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Select a project first",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "Use the Projects tab to create or open a project before estimating.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SecondaryActionButton(onClick = onOpenProjects) {
+                        Text("Open Projects")
+                    }
+                }
+            }
+        }
+    } else {
+        content(selectedProjectId)
     }
 }
 
@@ -641,7 +718,10 @@ private fun ProjectSetupScreen(
         items(options, key = { it.trade.name }) { option ->
             val isSelected = option.trade == selectedTrade
             Card(
-                onClick = { onSelectTrade(option.trade) },
+                onClick = {
+                    onSelectTrade(option.trade)
+                    viewModel.applyProjectEstimateProfile(option.trade)
+                },
                 shape = RoundedCornerShape(14.dp),
                 border = if (isSelected) {
                     BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
@@ -679,70 +759,6 @@ private fun ProjectSetupScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun WorkspaceNavHost(
-    navController: NavHostController,
-    projectId: String,
-    appSettings: Settings,
-    onRecordTap: (String) -> Unit,
-    onUpdatePrimaryTrade: (PrimaryTrade) -> Unit,
-    onNavigateToTab: (DetailTab) -> Unit,
-    onBlueprintFullscreenChanged: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    NavHost(
-        navController = navController,
-        startDestination = DetailTab.PROJECTS.route,
-        modifier = modifier.fillMaxSize()
-    ) {
-        composable(DetailTab.PROJECTS.route) {
-            ProjectSetupScreen(
-                projectId = projectId,
-                selectedTrade = appSettings.primaryTrade,
-                onSelectTrade = { trade ->
-                    onRecordTap("workspace_select_estimate_${trade.name.lowercase()}")
-                    if (trade != appSettings.primaryTrade) {
-                        onUpdatePrimaryTrade(trade)
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        composable(DetailTab.ROOMS.route) {
-            ProjectDetailScreen(
-                projectId = projectId,
-                onOpenBlueprint = { onNavigateToTab(DetailTab.BLUEPRINT) },
-                onOpenTakeoff = { onNavigateToTab(DetailTab.ESTIMATE) },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        composable(DetailTab.BLUEPRINT.route) {
-            BlueprintScreen(
-                projectId = projectId,
-                onOpenTakeoff = { onNavigateToTab(DetailTab.ESTIMATE) },
-                onFullscreenBlueprintChanged = onBlueprintFullscreenChanged,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        composable(DetailTab.ESTIMATE.route) {
-            TakeoffScreen(
-                projectId = projectId,
-                onOpenModel = { onNavigateToTab(DetailTab.ROOMS) },
-                onOpenBlueprint = { onNavigateToTab(DetailTab.BLUEPRINT) },
-                onOpenExport = { onNavigateToTab(DetailTab.RESULTS) },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        composable(DetailTab.RESULTS.route) {
-            ExportScreen(
-                projectId = projectId,
-                onOpenTakeoff = { onNavigateToTab(DetailTab.ESTIMATE) },
-                modifier = Modifier.fillMaxSize()
-            )
         }
     }
 }
@@ -785,9 +801,7 @@ private fun rememberEstimateOptions(): List<EstimateOption> {
 
 private sealed class Route(val route: String) {
     data object Welcome : Route("welcome")
-    data object Projects : Route("projects")
-    data object ProjectDetail : Route("project_detail")
-    data object Settings : Route("settings")
+    data object Workspace : Route("workspace")
 }
 
 private enum class DetailTab(
@@ -796,8 +810,11 @@ private enum class DetailTab(
     val icon: ImageVector
 ) {
     PROJECTS("tab_projects", "Projects", Icons.Filled.FolderOpen),
-    ROOMS("tab_rooms", "Rooms", Icons.Filled.Architecture),
     BLUEPRINT("tab_blueprint", "Blueprint", Icons.Filled.AutoFixHigh),
-    ESTIMATE("tab_estimate", "Estimate", Icons.Filled.Assessment),
-    RESULTS("tab_results", "Results", Icons.Filled.Description)
+    MATERIALS("tab_materials", "Materials", Icons.Filled.Assessment),
+    QUANTITIES("tab_quantities", "Qty", Icons.Filled.Straighten),
+    ADDONS("tab_addons", "Add-ons", Icons.Filled.Add),
+    REVIEW("tab_review", "Review", Icons.Filled.Description),
+    EXPORT("tab_export", "Export", Icons.Filled.Share),
+    SETTINGS_ABOUT("tab_settings", "Settings", Icons.Filled.Tune)
 }

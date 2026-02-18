@@ -82,16 +82,20 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Opening
+import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.SpaceTransform
 import com.tradesketch.estimator.domain.model.areaSqFt
+import com.tradesketch.estimator.utils.DimensionParser
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
@@ -144,6 +148,7 @@ internal fun ModelBuilder3DPanel(
     onDownloadBlueprintPdf: (() -> Unit)? = null,
     onShareBlueprintPdf: (() -> Unit)? = null,
     onBlueprintLayerFilterChange: ((BlueprintLayerFilter) -> Unit)? = null,
+    onUpdateSnapSettings: ((BlueprintSnapSettings) -> Unit)? = null,
     fullScreenBlueprint: Boolean = false,
     onToggleBlueprintFullscreen: (() -> Unit)? = null,
 ) {
@@ -153,6 +158,7 @@ internal fun ModelBuilder3DPanel(
     val defaultCameraPitch = if (blueprintMode && defaultTopLock) 75f else 30f
     val defaultCameraYaw = if (blueprintMode && defaultTopLock) 0f else -38f
     val defaultCameraZoom = if (blueprintMode && defaultTopLock) 1.15f else 1.05f
+    val snapDefaults = project.takeoffSession.snapSettings
     var selectedSpaceId by remember(project.id) {
         mutableStateOf(project.spaces.firstOrNull()?.id)
     }
@@ -168,7 +174,7 @@ internal fun ModelBuilder3DPanel(
     }
     var panX by rememberSaveable(project.id) { mutableStateOf(0f) }
     var panY by rememberSaveable(project.id) { mutableStateOf(0f) }
-    var nudgeStepFt by rememberSaveable(project.id) { mutableStateOf(1f) }
+    var nudgeStepFt by rememberSaveable(project.id) { mutableStateOf(snapDefaults.gridStepFeet.toFloat()) }
     var objectQuery by rememberSaveable(project.id) { mutableStateOf("") }
     var objectTradeFilter by rememberSaveable(project.id) { mutableStateOf(ModelTradeFilter.ALL) }
     var showGrid by rememberSaveable(project.id) { mutableStateOf(true) }
@@ -222,10 +228,28 @@ internal fun ModelBuilder3DPanel(
     var blueprintTool by rememberSaveable(project.id) { mutableStateOf(BlueprintCanvasTool.NAVIGATE) }
     var drawWallStart by remember(project.id) { mutableStateOf<GroundPoint?>(null) }
     var drawWallPreview by remember(project.id) { mutableStateOf<GroundPoint?>(null) }
+    var drawChainOrigin by remember(project.id) { mutableStateOf<GroundPoint?>(null) }
+    var drawLengthInput by rememberSaveable(project.id) { mutableStateOf("") }
+    var drawAngleInput by rememberSaveable(project.id) { mutableStateOf("") }
+    var drawLengthLockEnabled by rememberSaveable(project.id) { mutableStateOf(false) }
+    var drawAngleLockEnabled by rememberSaveable(project.id) { mutableStateOf(false) }
     var wallChainMode by rememberSaveable(project.id) { mutableStateOf(true) }
     var wallOrthoLock by rememberSaveable(project.id) { mutableStateOf(true) }
-    var wallAngleSnapDegrees by rememberSaveable(project.id) { mutableStateOf(15f) }
-    var wallAnchorSnapFeet by rememberSaveable(project.id) { mutableStateOf(0.75f) }
+    var wallAngleSnapDegrees by rememberSaveable(project.id) {
+        mutableStateOf(snapDefaults.angleIncrementDegrees.toFloat())
+    }
+    var wallAnchorSnapFeet by rememberSaveable(project.id) {
+        mutableStateOf(snapDefaults.thresholdFeet.toFloat())
+    }
+    var snapToGridEnabled by rememberSaveable(project.id) { mutableStateOf(snapDefaults.gridEnabled) }
+    var snapToEndpointEnabled by rememberSaveable(project.id) { mutableStateOf(snapDefaults.endpointEnabled) }
+    var snapToMidpointEnabled by rememberSaveable(project.id) { mutableStateOf(snapDefaults.midpointEnabled) }
+    var snapToAngleEnabled by rememberSaveable(project.id) { mutableStateOf(snapDefaults.angleEnabled) }
+    var snapToClosureEnabled by rememberSaveable(project.id) { mutableStateOf(snapDefaults.closureEnabled) }
+    var showAddonsPanel by rememberSaveable(project.id) { mutableStateOf(false) }
+    var pendingOpeningType by rememberSaveable(project.id) { mutableStateOf<OpeningPlacementType?>(null) }
+    var openingWidthInput by rememberSaveable(project.id) { mutableStateOf("3' 0\"") }
+    var openingHeightInput by rememberSaveable(project.id) { mutableStateOf("7' 0\"") }
     var canvasPixelSize by remember(project.id) { mutableStateOf(IntSize.Zero) }
     var multiSelectMode by rememberSaveable(project.id) { mutableStateOf(false) }
     var isolateSelection by rememberSaveable(project.id) { mutableStateOf(false) }
@@ -370,6 +394,31 @@ internal fun ModelBuilder3DPanel(
         }
     }
 
+    LaunchedEffect(
+        snapToGridEnabled,
+        snapToEndpointEnabled,
+        snapToMidpointEnabled,
+        snapToAngleEnabled,
+        snapToClosureEnabled,
+        nudgeStepFt,
+        wallAngleSnapDegrees,
+        wallAnchorSnapFeet,
+        onUpdateSnapSettings
+    ) {
+        onUpdateSnapSettings?.invoke(
+            BlueprintSnapSettings(
+                gridEnabled = snapToGridEnabled,
+                endpointEnabled = snapToEndpointEnabled,
+                midpointEnabled = snapToMidpointEnabled,
+                angleEnabled = snapToAngleEnabled,
+                closureEnabled = snapToClosureEnabled,
+                gridStepFeet = nudgeStepFt.toDouble().coerceAtLeast(0.25),
+                angleIncrementDegrees = wallAngleSnapDegrees.toInt().coerceAtLeast(1),
+                thresholdFeet = wallAnchorSnapFeet.toDouble().coerceAtLeast(0.1)
+            )
+        )
+    }
+
     val previewSpaces = remember(project.spaces, selectedSpaceId, draftTransform, wallEditDrag) {
         project.spaces.map { space ->
             val activeWallDrag = wallEditDrag
@@ -433,11 +482,31 @@ internal fun ModelBuilder3DPanel(
         val baseSpaces = if (sceneSpaces.isNotEmpty()) sceneSpaces else project.spaces
         sceneCenter(baseSpaces)
     }
-    val wallAnchorPoints = remember(project.spaces) {
-        collectWallAnchorPoints(project.spaces)
+    val wallAnchorPoints = remember(project.spaces, snapToEndpointEnabled, snapToMidpointEnabled) {
+        buildList {
+            if (snapToEndpointEnabled) {
+                addAll(collectWallAnchorPoints(project.spaces))
+            }
+            if (snapToMidpointEnabled) {
+                addAll(collectWallMidpointPoints(project.spaces))
+            }
+        }
     }
-    val wallEditAnchorPoints = remember(project.spaces, selectedSpaceId) {
-        collectWallAnchorPoints(project.spaces.filter { it.id != selectedSpaceId })
+    val wallEditAnchorPoints = remember(
+        project.spaces,
+        selectedSpaceId,
+        snapToEndpointEnabled,
+        snapToMidpointEnabled
+    ) {
+        val editableSpaces = project.spaces.filter { it.id != selectedSpaceId }
+        buildList {
+            if (snapToEndpointEnabled) {
+                addAll(collectWallAnchorPoints(editableSpaces))
+            }
+            if (snapToMidpointEnabled) {
+                addAll(collectWallMidpointPoints(editableSpaces))
+            }
+        }
     }
     val displayedSelectedSpace = remember(previewSpaces, selectedSpaceId) {
         previewSpaces.find { it.id == selectedSpaceId }
@@ -482,27 +551,76 @@ internal fun ModelBuilder3DPanel(
     val cancelWallDraft = {
         drawWallStart = null
         drawWallPreview = null
+        drawChainOrigin = null
     }
     val resolveWallPoint = { rawPoint: GroundPoint, startPoint: GroundPoint? ->
-        val basePoint = snapGroundPoint(
-            point = rawPoint,
-            stepFeet = nudgeStepFt.toDouble().coerceAtLeast(0.25)
-        )
+        val basePoint = if (snapToGridEnabled) {
+            snapGroundPoint(
+                point = rawPoint,
+                stepFeet = nudgeStepFt.toDouble().coerceAtLeast(0.25)
+            )
+        } else {
+            rawPoint
+        }
         val constrained = if (startPoint != null) {
-            applyWallDirectionConstraint(
+            var resolved = applyWallDirectionConstraint(
                 start = startPoint,
                 rawPoint = basePoint,
                 orthoLock = wallOrthoLock,
-                angleSnapDegrees = wallAngleSnapDegrees.toDouble()
+                angleSnapDegrees = if (snapToAngleEnabled) wallAngleSnapDegrees.toDouble() else 0.0
             )
+            val lockedLengthFeet = if (drawLengthLockEnabled) {
+                DimensionParser.parseLengthToFeet(drawLengthInput)?.coerceAtLeast(0.5)
+            } else {
+                null
+            }
+            val lockedAngleDegrees = if (drawAngleLockEnabled) {
+                DimensionParser.parseAngleDegrees(drawAngleInput)
+            } else {
+                null
+            }
+            if (lockedLengthFeet != null || lockedAngleDegrees != null) {
+                val liveLength = hypot(
+                    resolved.xFeet - startPoint.xFeet,
+                    resolved.zFeet - startPoint.zFeet
+                ).coerceAtLeast(0.5)
+                val liveAngle = Math.toDegrees(
+                    atan2(
+                        resolved.zFeet - startPoint.zFeet,
+                        resolved.xFeet - startPoint.xFeet
+                    )
+                )
+                val finalLength = lockedLengthFeet ?: liveLength
+                val finalAngle = lockedAngleDegrees ?: liveAngle
+                val radians = Math.toRadians(finalAngle)
+                resolved = GroundPoint(
+                    xFeet = startPoint.xFeet + (cos(radians) * finalLength),
+                    zFeet = startPoint.zFeet + (sin(radians) * finalLength)
+                )
+            }
+            resolved
         } else {
             basePoint
         }
-        snapPointToNearestAnchor(
-            point = constrained,
-            anchors = wallAnchorPoints,
-            thresholdFeet = wallAnchorSnapFeet.toDouble().coerceAtLeast(0.25)
-        )
+        var snapped = constrained
+        if (snapToEndpointEnabled || snapToMidpointEnabled) {
+            snapped = snapPointToNearestAnchor(
+                point = snapped,
+                anchors = wallAnchorPoints,
+                thresholdFeet = wallAnchorSnapFeet.toDouble().coerceAtLeast(0.25)
+            )
+        }
+        if (snapToClosureEnabled && startPoint != null) {
+            val origin = drawChainOrigin
+            if (
+                origin != null &&
+                pointDistance(snapped, origin) <= wallAnchorSnapFeet.toDouble().coerceAtLeast(0.25) &&
+                pointDistance(startPoint, origin) > 0.01
+            ) {
+                snapped = origin
+            }
+        }
+        snapped
     }
     val resolveTappedSpace: (Offset) -> Space? = { tapOffset ->
         if (canvasPixelSize.width <= 0 || canvasPixelSize.height <= 0) {
@@ -572,7 +690,25 @@ internal fun ModelBuilder3DPanel(
         }
     }
     val placeWallSegment = { startPoint: GroundPoint, endPoint: GroundPoint ->
-        val segmentLength = hypot(endPoint.xFeet - startPoint.xFeet, endPoint.zFeet - startPoint.zFeet)
+        val closureTarget = if (wallChainMode && snapToClosureEnabled) {
+            val origin = drawChainOrigin
+            if (
+                origin != null &&
+                pointDistance(endPoint, origin) <= wallAnchorSnapFeet.toDouble().coerceAtLeast(0.25) &&
+                pointDistance(startPoint, origin) > 0.01
+            ) {
+                origin
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+        val resolvedEndPoint = closureTarget ?: endPoint
+        val segmentLength = hypot(
+            resolvedEndPoint.xFeet - startPoint.xFeet,
+            resolvedEndPoint.zFeet - startPoint.zFeet
+        )
         if (segmentLength < 1.0) {
             haptics.tap()
             if (!wallChainMode) {
@@ -584,13 +720,20 @@ internal fun ModelBuilder3DPanel(
             onDrawWallSegment?.invoke(
                 startPoint.xFeet,
                 startPoint.zFeet,
-                endPoint.xFeet,
-                endPoint.zFeet
+                resolvedEndPoint.xFeet,
+                resolvedEndPoint.zFeet
             )
             haptics.confirm()
             if (wallChainMode) {
-                drawWallStart = endPoint
-                drawWallPreview = endPoint
+                if (closureTarget != null) {
+                    cancelWallDraft()
+                } else {
+                    drawWallStart = resolvedEndPoint
+                    drawWallPreview = resolvedEndPoint
+                    if (drawChainOrigin == null) {
+                        drawChainOrigin = startPoint
+                    }
+                }
             } else {
                 cancelWallDraft()
             }
@@ -1352,6 +1495,9 @@ internal fun ModelBuilder3DPanel(
                             val startPoint = resolveWallPoint(groundPoint, null)
                             drawWallStart = startPoint
                             drawWallPreview = startPoint
+                            if (drawChainOrigin == null) {
+                                drawChainOrigin = startPoint
+                            }
                             haptics.tap()
                         } else {
                             val endPoint = resolveWallPoint(groundPoint, pendingStart)
@@ -1403,6 +1549,9 @@ internal fun ModelBuilder3DPanel(
                             }
                             drawWallStart = normalizedStart
                             drawWallPreview = normalizedStart
+                            if (drawChainOrigin == null) {
+                                drawChainOrigin = normalizedStart
+                            }
                             haptics.tap()
                         },
                         onDragCancel = {
@@ -1441,6 +1590,67 @@ internal fun ModelBuilder3DPanel(
             } else {
                 Modifier
             }
+            val openingPlacementTapModifier = if (
+                blueprintMode &&
+                lockTopView &&
+                onUpdateSpace != null &&
+                (blueprintTool == BlueprintCanvasTool.PLACE_DOOR || blueprintTool == BlueprintCanvasTool.PLACE_WINDOW)
+            ) {
+                Modifier.pointerInput(
+                    project.id,
+                    blueprintTool,
+                    lockTopView,
+                    cameraPitch,
+                    cameraYaw,
+                    cameraZoom,
+                    panX,
+                    panY,
+                    canvasPixelSize,
+                    activeSceneCenter,
+                    sceneSpaces,
+                    openingWidthInput,
+                    openingHeightInput
+                ) {
+                    detectTapGestures { tapOffset ->
+                        if (canvasPixelSize.width <= 0 || canvasPixelSize.height <= 0) return@detectTapGestures
+                        val wallSpace = resolveTappedSpace(tapOffset)
+                            ?.takeIf { it.geometry is Geometry.Wall }
+                            ?: return@detectTapGestures
+                        val viewport = Size(
+                            width = canvasPixelSize.width.toFloat(),
+                            height = canvasPixelSize.height.toFloat()
+                        )
+                        val groundPoint = screenToGroundPoint(
+                            tapOffset = tapOffset,
+                            viewport = viewport,
+                            sceneCenter = activeSceneCenter,
+                            cameraState = cameraState
+                        ) ?: return@detectTapGestures
+                        val placementType = if (blueprintTool == BlueprintCanvasTool.PLACE_DOOR) {
+                            OpeningPlacementType.DOOR
+                        } else {
+                            OpeningPlacementType.WINDOW
+                        }
+                        val wallT = wallPositionTForGroundPoint(wallSpace, groundPoint) ?: 0.5
+                        val widthFeet = DimensionParser.parseLengthToFeet(openingWidthInput)
+                            ?: placementType.defaultWidthFeet
+                        val heightFeet = DimensionParser.parseLengthToFeet(openingHeightInput)
+                            ?: placementType.defaultHeightFeet
+                        val updatedWall = wallSpace.withOpeningPreset(
+                            widthFeet = widthFeet,
+                            heightFeet = heightFeet,
+                            openingType = placementType.openingType,
+                            wallPositionT = wallT
+                        )
+                        onUpdateSpace.invoke(updatedWall)
+                        selectedSpaceId = wallSpace.id
+                        selectedSpaceIds = setOf(wallSpace.id)
+                        haptics.confirm()
+                    }
+                }
+            } else {
+                Modifier
+            }
             val canvasSurfaceModifier = if (fillCanvasViewport) {
                 Modifier
                     .fillMaxWidth()
@@ -1468,6 +1678,7 @@ internal fun ModelBuilder3DPanel(
                     .then(spaceMoveDragModifier)
                     .then(wallTapModifier)
                     .then(wallDragModifier)
+                    .then(openingPlacementTapModifier)
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawScene(
@@ -1580,6 +1791,34 @@ internal fun ModelBuilder3DPanel(
                                     color = Color(0xFF4FC3F7),
                                     radius = 7f,
                                     center = projectedEnd.screen
+                                )
+                                val liveLengthFeet = hypot(
+                                    preview.xFeet - start.xFeet,
+                                    preview.zFeet - start.zFeet
+                                )
+                                val liveAngleDegrees = normalizeAngleDegrees(
+                                    Math.toDegrees(
+                                        atan2(
+                                            preview.zFeet - start.zFeet,
+                                            preview.xFeet - start.xFeet
+                                        )
+                                    )
+                                )
+                                val liveLabelPaint = android.graphics.Paint().apply {
+                                    isAntiAlias = true
+                                    color = android.graphics.Color.argb(230, 18, 33, 46)
+                                    textSize = 30f
+                                    typeface = android.graphics.Typeface.create(
+                                        android.graphics.Typeface.SANS_SERIF,
+                                        android.graphics.Typeface.BOLD
+                                    )
+                                }
+                                val liveLabelText = "${"%.2f".format(liveLengthFeet)}'  @ ${liveAngleDegrees.toInt()}deg"
+                                drawContext.canvas.nativeCanvas.drawText(
+                                    liveLabelText,
+                                    projectedEnd.screen.x + 14f,
+                                    projectedEnd.screen.y - 14f,
+                                    liveLabelPaint
                                 )
                             }
                         }
@@ -2081,6 +2320,218 @@ internal fun ModelBuilder3DPanel(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = drawLengthInput,
+                                        onValueChange = { drawLengthInput = it },
+                                        label = { Text("Length") },
+                                        placeholder = { Text("12' 6\" / 3800mm") },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                            keyboardType = KeyboardType.Text
+                                        ),
+                                        modifier = Modifier.width(168.dp)
+                                    )
+                                    OutlinedTextField(
+                                        value = drawAngleInput,
+                                        onValueChange = { drawAngleInput = it },
+                                        label = { Text("Angle") },
+                                        placeholder = { Text("45") },
+                                        singleLine = true,
+                                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                            keyboardType = KeyboardType.Number
+                                        ),
+                                        modifier = Modifier.width(118.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = drawLengthLockEnabled,
+                                        onClick = {
+                                            drawLengthLockEnabled = !drawLengthLockEnabled
+                                        },
+                                        label = { Text("Lock Length") }
+                                    )
+                                    FilterChip(
+                                        selected = drawAngleLockEnabled,
+                                        onClick = {
+                                            drawAngleLockEnabled = !drawAngleLockEnabled
+                                        },
+                                        label = { Text("Lock Angle") }
+                                    )
+                                    FilterChip(
+                                        selected = snapToClosureEnabled,
+                                        onClick = {
+                                            snapToClosureEnabled = !snapToClosureEnabled
+                                        },
+                                        label = { Text("Close Room Snap") }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = snapToGridEnabled,
+                                        onClick = { snapToGridEnabled = !snapToGridEnabled },
+                                        label = { Text("Grid Snap") }
+                                    )
+                                    FilterChip(
+                                        selected = snapToEndpointEnabled,
+                                        onClick = { snapToEndpointEnabled = !snapToEndpointEnabled },
+                                        label = { Text("Endpoint Snap") }
+                                    )
+                                    FilterChip(
+                                        selected = snapToMidpointEnabled,
+                                        onClick = { snapToMidpointEnabled = !snapToMidpointEnabled },
+                                        label = { Text("Midpoint Snap") }
+                                    )
+                                    FilterChip(
+                                        selected = snapToAngleEnabled,
+                                        onClick = { snapToAngleEnabled = !snapToAngleEnabled },
+                                        label = { Text("Angle Snap") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (blueprintMode && lockTopView) {
+                        Card(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(10.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    .width(290.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = showAddonsPanel,
+                                        onClick = {
+                                            showAddonsPanel = !showAddonsPanel
+                                        },
+                                        label = { Text(if (showAddonsPanel) "Add-ons On" else "Add-ons") }
+                                    )
+                                    FilterChip(
+                                        selected = blueprintTool == BlueprintCanvasTool.PLACE_DOOR,
+                                        onClick = {
+                                            blueprintTool = BlueprintCanvasTool.PLACE_DOOR
+                                            pendingOpeningType = OpeningPlacementType.DOOR
+                                        },
+                                        label = { Text("Door Tool") }
+                                    )
+                                    FilterChip(
+                                        selected = blueprintTool == BlueprintCanvasTool.PLACE_WINDOW,
+                                        onClick = {
+                                            blueprintTool = BlueprintCanvasTool.PLACE_WINDOW
+                                            pendingOpeningType = OpeningPlacementType.WINDOW
+                                        },
+                                        label = { Text("Window Tool") }
+                                    )
+                                }
+                                if (showAddonsPanel) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = {
+                                                openingWidthInput = "3' 0\""
+                                                openingHeightInput = "7' 0\""
+                                                blueprintTool = BlueprintCanvasTool.PLACE_DOOR
+                                                pendingOpeningType = OpeningPlacementType.DOOR
+                                            },
+                                            label = { Text("Door 3x7") }
+                                        )
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = {
+                                                openingWidthInput = "5' 0\""
+                                                openingHeightInput = "7' 0\""
+                                                blueprintTool = BlueprintCanvasTool.PLACE_DOOR
+                                                pendingOpeningType = OpeningPlacementType.DOOR
+                                            },
+                                            label = { Text("Door 5x7") }
+                                        )
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = {
+                                                openingWidthInput = "3' 0\""
+                                                openingHeightInput = "4' 0\""
+                                                blueprintTool = BlueprintCanvasTool.PLACE_WINDOW
+                                                pendingOpeningType = OpeningPlacementType.WINDOW
+                                            },
+                                            label = { Text("Window 3x4") }
+                                        )
+                                        FilterChip(
+                                            selected = false,
+                                            onClick = {
+                                                openingWidthInput = "4' 0\""
+                                                openingHeightInput = "5' 0\""
+                                                blueprintTool = BlueprintCanvasTool.PLACE_WINDOW
+                                                pendingOpeningType = OpeningPlacementType.WINDOW
+                                            },
+                                            label = { Text("Window 4x5") }
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = openingWidthInput,
+                                            onValueChange = { openingWidthInput = it },
+                                            singleLine = true,
+                                            label = { Text("Width") },
+                                            placeholder = { Text("3' 0\"") },
+                                            modifier = Modifier.width(128.dp)
+                                        )
+                                        OutlinedTextField(
+                                            value = openingHeightInput,
+                                            onValueChange = { openingHeightInput = it },
+                                            singleLine = true,
+                                            label = { Text("Height") },
+                                            placeholder = { Text("7' 0\"") },
+                                            modifier = Modifier.width(128.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Tap any wall to place ${pendingOpeningType?.label ?: "an opening"} at the exact wall position.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -3314,6 +3765,29 @@ private fun collectWallAnchorPoints(spaces: List<Space>): List<GroundPoint> {
     return anchors
 }
 
+private fun collectWallMidpointPoints(spaces: List<Space>): List<GroundPoint> {
+    if (spaces.isEmpty()) return emptyList()
+    return spaces.mapNotNull { space ->
+        val wall = space.geometry as? Geometry.Wall ?: return@mapNotNull null
+        val halfLength = wall.length.toFeet() / 2.0
+        val yawRad = Math.toRadians(space.transform.yawDegrees)
+        val dx = kotlin.math.cos(yawRad) * halfLength
+        val dz = kotlin.math.sin(yawRad) * halfLength
+        val start = GroundPoint(
+            xFeet = space.transform.xFeet - dx,
+            zFeet = space.transform.zFeet - dz
+        )
+        val end = GroundPoint(
+            xFeet = space.transform.xFeet + dx,
+            zFeet = space.transform.zFeet + dz
+        )
+        GroundPoint(
+            xFeet = (start.xFeet + end.xFeet) / 2.0,
+            zFeet = (start.zFeet + end.zFeet) / 2.0
+        )
+    }
+}
+
 private fun screenToGroundPoint(
     tapOffset: Offset,
     viewport: Size,
@@ -3399,6 +3873,18 @@ private fun toLocalGroundPoint(
     val localX = (dx * cosYaw) + (dz * sinYaw)
     val localZ = (-dx * sinYaw) + (dz * cosYaw)
     return localX to localZ
+}
+
+private fun wallPositionTForGroundPoint(
+    wallSpace: Space,
+    point: GroundPoint
+): Double? {
+    val wall = wallSpace.geometry as? Geometry.Wall ?: return null
+    val (localX, _) = toLocalGroundPoint(point, wallSpace)
+    val halfLength = wall.length.toFeet() / 2.0
+    if (halfLength <= 0.0001) return null
+    val t = ((localX.toDouble() + halfLength) / (2.0 * halfLength))
+    return t.coerceIn(0.0, 1.0)
 }
 
 private data class MarqueeSelectionState(
@@ -3775,8 +4261,32 @@ private enum class BuilderControlTab(val label: String) {
 }
 
 private enum class BlueprintCanvasTool(val label: String) {
-    NAVIGATE("Navigate"),
-    DRAW_WALL("Draw Wall")
+    NAVIGATE("Select"),
+    DRAW_WALL("Draw Wall"),
+    PLACE_DOOR("Place Door"),
+    PLACE_WINDOW("Place Window"),
+    PAN("Pan"),
+    MEASURE("Measure")
+}
+
+private enum class OpeningPlacementType(
+    val label: String,
+    val openingType: OpeningType,
+    val defaultWidthFeet: Double,
+    val defaultHeightFeet: Double
+) {
+    DOOR(
+        label = "Door",
+        openingType = OpeningType.DOOR,
+        defaultWidthFeet = 3.0,
+        defaultHeightFeet = 7.0
+    ),
+    WINDOW(
+        label = "Window",
+        openingType = OpeningType.WINDOW,
+        defaultWidthFeet = 4.0,
+        defaultHeightFeet = 5.0
+    )
 }
 
 private enum class BlueprintRailSection(val label: String) {
@@ -4052,6 +4562,34 @@ private fun BlueprintIconRail(
                 selected = selectedTool == BlueprintCanvasTool.DRAW_WALL,
                 expanded = expanded,
                 onClick = { onSelectTool(BlueprintCanvasTool.DRAW_WALL) }
+            )
+            BlueprintRailAction(
+                icon = Icons.Default.LockOpen,
+                label = "Place Door",
+                selected = selectedTool == BlueprintCanvasTool.PLACE_DOOR,
+                expanded = expanded,
+                onClick = { onSelectTool(BlueprintCanvasTool.PLACE_DOOR) }
+            )
+            BlueprintRailAction(
+                icon = Icons.Default.Visibility,
+                label = "Place Window",
+                selected = selectedTool == BlueprintCanvasTool.PLACE_WINDOW,
+                expanded = expanded,
+                onClick = { onSelectTool(BlueprintCanvasTool.PLACE_WINDOW) }
+            )
+            BlueprintRailAction(
+                icon = Icons.Default.OpenWith,
+                label = "Pan",
+                selected = selectedTool == BlueprintCanvasTool.PAN,
+                expanded = expanded,
+                onClick = { onSelectTool(BlueprintCanvasTool.PAN) }
+            )
+            BlueprintRailAction(
+                icon = Icons.Default.Straighten,
+                label = "Measure",
+                selected = selectedTool == BlueprintCanvasTool.MEASURE,
+                expanded = expanded,
+                onClick = { onSelectTool(BlueprintCanvasTool.MEASURE) }
             )
             BlueprintRailAction(
                 icon = Icons.Default.Add,
@@ -5076,10 +5614,9 @@ private enum class BlueprintOpeningMarker {
 }
 
 private fun classifyOpening(opening: com.tradesketch.estimator.domain.model.Opening): BlueprintOpeningMarker {
-    return if (opening.height.toFeet() >= 6.0) {
-        BlueprintOpeningMarker.DOOR
-    } else {
-        BlueprintOpeningMarker.WINDOW
+    return when (opening.type) {
+        com.tradesketch.estimator.domain.model.OpeningType.DOOR -> BlueprintOpeningMarker.DOOR
+        com.tradesketch.estimator.domain.model.OpeningType.WINDOW -> BlueprintOpeningMarker.WINDOW
     }
 }
 
@@ -5202,13 +5739,17 @@ private fun isPaintedSpace(space: Space): Boolean {
 
 private fun Space.withOpeningPreset(
     widthFeet: Double,
-    heightFeet: Double
+    heightFeet: Double,
+    openingType: OpeningType = if (heightFeet >= 6.0) OpeningType.DOOR else OpeningType.WINDOW,
+    wallPositionT: Double = 0.5
 ): Space {
     val width = Millimeters.fromFeet(widthFeet)
     val height = Millimeters.fromFeet(heightFeet)
     val existingIndex = openings.indexOfFirst { opening ->
         kotlin.math.abs(opening.width.toFeet() - widthFeet) <= 0.1 &&
-            kotlin.math.abs(opening.height.toFeet() - heightFeet) <= 0.1
+            kotlin.math.abs(opening.height.toFeet() - heightFeet) <= 0.1 &&
+            opening.type == openingType &&
+            kotlin.math.abs(opening.wallPositionT - wallPositionT) <= 0.05
     }
     val updatedOpenings = openings.toMutableList()
     if (existingIndex >= 0) {
@@ -5218,7 +5759,10 @@ private fun Space.withOpeningPreset(
         updatedOpenings += Opening(
             width = width,
             height = height,
-            count = 1
+            count = 1,
+            type = openingType,
+            wallPositionT = wallPositionT.coerceIn(0.0, 1.0),
+            sillHeight = if (openingType == OpeningType.WINDOW) Millimeters.fromFeet(3.0) else Millimeters(0)
         )
     }
     return copy(openings = updatedOpenings)

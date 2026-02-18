@@ -98,6 +98,7 @@ private data class ProjectJson(
 private data class ProjectTakeoffSessionJson(
     val selectedScope: String,
     val selectedPlaybook: String,
+    val snapSettings: BlueprintSnapSettingsJson? = null,
     val drywall: DrywallSessionParamsJson,
     val concrete: ConcreteSessionParamsJson,
     val gravel: GravelSessionParamsJson,
@@ -108,6 +109,7 @@ private data class ProjectTakeoffSessionJson(
         selectedScope = runCatching { TakeoffScope.valueOf(selectedScope) }
             .getOrDefault(TakeoffScope.DRYWALL),
         selectedPlaybook = selectedPlaybook,
+        snapSettings = snapSettings?.toDomain() ?: BlueprintSnapSettings(),
         drywall = drywall.toDomain(),
         concrete = concrete.toDomain(),
         gravel = gravel.toDomain(),
@@ -119,11 +121,47 @@ private data class ProjectTakeoffSessionJson(
         fun fromTakeoffSession(session: ProjectTakeoffSession) = ProjectTakeoffSessionJson(
             selectedScope = session.selectedScope.name,
             selectedPlaybook = session.selectedPlaybook,
+            snapSettings = BlueprintSnapSettingsJson.fromDomain(session.snapSettings),
             drywall = DrywallSessionParamsJson.fromDomain(session.drywall),
             concrete = ConcreteSessionParamsJson.fromDomain(session.concrete),
             gravel = GravelSessionParamsJson.fromDomain(session.gravel),
             paint = PaintSessionParamsJson.fromDomain(session.paint),
             pricing = PricingSessionParamsJson.fromDomain(session.pricing)
+        )
+    }
+}
+
+private data class BlueprintSnapSettingsJson(
+    val gridEnabled: Boolean,
+    val endpointEnabled: Boolean,
+    val midpointEnabled: Boolean,
+    val angleEnabled: Boolean,
+    val closureEnabled: Boolean,
+    val gridStepFeet: Double,
+    val angleIncrementDegrees: Int,
+    val thresholdFeet: Double
+) {
+    fun toDomain() = BlueprintSnapSettings(
+        gridEnabled = gridEnabled,
+        endpointEnabled = endpointEnabled,
+        midpointEnabled = midpointEnabled,
+        angleEnabled = angleEnabled,
+        closureEnabled = closureEnabled,
+        gridStepFeet = gridStepFeet,
+        angleIncrementDegrees = angleIncrementDegrees,
+        thresholdFeet = thresholdFeet
+    )
+
+    companion object {
+        fun fromDomain(settings: BlueprintSnapSettings) = BlueprintSnapSettingsJson(
+            gridEnabled = settings.gridEnabled,
+            endpointEnabled = settings.endpointEnabled,
+            midpointEnabled = settings.midpointEnabled,
+            angleEnabled = settings.angleEnabled,
+            closureEnabled = settings.closureEnabled,
+            gridStepFeet = settings.gridStepFeet,
+            angleIncrementDegrees = settings.angleIncrementDegrees,
+            thresholdFeet = settings.thresholdFeet
         )
     }
 }
@@ -256,6 +294,7 @@ private data class SpaceJson(
     val id: String,
     val name: String,
     val geometry: GeometryJson,
+    val tags: List<String> = emptyList(),
     val openings: List<OpeningJson> = emptyList(),
     val transform: SpaceTransformJson? = null
 ) {
@@ -263,6 +302,7 @@ private data class SpaceJson(
         id = id,
         name = name,
         geometry = geometry.toGeometry(),
+        tags = tags.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet(),
         openings = openings.map { it.toOpening() },
         transform = transform?.toSpaceTransform() ?: SpaceTransform()
     )
@@ -271,6 +311,7 @@ private data class SpaceJson(
             id = s.id,
             name = s.name,
             geometry = GeometryJson.fromGeometry(s.geometry),
+            tags = s.tags.toList(),
             openings = s.openings.map { OpeningJson.fromOpening(it) },
             transform = SpaceTransformJson.fromTransform(s.transform)
         )
@@ -314,10 +355,35 @@ private data class RectJson(val length: Long, val width: Long) {
     }
 }
 
-private data class OpeningJson(val width: Long, val height: Long, val count: Int) {
-    fun toOpening() = Opening(Millimeters(width), Millimeters(height), count)
+private data class OpeningJson(
+    val width: Long,
+    val height: Long,
+    val count: Int,
+    val type: String? = null,
+    val wallPositionT: Double? = null,
+    val sillHeight: Long? = null,
+    val id: String? = null
+) {
+    fun toOpening() = Opening(
+        width = Millimeters(width),
+        height = Millimeters(height),
+        count = count,
+        type = type?.let { runCatching { OpeningType.valueOf(it) }.getOrNull() }
+            ?: if (Millimeters(height).toFeet() >= 6.0) OpeningType.DOOR else OpeningType.WINDOW,
+        wallPositionT = wallPositionT ?: 0.5,
+        sillHeight = Millimeters(sillHeight ?: 0L),
+        id = id ?: java.util.UUID.randomUUID().toString()
+    )
     companion object {
-        fun fromOpening(o: Opening) = OpeningJson(o.width.value, o.height.value, o.count)
+        fun fromOpening(o: Opening) = OpeningJson(
+            width = o.width.value,
+            height = o.height.value,
+            count = o.count,
+            type = o.type.name,
+            wallPositionT = o.wallPositionT,
+            sillHeight = o.sillHeight.value,
+            id = o.id
+        )
     }
 }
 

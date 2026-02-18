@@ -5,6 +5,7 @@ import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Opening
 import com.tradesketch.estimator.domain.model.Space
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -185,6 +186,35 @@ class TakeoffCalculatorTest {
 
         val gallons = result.items.first().quantity
         assertTrue(gallons > 0.0)
+    }
+
+    @Test
+    fun `paint takeoff subtracts wall openings`() {
+        val wall = Space(
+            id = "wall-paint-openings",
+            name = "Wall",
+            geometry = Geometry.Wall(
+                length = Millimeters.fromFeet(10.0),
+                height = Millimeters.fromFeet(8.0)
+            ),
+            openings = listOf(
+                Opening(
+                    width = Millimeters.fromFeet(3.0),
+                    height = Millimeters.fromFeet(7.0),
+                    count = 1
+                )
+            )
+        )
+
+        val result = TakeoffCalculator.paintTakeoff(
+            spaces = listOf(wall),
+            coverageSqFtPerGallon = 350.0,
+            coats = 1,
+            wastePercent = 0.0
+        )
+        val expectedGallons = (80.0 - 21.0) / 350.0
+        val actualGallons = result.items.first().quantity
+        assertTrue(abs(actualGallons - expectedGallons) < 0.0001)
     }
 
     @Test

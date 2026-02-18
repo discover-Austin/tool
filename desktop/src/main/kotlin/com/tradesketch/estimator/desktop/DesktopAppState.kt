@@ -47,8 +47,12 @@ data class PaintParams(
 )
 
 enum class WorkspaceTab(val label: String) {
-    MODEL("Model"),
-    TAKEOFF("Takeoff"),
+    PROJECTS("Projects"),
+    BLUEPRINT("Blueprint"),
+    MATERIALS("Materials"),
+    QUANTITIES("Quantities"),
+    ADDONS("Add-ons"),
+    REVIEW("Review"),
     EXPORT("Export"),
     SETTINGS("Settings")
 }
@@ -68,7 +72,7 @@ class DesktopAppState(
     var selectedTakeoffType by mutableStateOf(DesktopTakeoffType.DRYWALL)
         private set
 
-    var activeTab by mutableStateOf(WorkspaceTab.MODEL)
+    var activeTab by mutableStateOf(WorkspaceTab.PROJECTS)
 
     var drywallParams by mutableStateOf(DrywallParams())
         private set
@@ -257,6 +261,15 @@ class DesktopAppState(
     fun resetSettings() {
         settings = Settings.DEFAULT
         persistSettings("Settings reset")
+    }
+
+    fun completeWelcomeOnboarding() {
+        if (!settings.firstRun) return
+        settings = settings.copy(
+            firstRun = false,
+            hasCompletedTradeOnboarding = true
+        )
+        persistSettings("Welcome complete")
     }
 
     fun clearMessages() {
