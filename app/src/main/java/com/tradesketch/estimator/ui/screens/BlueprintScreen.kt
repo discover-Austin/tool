@@ -65,6 +65,7 @@ import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
+import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -213,16 +214,13 @@ fun BlueprintScreen(
                     BlueprintDraftTool.PLACE_WINDOW -> {
                         val basePreset = selectedPreset ?: if (tool == BlueprintDraftTool.PLACE_DOOR) doorPreset else windowPreset
                         val preset = basePreset.copy(
-                            widthMm = customWidthFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            widthMm = DimensionParser.parseLengthToMillimeters(customWidthFeet)
                                 ?.coerceAtLeast(1L)
                                 ?: basePreset.widthMm,
-                            heightMm = customHeightFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            heightMm = DimensionParser.parseLengthToMillimeters(customHeightFeet)
                                 ?.coerceAtLeast(1L)
                                 ?: basePreset.heightMm,
-                            sillMm = customSillFeet.toDoubleOrNull()
-                                ?.let { Millimeters.fromFeet(it).value }
+                            sillMm = DimensionParser.parseLengthToMillimeters(customSillFeet)
                                 ?.coerceAtLeast(0L)
                                 ?: basePreset.sillMm
                         )
@@ -433,13 +431,52 @@ private fun DrawingInputPanel(
     if (drawingStart == null || drawingPreview == null) return
     val lengthFt = Millimeters(BlueprintSnapMath.distanceMillimeters(drawingStart, drawingPreview)).toFeet()
     val angle = Math.toDegrees(atan2((drawingPreview.y - drawingStart.y).toDouble(), (drawingPreview.x - drawingStart.x).toDouble()))
+    
+    // Parse input to show feedback
+    val parsedLengthMm = DimensionParser.parseLengthToMillimeters(lengthInputFeet)
+    val parsedAngle = DimensionParser.parseAngleDegrees(angleInputDegrees)
+    val lengthValid = lengthInputFeet.isBlank() || parsedLengthMm != null
+    val angleValid = angleInputDegrees.isBlank() || parsedAngle != null
+    
     Card(modifier = modifier.widthIn(max = 620.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Live: ${"%.2f".format(lengthFt)} ft @ ${"%.1f".format(angle)}°", fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(lengthInputFeet, onLengthChange, label = { Text("Length (ft)") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(angleInputDegrees, onAngleChange, label = { Text("Angle (deg)") }, singleLine = true, modifier = Modifier.weight(1f))
-                Button(onClick = onLock) { Text("Lock") }
+                Column(Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = lengthInputFeet,
+                        onValueChange = onLengthChange,
+                        label = { Text("Length") },
+                        singleLine = true,
+                        isError = !lengthValid,
+                        supportingText = {
+                            if (lengthValid && parsedLengthMm != null) {
+                                Text("= ${"%.2f".format(Millimeters(parsedLengthMm).toFeet())} ft", style = MaterialTheme.typography.bodySmall)
+                            } else if (lengthValid) {
+                                Text("12' 6\", 12.5ft, 3800mm, 3.8m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = angleInputDegrees,
+                        onValueChange = onAngleChange,
+                        label = { Text("Angle") },
+                        singleLine = true,
+                        isError = !angleValid,
+                        supportingText = {
+                            if (angleValid && parsedAngle != null) {
+                                Text("= ${"%.1f".format(parsedAngle)}°", style = MaterialTheme.typography.bodySmall)
+                            } else if (angleValid) {
+                                Text("45, 45°, 45deg", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                Button(onClick = onLock, enabled = lengthValid && angleValid) { Text("Lock") }
             }
         }
     }
@@ -504,22 +541,25 @@ private fun AddonsDrawer(
                 OutlinedTextField(
                     value = customWidthFeet,
                     onValueChange = onCustomWidthChange,
-                    label = { Text("Width ft") },
+                    label = { Text("Width") },
                     singleLine = true,
+                    supportingText = { Text("3', 3.5ft, 900mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = customHeightFeet,
                     onValueChange = onCustomHeightChange,
-                    label = { Text("Height ft") },
+                    label = { Text("Height") },
                     singleLine = true,
+                    supportingText = { Text("7', 7ft, 2100mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = customSillFeet,
                     onValueChange = onCustomSillChange,
-                    label = { Text("Sill ft") },
+                    label = { Text("Sill") },
                     singleLine = true,
+                    supportingText = { Text("0', 3ft, 900mm", style = MaterialTheme.typography.bodySmall) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -567,8 +607,11 @@ private fun applyLengthAngleOverride(start: PointMm, fallbackEnd: PointMm, lengt
     val dy = (fallbackEnd.y - start.y).toDouble()
     val fallbackLength = hypot(dx, dy)
     val fallbackAngle = Math.toDegrees(atan2(dy, dx))
-    val lengthMm = lengthInputFeet.toDoubleOrNull()?.let { Millimeters.fromFeet(it).value.toDouble() }?.coerceAtLeast(1.0) ?: fallbackLength
-    val angleDeg = angleInputDegrees.toDoubleOrNull() ?: fallbackAngle
+    
+    // Use DimensionParser to support multiple formats: "12' 6\"", "12.5ft", "3800mm", "3.8m"
+    val lengthMm = DimensionParser.parseLengthToMillimeters(lengthInputFeet)?.toDouble()?.coerceAtLeast(1.0) ?: fallbackLength
+    val angleDeg = DimensionParser.parseAngleDegrees(angleInputDegrees) ?: fallbackAngle
+    
     val rad = Math.toRadians(angleDeg)
     return PointMm(start.x + (cos(rad) * lengthMm).roundToLong(), start.y + (sin(rad) * lengthMm).roundToLong())
 }
