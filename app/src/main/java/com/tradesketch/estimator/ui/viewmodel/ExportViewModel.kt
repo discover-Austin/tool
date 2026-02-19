@@ -226,7 +226,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintSpaces = project.blueprintDocument.toLegacySpaces()
             )
         }.getOrElse { error ->
             _uiState.update { it.copy(error = "Could not prepare estimate PDF: ${error.message}") }
@@ -249,7 +249,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintSpaces = project.blueprintDocument.toLegacySpaces()
             )
         }.onSuccess { uri ->
             if (uri != null) {
@@ -273,7 +273,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintSpaces = project.blueprintDocument.toLegacySpaces()
             )
         }.onFailure { error ->
             _uiState.update { it.copy(error = "Could not build PDF bytes: ${error.message}") }
