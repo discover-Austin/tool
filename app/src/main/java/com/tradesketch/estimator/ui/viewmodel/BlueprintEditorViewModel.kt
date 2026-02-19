@@ -13,7 +13,6 @@ import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
-import com.tradesketch.estimator.domain.model.toLegacySpaces
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -312,7 +311,6 @@ class BlueprintEditorViewModel @Inject constructor(
                 saveProjectUseCase(
                     project.copy(
                         blueprintDocument = updated,
-                        spaces = updated.toLegacySpaces(),
                         updatedAt = System.currentTimeMillis()
                     )
                 )

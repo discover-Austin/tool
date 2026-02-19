@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
-import com.tradesketch.estimator.domain.calc.TakeoffCalculator
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.PrimaryTrade
@@ -14,7 +13,6 @@ import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
-import com.tradesketch.estimator.domain.model.toLegacySpaces
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Validators
 
@@ -177,7 +175,6 @@ class DesktopAppState(
         updateSelectedProject {
             it.copy(
                 blueprintDocument = updated.copy(projectId = it.id),
-                spaces = updated.toLegacySpaces(),
                 updatedAt = System.currentTimeMillis()
             )
         }

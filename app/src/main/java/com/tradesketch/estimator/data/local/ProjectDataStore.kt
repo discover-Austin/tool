@@ -67,30 +67,42 @@ class ProjectDataStore @Inject constructor(
 
 // JSON data classes for Gson serialization
 private data class ProjectJson(
+    val schemaVersion: Int = 1,
     val id: String,
     val name: String,
-    val spaces: List<SpaceJson>? = null, // DEPRECATED: Keep for backward compatibility only
+    val spaces: List<SpaceJson>? = null,
     val createdAt: Long,
     val updatedAt: Long,
     val takeoffSession: ProjectTakeoffSessionJson? = null,
     val blueprintDocument: BlueprintDocument? = null
 ) {
-    fun toProject() = Project(
-        id = id,
-        name = name,
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
-        blueprintDocument = blueprintDocument
-            ?: (spaces?.let { BlueprintDocument.fromLegacySpaces(projectId = id, spaces = it.map { s -> s.toSpace() }) })
-            ?: BlueprintDocument.empty(projectId = id)
-    )
+    fun toProject(): Project {
+        val legacySpaces = spaces.orEmpty().map { it.toSpace() }
+        val blueprint = blueprintDocument?.copy(projectId = id)
+            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
+        val runtimeSpaces = when {
+            spaces != null -> legacySpaces
+            blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty() ->
+                blueprint.toLegacySpaces()
+            else -> emptyList()
+        }
+        return Project(
+            id = id,
+            name = name,
+            spaces = runtimeSpaces,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
+            blueprintDocument = blueprint
+        )
+    }
 
     companion object {
         fun fromProject(p: Project) = ProjectJson(
+            schemaVersion = 2,
             id = p.id,
             name = p.name,
-            spaces = null, // No longer serialize spaces
+            spaces = null,
             createdAt = p.createdAt,
             updatedAt = p.updatedAt,
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession),
