@@ -43,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
@@ -1046,14 +1045,14 @@ private fun takeoffWarnings(
 ): List<String> {
     val warnings = mutableListOf<String>()
     if (scopeSummary.spaceCount == 0) {
-        warnings += "No matching spaces were found for ${selectedType.displayLabel}. Add spaces in Model or Blueprint."
+        warnings += "No matching blueprint surfaces were found for ${selectedType.displayLabel}. Draw geometry in Blueprint."
     }
     if (scopeSummary.measuredQuantity <= 0.0) {
         warnings += "Measured quantity is zero. Verify dimensions and openings."
     }
     if (selectedType == TakeoffType.DRYWALL) {
-        val hasRooms = uiState.project?.blueprintDocument?.rooms?.any { it.ceiling.enabled } == true
-        if (hasRooms && !uiState.drywallParams.includeCeilings) {
+        val hasCeilings = uiState.project?.authoritativeBlueprint()?.rooms?.any { it.ceiling.enabled } == true
+        if (hasCeilings && !uiState.drywallParams.includeCeilings) {
             warnings += "Room ceilings exist but are excluded from drywall totals."
         }
     }
