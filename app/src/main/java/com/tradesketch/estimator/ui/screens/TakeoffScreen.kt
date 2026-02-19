@@ -1051,9 +1051,9 @@ private fun takeoffWarnings(
         warnings += "Measured quantity is zero. Verify dimensions and openings."
     }
     if (selectedType == TakeoffType.DRYWALL) {
-        val hasRectangles = uiState.project?.spaces?.any { it.geometry is Geometry.Rect } == true
-        if (hasRectangles && !uiState.drywallParams.includeCeilings) {
-            warnings += "Rectangular room ceilings exist but are excluded from drywall totals."
+        val hasRooms = uiState.project?.blueprintDocument?.rooms?.any { it.ceiling.enabled } == true
+        if (hasRooms && !uiState.drywallParams.includeCeilings) {
+            warnings += "Room ceilings exist but are excluded from drywall totals."
         }
     }
 

@@ -12,13 +12,11 @@ import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.model.toLegacySpaces
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Validators
-import java.util.UUID
 
 enum class DesktopTakeoffType(val label: String) {
     DRYWALL("Drywall"),
@@ -165,54 +163,6 @@ class DesktopAppState(
             )
         }
         persistProjects("Project renamed")
-    }
-
-    fun saveSpace(space: Space) {
-        if (!Validators.isValidSpaceName(space.name)) {
-            errorMessage = "Space name must be 1-50 characters."
-            return
-        }
-        updateSelectedProject { project ->
-            val existing = project.spaces.indexOfFirst { it.id == space.id }
-            val updatedSpaces = project.spaces.toMutableList()
-            if (existing >= 0) {
-                updatedSpaces[existing] = space
-            } else {
-                updatedSpaces += space.copy(
-                    id = space.id.ifBlank { UUID.randomUUID().toString() }
-                )
-            }
-            project.copy(
-                spaces = updatedSpaces,
-                updatedAt = System.currentTimeMillis()
-            )
-        }
-        persistProjects("Space saved")
-    }
-
-    fun duplicateSpace(spaceId: String) {
-        updateSelectedProject { project ->
-            val source = project.spaces.firstOrNull { it.id == spaceId } ?: return@updateSelectedProject project
-            val clone = source.copy(
-                id = UUID.randomUUID().toString(),
-                name = "${source.name} Copy"
-            )
-            project.copy(
-                spaces = project.spaces + clone,
-                updatedAt = System.currentTimeMillis()
-            )
-        }
-        persistProjects("Space duplicated")
-    }
-
-    fun deleteSpace(spaceId: String) {
-        updateSelectedProject { project ->
-            project.copy(
-                spaces = project.spaces.filterNot { it.id == spaceId },
-                updatedAt = System.currentTimeMillis()
-            )
-        }
-        persistProjects("Space deleted")
     }
 
     fun updateBlueprintDocument(updated: BlueprintDocument, trackHistory: Boolean = true) {
