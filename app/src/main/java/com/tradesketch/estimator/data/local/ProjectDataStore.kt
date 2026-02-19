@@ -67,30 +67,42 @@ class ProjectDataStore @Inject constructor(
 
 // JSON data classes for Gson serialization
 private data class ProjectJson(
+    val schemaVersion: Int = 1,
     val id: String,
     val name: String,
-    val spaces: List<SpaceJson>,
+    val spaces: List<SpaceJson>? = null,
     val createdAt: Long,
     val updatedAt: Long,
     val takeoffSession: ProjectTakeoffSessionJson? = null,
     val blueprintDocument: BlueprintDocument? = null
 ) {
-    fun toProject() = Project(
-        id = id,
-        name = name,
-        spaces = spaces.map { it.toSpace() },
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
-        blueprintDocument = blueprintDocument
-            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces.map { it.toSpace() })
-    )
+    fun toProject(): Project {
+        val legacySpaces = spaces.orEmpty().map { it.toSpace() }
+        val blueprint = blueprintDocument?.copy(projectId = id)
+            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
+        val runtimeSpaces = when {
+            spaces != null -> legacySpaces
+            blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty() ->
+                blueprint.toLegacySpaces()
+            else -> emptyList()
+        }
+        return Project(
+            id = id,
+            name = name,
+            spaces = runtimeSpaces,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
+            blueprintDocument = blueprint
+        )
+    }
 
     companion object {
         fun fromProject(p: Project) = ProjectJson(
+            schemaVersion = 2,
             id = p.id,
             name = p.name,
-            spaces = p.spaces.map { SpaceJson.fromSpace(it) },
+            spaces = null,
             createdAt = p.createdAt,
             updatedAt = p.updatedAt,
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession),

@@ -19,6 +19,7 @@ import com.tradesketch.estimator.domain.model.GravelSessionParams
 import com.tradesketch.estimator.domain.model.PaintSessionParams
 import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.toLegacySpaces
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -92,30 +93,42 @@ class DesktopStorage(
 }
 
 private data class ProjectJson(
+    val schemaVersion: Int = 1,
     val id: String,
     val name: String,
-    val spaces: List<SpaceJson>,
+    val spaces: List<SpaceJson>? = null,
     val takeoffSession: ProjectTakeoffSessionJson? = null,
     val blueprintDocument: BlueprintDocument? = null,
     val createdAt: Long,
     val updatedAt: Long
 ) {
-    fun toProject(): Project = Project(
-        id = id,
-        name = name,
-        spaces = spaces.map { it.toSpace() },
-        takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
-        blueprintDocument = blueprintDocument
-            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces.map { it.toSpace() }),
-        createdAt = createdAt,
-        updatedAt = updatedAt
-    )
+    fun toProject(): Project {
+        val legacySpaces = spaces.orEmpty().map { it.toSpace() }
+        val blueprint = blueprintDocument?.copy(projectId = id)
+            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
+        val runtimeSpaces = when {
+            spaces != null -> legacySpaces
+            blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty() ->
+                blueprint.toLegacySpaces()
+            else -> emptyList()
+        }
+        return Project(
+            id = id,
+            name = name,
+            spaces = runtimeSpaces,
+            takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
+            blueprintDocument = blueprint,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        )
+    }
 
     companion object {
         fun fromProject(project: Project): ProjectJson = ProjectJson(
+            schemaVersion = 2,
             id = project.id,
             name = project.name,
-            spaces = project.spaces.map { SpaceJson.fromSpace(it) },
+            spaces = null,
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(project.takeoffSession),
             blueprintDocument = project.blueprintDocument,
             createdAt = project.createdAt,
