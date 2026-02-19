@@ -115,7 +115,7 @@ private data class ProjectJson(
         fun fromProject(project: Project): ProjectJson = ProjectJson(
             id = project.id,
             name = project.name,
-            spaces = project.spaces.map { SpaceJson.fromSpace(it) },
+            spaces = project.blueprintDocument.toLegacySpaces().map { SpaceJson.fromSpace(it) },
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(project.takeoffSession),
             blueprintDocument = project.blueprintDocument,
             createdAt = project.createdAt,
