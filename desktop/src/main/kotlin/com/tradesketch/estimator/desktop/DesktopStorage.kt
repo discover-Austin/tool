@@ -19,7 +19,6 @@ import com.tradesketch.estimator.domain.model.GravelSessionParams
 import com.tradesketch.estimator.domain.model.PaintSessionParams
 import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.BlueprintDocument
-import com.tradesketch.estimator.domain.model.toLegacySpaces
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -106,16 +105,9 @@ private data class ProjectJson(
         val legacySpaces = spaces.orEmpty().map { it.toSpace() }
         val blueprint = blueprintDocument?.copy(projectId = id)
             ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
-        val runtimeSpaces = when {
-            spaces != null -> legacySpaces
-            blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty() ->
-                blueprint.toLegacySpaces()
-            else -> emptyList()
-        }
         return Project(
             id = id,
             name = name,
-            spaces = runtimeSpaces,
             takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
             blueprintDocument = blueprint,
             createdAt = createdAt,
