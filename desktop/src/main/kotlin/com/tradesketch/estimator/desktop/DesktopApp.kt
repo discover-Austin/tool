@@ -67,14 +67,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerMoveFilter
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.BlueprintOpening
+import com.tradesketch.estimator.domain.model.Millimeters
+import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
-import com.tradesketch.estimator.domain.model.Space
-import com.tradesketch.estimator.domain.model.areaSqFt
+import com.tradesketch.estimator.domain.model.Room
+import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
-import com.tradesketch.estimator.domain.model.openingsAreaSqFt
-import com.tradesketch.estimator.domain.model.volumeCuFt
+import com.tradesketch.estimator.domain.model.elementCount
+import com.tradesketch.estimator.domain.model.totalAreaSqFt
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Formatters
 import java.awt.Toolkit
@@ -402,7 +404,7 @@ private fun ProjectsSidebar(
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "${project.blueprintDocument.spaces.size} spaces",
+                                    text = "${project.blueprintDocument.elementCount()} elements",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
@@ -528,16 +530,22 @@ private fun ModelTab(state: DesktopAppState) {
             SnapshotCard(project = project)
         }
 
-        if (project.blueprintDocument.spaces.isEmpty()) {
+        if (project.blueprintDocument.elementCount() == 0 && project.blueprintDocument.openings.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = "No spaces in this project",
-                    subtitle = "Use the Blueprint tab to add spaces."
+                    title = "No blueprint elements in this project",
+                    subtitle = "Use the Blueprint tab to add walls, rooms, and openings."
                 )
             }
         } else {
-            items(project.blueprintDocument.spaces, key = { it.id }) { space ->
-                SpaceCard(space = space)
+            items(project.blueprintDocument.walls, key = { it.id }) { wall ->
+                WallElementCard(wall = wall)
+            }
+            items(project.blueprintDocument.rooms, key = { it.id }) { room ->
+                RoomElementCard(room = room)
+            }
+            items(project.blueprintDocument.openings, key = { it.id }) { opening ->
+                OpeningElementCard(opening = opening)
             }
         }
     }
@@ -546,8 +554,8 @@ private fun ModelTab(state: DesktopAppState) {
 @Composable
 private fun SnapshotCard(project: Project) {
     val blueprint = project.authoritativeBlueprint()
-    val totalArea = blueprint.spaces.sumOf { it.geometry.areaSqFt() }
-    val totalVolume = blueprint.spaces.sumOf { it.geometry.volumeCuFt() }
+    val totalArea = blueprint.totalAreaSqFt()
+    val elementCount = blueprint.elementCount() + blueprint.openings.size
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -556,9 +564,9 @@ private fun SnapshotCard(project: Project) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Project Snapshot", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Spaces: ${blueprint.spaces.size}")
+            Text("Elements: $elementCount")
+            Text("Walls: ${blueprint.walls.size}  Rooms: ${blueprint.rooms.size}  Openings: ${blueprint.openings.size}")
             Text("Total area: ${Formatters.formatArea(totalArea)}")
-            Text("Total volume: ${Formatters.formatQuantity(totalVolume)} cu ft")
             Text(
                 text = "Updated: ${Formatters.formatDateTime(project.updatedAt)}",
                 style = MaterialTheme.typography.bodySmall,
@@ -569,39 +577,48 @@ private fun SnapshotCard(project: Project) {
 }
 
 @Composable
-private fun SpaceCard(space: Space) {
-    val area = space.geometry.areaSqFt()
-    val volume = space.geometry.volumeCuFt()
-    val openingArea = space.openingsAreaSqFt()
-    val netArea = (area - openingArea).coerceAtLeast(0.0)
-
+private fun WallElementCard(wall: WallSegment) {
+    val lengthFt = Millimeters(wall.lengthMillimeters()).toFeet()
+    val heightFt = Millimeters(wall.heightMm).toFeet()
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(space.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = describeGeometry(space.geometry),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+            Text("Wall ${wall.id}", style = MaterialTheme.typography.titleMedium)
+            Text("Length: ${"%.1f".format(lengthFt)} ft", style = MaterialTheme.typography.bodySmall)
+            Text("Height: ${"%.1f".format(heightFt)} ft", style = MaterialTheme.typography.bodySmall)
+            Text("Type: ${wall.type.name.lowercase().replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun RoomElementCard(room: Room) {
+    val area = room.areaSqFt()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(room.name.ifBlank { "Room ${room.id}" }, style = MaterialTheme.typography.titleMedium)
             Text("Area: ${Formatters.formatArea(area)}", style = MaterialTheme.typography.bodySmall)
-            if (openingArea > 0.0) {
-                Text(
-                    "Net after openings: ${Formatters.formatArea(netArea)}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            if (volume > 0.0) {
-                Text("Volume: ${Formatters.formatQuantity(volume)} cu ft", style = MaterialTheme.typography.bodySmall)
-            }
+            Text("Vertices: ${room.polygon.size}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = if (room.ceiling.enabled) "Ceiling included" else "Ceiling excluded",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpeningElementCard(opening: BlueprintOpening) {
+    val widthFt = Millimeters(opening.widthMm).toFeet()
+    val heightFt = Millimeters(opening.heightMm).toFeet()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = if (opening.type == OpeningType.DOOR) "Door ${opening.id}" else "Window ${opening.id}",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text("Wall: ${opening.wallId}", style = MaterialTheme.typography.bodySmall)
+            Text("Size: ${"%.1f".format(widthFt)} ft x ${"%.1f".format(heightFt)} ft", style = MaterialTheme.typography.bodySmall)
+            Text("Position: ${"%.0f".format(opening.t * 100)}%", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1022,23 +1039,6 @@ private fun EmptyStateCard(title: String, subtitle: String) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-    }
-}
-
-private fun describeGeometry(geometry: Geometry): String {
-    return when (geometry) {
-        is Geometry.Wall -> "Wall ${Formatters.formatDimension(geometry.length)} x ${Formatters.formatDimension(geometry.height)}"
-        is Geometry.Rect -> "Room ${Formatters.formatDimension(geometry.length)} x ${Formatters.formatDimension(geometry.width)}"
-        is Geometry.Slab -> {
-            "Slab ${Formatters.formatDimension(geometry.length)} x " +
-                "${Formatters.formatDimension(geometry.width)} x " +
-                "${Formatters.formatDimension(geometry.thickness)}"
-        }
-        is Geometry.Circle -> "Circle radius ${Formatters.formatDimension(geometry.radius)}"
-        is Geometry.LShape -> {
-            "L-Shape (${Formatters.formatDimension(geometry.rectA.length)} x ${Formatters.formatDimension(geometry.rectA.width)}) + " +
-                "(${Formatters.formatDimension(geometry.rectB.length)} x ${Formatters.formatDimension(geometry.rectB.width)})"
         }
     }
 }

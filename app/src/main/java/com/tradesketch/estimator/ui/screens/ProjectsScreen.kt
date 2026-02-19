@@ -58,6 +58,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.domain.model.elementCount
+import com.tradesketch.estimator.domain.model.totalAreaSqFt
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
@@ -687,7 +689,7 @@ private fun projectLaneTags(project: Project): List<String> {
     val tags = mutableListOf<String>()
     val blueprint = project.blueprintDocument
     if (blueprint.walls.isNotEmpty()) tags += "Drywall"
-    if (blueprint.slabs.isNotEmpty()) tags += "Concrete"
+    if (blueprint.rooms.any { room -> "slab" in room.tags || "concrete" in room.tags }) tags += "Concrete"
     if (blueprint.rooms.isNotEmpty()) tags += "Rooms"
     return tags
 }

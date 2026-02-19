@@ -101,7 +101,7 @@ private fun Project.withTradeScope(trade: PrimaryTrade): Project {
     val blueprint = if (blueprintDocument.projectId == id) {
         blueprintDocument
     } else {
-        BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces)
+        blueprintDocument.copy(projectId = id)
     }
     return copy(
         takeoffSession = takeoffSession.copy(

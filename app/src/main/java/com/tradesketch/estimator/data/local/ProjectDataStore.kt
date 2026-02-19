@@ -80,16 +80,9 @@ private data class ProjectJson(
         val legacySpaces = spaces.orEmpty().map { it.toSpace() }
         val blueprint = blueprintDocument?.copy(projectId = id)
             ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
-        val runtimeSpaces = when {
-            spaces != null -> legacySpaces
-            blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty() ->
-                blueprint.toLegacySpaces()
-            else -> emptyList()
-        }
         return Project(
             id = id,
             name = name,
-            spaces = runtimeSpaces,
             createdAt = createdAt,
             updatedAt = updatedAt,
             takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
