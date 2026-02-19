@@ -39,12 +39,12 @@ TradeSketch Estimator is a privacy-first, offline Android app for calculating ma
 ```
 core/src/main/kotlin/com/tradesketch/estimator/
 ├── domain/
-│   ├── model/            # Shared domain models (Space, Geometry, Units, Money)
-│   └── calc/             # Shared takeoff calculation engine
-└── utils/                # Shared non-Android utilities
+│   ├── model/            # Shared domain models (BlueprintDocument, WallSegment, Room, Units, Money)
+│   └── calc/             # Shared takeoff calculation engine (BlueprintTakeoffCalculator)
+└── utils/                # Shared non-Android utilities (DimensionParser)
 
 app/src/main/java/com/tradesketch/estimator/
-├── ui/                   # Android Compose UI
+├── ui/                   # Android Compose UI (BlueprintScreen, TakeoffScreen, etc.)
 ├── data/                 # Android persistence + repositories
 ├── domain/usecase/       # Android use case wiring
 ├── di/                   # Hilt dependency injection modules
