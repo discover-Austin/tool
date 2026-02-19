@@ -93,8 +93,6 @@ private enum class ExportViewMode(val label: String) {
 @Composable
 fun TradeSketchDesktopApp() {
     val state = remember { DesktopAppState() }
-    var showSpaceEditor by remember { mutableStateOf(false) }
-    var editingSpace by remember { mutableStateOf<Space?>(null) }
     var exportViewMode by remember { mutableStateOf(ExportViewMode.SUMMARY) }
     var showWelcomeDetail by remember { mutableStateOf(false) }
     var ritualProjectName by remember { mutableStateOf("My First Project") }
@@ -148,17 +146,7 @@ fun TradeSketchDesktopApp() {
                                 state = state,
                                 openAddonsByDefault = true
                             )
-                            WorkspaceTab.REVIEW -> ModelTab(
-                                state = state,
-                                onAddSpace = {
-                                    editingSpace = null
-                                    showSpaceEditor = true
-                                },
-                                onEditSpace = {
-                                    editingSpace = it
-                                    showSpaceEditor = true
-                                }
-                            )
+                            WorkspaceTab.REVIEW -> ModelTab(state = state)
                             WorkspaceTab.EXPORT -> ExportTab(
                                 state = state,
                                 exportViewMode = exportViewMode,
@@ -170,21 +158,6 @@ fun TradeSketchDesktopApp() {
                 }
             }
         }
-    }
-
-    if (showSpaceEditor && state.selectedProject != null) {
-        DesktopSpaceEditorDialog(
-            initialSpace = editingSpace,
-            onDismiss = {
-                showSpaceEditor = false
-                editingSpace = null
-            },
-            onSave = { space ->
-                state.saveSpace(space)
-                showSpaceEditor = false
-                editingSpace = null
-            }
-        )
     }
 }
 
@@ -429,7 +402,7 @@ private fun ProjectsSidebar(
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "${project.spaces.size} spaces",
+                                    text = "${project.blueprintDocument.spaces.size} spaces",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
@@ -510,11 +483,7 @@ private fun WorkspaceHeader(state: DesktopAppState) {
 }
 
 @Composable
-private fun ModelTab(
-    state: DesktopAppState,
-    onAddSpace: () -> Unit,
-    onEditSpace: (Space) -> Unit
-) {
+private fun ModelTab(state: DesktopAppState) {
     val project = state.selectedProject
     if (project == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -546,17 +515,10 @@ private fun ModelTab(
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { state.renameSelectedProject(renameDraft) }) {
-                            Icon(Icons.Default.Edit, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Save Name")
-                        }
-                        OutlinedButton(onClick = onAddSpace) {
-                            Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Space")
-                        }
+                    Button(onClick = { state.renameSelectedProject(renameDraft) }) {
+                        Icon(Icons.Default.Edit, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save Name")
                     }
                 }
             }
@@ -566,21 +528,16 @@ private fun ModelTab(
             SnapshotCard(project = project)
         }
 
-        if (project.spaces.isEmpty()) {
+        if (project.blueprintDocument.spaces.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "No spaces in this project",
-                    subtitle = "Add a wall, room, slab, circle, or L-shape."
+                    subtitle = "Use the Blueprint tab to add spaces."
                 )
             }
         } else {
-            items(project.spaces, key = { it.id }) { space ->
-                SpaceCard(
-                    space = space,
-                    onEdit = { onEditSpace(space) },
-                    onDuplicate = { state.duplicateSpace(space.id) },
-                    onDelete = { state.deleteSpace(space.id) }
-                )
+            items(project.blueprintDocument.spaces, key = { it.id }) { space ->
+                SpaceCard(space = space)
             }
         }
     }
@@ -588,8 +545,9 @@ private fun ModelTab(
 
 @Composable
 private fun SnapshotCard(project: Project) {
-    val totalArea = project.spaces.sumOf { it.geometry.areaSqFt() }
-    val totalVolume = project.spaces.sumOf { it.geometry.volumeCuFt() }
+    val blueprint = project.authoritativeBlueprint()
+    val totalArea = blueprint.spaces.sumOf { it.geometry.areaSqFt() }
+    val totalVolume = blueprint.spaces.sumOf { it.geometry.volumeCuFt() }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -598,7 +556,7 @@ private fun SnapshotCard(project: Project) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("Project Snapshot", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Spaces: ${project.spaces.size}")
+            Text("Spaces: ${blueprint.spaces.size}")
             Text("Total area: ${Formatters.formatArea(totalArea)}")
             Text("Total volume: ${Formatters.formatQuantity(totalVolume)} cu ft")
             Text(
@@ -611,21 +569,13 @@ private fun SnapshotCard(project: Project) {
 }
 
 @Composable
-private fun SpaceCard(
-    space: Space,
-    onEdit: () -> Unit,
-    onDuplicate: () -> Unit,
-    onDelete: () -> Unit
-) {
+private fun SpaceCard(space: Space) {
     val area = space.geometry.areaSqFt()
     val volume = space.geometry.volumeCuFt()
     val openingArea = space.openingsAreaSqFt()
     val netArea = (area - openingArea).coerceAtLeast(0.0)
 
-    Card(
-        onClick = onEdit,
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -639,14 +589,6 @@ private fun SpaceCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                Row {
-                    TextButton(onClick = onDuplicate) {
-                        Text("Duplicate")
-                    }
-                    TextButton(onClick = onDelete) {
-                        Text("Delete")
-                    }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))

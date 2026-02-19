@@ -69,7 +69,7 @@ class ProjectDataStore @Inject constructor(
 private data class ProjectJson(
     val id: String,
     val name: String,
-    val spaces: List<SpaceJson>,
+    val spaces: List<SpaceJson>? = null, // DEPRECATED: Keep for backward compatibility only
     val createdAt: Long,
     val updatedAt: Long,
     val takeoffSession: ProjectTakeoffSessionJson? = null,
@@ -78,19 +78,19 @@ private data class ProjectJson(
     fun toProject() = Project(
         id = id,
         name = name,
-        spaces = spaces.map { it.toSpace() },
         createdAt = createdAt,
         updatedAt = updatedAt,
         takeoffSession = takeoffSession?.toTakeoffSession() ?: ProjectTakeoffSession(),
         blueprintDocument = blueprintDocument
-            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = spaces.map { it.toSpace() })
+            ?: (spaces?.let { BlueprintDocument.fromLegacySpaces(projectId = id, spaces = it.map { s -> s.toSpace() }) })
+            ?: BlueprintDocument.empty(projectId = id)
     )
 
     companion object {
         fun fromProject(p: Project) = ProjectJson(
             id = p.id,
             name = p.name,
-            spaces = p.spaces.map { SpaceJson.fromSpace(it) },
+            spaces = null, // No longer serialize spaces
             createdAt = p.createdAt,
             updatedAt = p.updatedAt,
             takeoffSession = ProjectTakeoffSessionJson.fromTakeoffSession(p.takeoffSession),
