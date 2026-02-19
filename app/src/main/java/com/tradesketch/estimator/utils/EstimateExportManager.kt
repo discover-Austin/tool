@@ -12,8 +12,8 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.Space
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import kotlinx.coroutines.Dispatchers
@@ -31,14 +31,14 @@ object EstimateExportManager {
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
-        blueprintSpaces: List<Space> = emptyList()
+        blueprintDocument: BlueprintDocument? = null
     ): ByteArray {
         return renderEstimatePdfBytes(
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
             result = result,
-            blueprintSpaces = blueprintSpaces
+            blueprintDocument = blueprintDocument
         )
     }
 
@@ -48,7 +48,7 @@ object EstimateExportManager {
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
-        blueprintSpaces: List<Space> = emptyList()
+        blueprintDocument: BlueprintDocument? = null
     ): Uri? = withContext(Dispatchers.IO) {
         val fileName = buildFileName(projectName = projectName, extension = "pdf")
         val pdfBytes = renderEstimatePdfBytes(
@@ -56,7 +56,7 @@ object EstimateExportManager {
             takeoffType = takeoffType,
             settings = settings,
             result = result,
-            blueprintSpaces = blueprintSpaces
+            blueprintDocument = blueprintDocument
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             saveBytesToPublicDownloads(
@@ -80,7 +80,7 @@ object EstimateExportManager {
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
-        blueprintSpaces: List<Space> = emptyList()
+        blueprintDocument: BlueprintDocument? = null
     ): Intent? = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "estimate-share").apply { mkdirs() }
         val shareFile = File(cacheDir, buildFileName(projectName = projectName, extension = "pdf"))
@@ -89,7 +89,7 @@ object EstimateExportManager {
             takeoffType = takeoffType,
             settings = settings,
             result = result,
-            blueprintSpaces = blueprintSpaces
+            blueprintDocument = blueprintDocument
         )
         FileOutputStream(shareFile).use { output ->
             output.write(pdfBytes)
@@ -116,7 +116,7 @@ object EstimateExportManager {
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
-        blueprintSpaces: List<Space> = emptyList()
+        blueprintDocument: BlueprintDocument? = null
     ): ByteArray {
         val document = PdfDocument()
         val pageWidth = 1240
@@ -212,13 +212,19 @@ object EstimateExportManager {
         canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
         y += 28f
 
-        if (blueprintSpaces.isNotEmpty()) {
+        val hasBlueprintGeometry = blueprintDocument != null && (
+            blueprintDocument.walls.isNotEmpty() ||
+                blueprintDocument.rooms.isNotEmpty() ||
+                blueprintDocument.openings.isNotEmpty()
+            )
+        if (hasBlueprintGeometry) {
+            val document = blueprintDocument!!
             ensureSpace(340f)
             canvas.drawText("Blueprint Snapshot", margin, y, headingPaint)
             y += 20f
             val bitmap = BlueprintExportManager.renderBlueprintBitmap(
                 projectName = projectName,
-                spaces = blueprintSpaces,
+                document = document,
                 widthPx = 1200,
                 heightPx = 900
             )
