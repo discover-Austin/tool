@@ -2,8 +2,6 @@ package com.tradesketch.estimator.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -120,17 +118,12 @@ fun BlueprintScreen(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var lengthInputFeet by remember { mutableStateOf("") }
     var angleInputDegrees by remember { mutableStateOf("") }
-    var showAddons by remember { mutableStateOf(true) }
+    var showAddons by remember { mutableStateOf(false) }
+    var showParams by remember { mutableStateOf(true) }
     var selectedPreset by remember { mutableStateOf<OpeningPreset?>(null) }
     var customWidthFeet by remember { mutableStateOf("3.0") }
     var customHeightFeet by remember { mutableStateOf("7.0") }
     var customSillFeet by remember { mutableStateOf("0.0") }
-    
-    // Drag-drop state for add-ons
-    var draggedPreset by remember { mutableStateOf<OpeningPreset?>(null) }
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-    var dragGhostWallId by remember { mutableStateOf<String?>(null) }
-    var dragGhostT by remember { mutableStateOf(0.0) }
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
     if (uiState.isLoading || uiState.document == null) {
@@ -310,12 +303,14 @@ fun BlueprintScreen(
         )
 
         ParamsPanel(
+            expanded = showParams,
             params = doc.params,
             snap = snapSettings,
             onParamsChange = viewModel::updateParams,
             onSnapChange = { snapSettings = it },
             onScopeExpand = viewModel::expandScopeWithPaint,
             onDetectRooms = viewModel::ensureRoomDetection,
+            onToggle = { showParams = !showParams },
             modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
         )
 
@@ -326,10 +321,6 @@ fun BlueprintScreen(
             onSelectPreset = {
                 selectedPreset = it
                 tool = if (it.type == OpeningType.DOOR) BlueprintDraftTool.PLACE_DOOR else BlueprintDraftTool.PLACE_WINDOW
-            },
-            onStartDrag = { preset ->
-                draggedPreset = preset
-                tool = BlueprintDraftTool.PAN // Switch to PAN to avoid conflicts
             },
             customWidthFeet = customWidthFeet,
             customHeightFeet = customHeightFeet,
@@ -546,30 +537,53 @@ private fun DrawingInputPanel(
 
 @Composable
 private fun ParamsPanel(
-    params: BlueprintParams, snap: BlueprintSnapSettings, onParamsChange: (BlueprintParams) -> Unit,
-    onSnapChange: (BlueprintSnapSettings) -> Unit, onScopeExpand: () -> Unit, onDetectRooms: () -> Unit, modifier: Modifier = Modifier
+    expanded: Boolean,
+    params: BlueprintParams,
+    snap: BlueprintSnapSettings,
+    onParamsChange: (BlueprintParams) -> Unit,
+    onSnapChange: (BlueprintSnapSettings) -> Unit,
+    onScopeExpand: () -> Unit,
+    onDetectRooms: () -> Unit,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var heightFt by remember(params.wallHeightMm) { mutableStateOf("%.2f".format(Millimeters(params.wallHeightMm).toFeet())) }
     var coats by remember(params.paintCoats) { mutableStateOf(params.paintCoats.toString()) }
     var waste by remember(params.wasteFactorPercent) { mutableStateOf(params.wasteFactorPercent.toString()) }
-    Card(modifier = modifier.width(300.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))) {
-        Column(Modifier.padding(10.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Parameters", style = MaterialTheme.typography.titleSmall)
-            OutlinedTextField(heightFt, { heightFt = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wallHeightMm = Millimeters.fromFeet(v).value)) } }, label = { Text("Wall height (ft)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(coats, { coats = it; it.toIntOrNull()?.let { v -> onParamsChange(params.copy(paintCoats = v.coerceAtLeast(1))) } }, label = { Text("Paint coats") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(waste, { waste = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wasteFactorPercent = v.coerceAtLeast(0.0))) } }, label = { Text("Waste (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Text("Snap toggles", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(snap.gridEnabled, { onSnapChange(snap.copy(gridEnabled = !snap.gridEnabled)) }, label = { Text("Grid") })
-                FilterChip(snap.angleEnabled, { onSnapChange(snap.copy(angleEnabled = !snap.angleEnabled)) }, label = { Text("Angle") })
+    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f)) {
+        if (!expanded) {
+            Button(onClick = onToggle) { Text("Params") }
+        } else {
+            Card(
+                modifier = Modifier.width(300.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))
+            ) {
+                Column(Modifier.padding(10.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Parameters", style = MaterialTheme.typography.titleSmall)
+                        Button(onClick = onToggle) { Text("Hide") }
+                    }
+                    OutlinedTextField(heightFt, { heightFt = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wallHeightMm = Millimeters.fromFeet(v).value)) } }, label = { Text("Wall height (ft)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(coats, { coats = it; it.toIntOrNull()?.let { v -> onParamsChange(params.copy(paintCoats = v.coerceAtLeast(1))) } }, label = { Text("Paint coats") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(waste, { waste = it; it.toDoubleOrNull()?.let { v -> onParamsChange(params.copy(wasteFactorPercent = v.coerceAtLeast(0.0))) } }, label = { Text("Waste (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("Snap toggles", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(snap.gridEnabled, { onSnapChange(snap.copy(gridEnabled = !snap.gridEnabled)) }, label = { Text("Grid") })
+                        FilterChip(snap.angleEnabled, { onSnapChange(snap.copy(angleEnabled = !snap.angleEnabled)) }, label = { Text("Angle") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(snap.endpointEnabled, { onSnapChange(snap.copy(endpointEnabled = !snap.endpointEnabled)) }, label = { Text("Endpoints") })
+                        FilterChip(snap.midpointEnabled, { onSnapChange(snap.copy(midpointEnabled = !snap.midpointEnabled)) }, label = { Text("Midpoints") })
+                    }
+                    FilterChip(snap.closureEnabled, { onSnapChange(snap.copy(closureEnabled = !snap.closureEnabled)) }, label = { Text("Room closure") })
+                    Button(onClick = onDetectRooms, modifier = Modifier.fillMaxWidth()) { Text("Detect Rooms") }
+                    Button(onClick = onScopeExpand, modifier = Modifier.fillMaxWidth()) { Text("Scope Expansion: Paint") }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(snap.endpointEnabled, { onSnapChange(snap.copy(endpointEnabled = !snap.endpointEnabled)) }, label = { Text("Endpoints") })
-                FilterChip(snap.midpointEnabled, { onSnapChange(snap.copy(midpointEnabled = !snap.midpointEnabled)) }, label = { Text("Midpoints") })
-            }
-            FilterChip(snap.closureEnabled, { onSnapChange(snap.copy(closureEnabled = !snap.closureEnabled)) }, label = { Text("Room closure") })
-            Button(onClick = onDetectRooms, modifier = Modifier.fillMaxWidth()) { Text("Detect Rooms") }
-            Button(onClick = onScopeExpand, modifier = Modifier.fillMaxWidth()) { Text("Scope Expansion: Paint") }
         }
     }
 }
@@ -580,7 +594,6 @@ private fun AddonsDrawer(
     selectedPreset: OpeningPreset?,
     onToggle: () -> Unit,
     onSelectPreset: (OpeningPreset) -> Unit,
-    onStartDrag: (OpeningPreset) -> Unit,
     customWidthFeet: String,
     customHeightFeet: String,
     customSillFeet: String,
@@ -603,15 +616,13 @@ private fun AddonsDrawer(
                     preset = doorPreset,
                     selected = selectedPreset == doorPreset,
                     icon = { Icon(Icons.Filled.DoorFront, contentDescription = null) },
-                    onClick = { onSelectPreset(doorPreset) },
-                    onStartDrag = { onStartDrag(doorPreset) }
+                    onClick = { onSelectPreset(doorPreset) }
                 )
                 AddonPresetCard(
                     preset = windowPreset,
                     selected = selectedPreset == windowPreset,
                     icon = { Icon(Icons.Filled.Window, contentDescription = null) },
-                    onClick = { onSelectPreset(windowPreset) },
-                    onStartDrag = { onStartDrag(windowPreset) }
+                    onClick = { onSelectPreset(windowPreset) }
                 )
                 OutlinedTextField(
                     value = customWidthFeet,
@@ -647,20 +658,11 @@ private fun AddonPresetCard(
     preset: OpeningPreset,
     selected: Boolean,
     icon: @Composable () -> Unit,
-    onClick: () -> Unit,
-    onStartDrag: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.pointerInput(Unit) {
-            detectDragGesturesAfterLongPress(
-                onDragStart = { onStartDrag() },
-                onDrag = { _, _ -> /* Drag handled at screen level */ },
-                onDragEnd = { /* End handled at screen level */ },
-                onDragCancel = { /* Cancel handled at screen level */ }
-            )
-        }
+        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
