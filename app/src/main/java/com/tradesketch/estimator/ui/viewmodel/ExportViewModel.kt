@@ -15,6 +15,7 @@ import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.utils.EstimateExportManager
@@ -226,7 +227,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintDocument = project.authoritativeBlueprint()
             )
         }.getOrElse { error ->
             _uiState.update { it.copy(error = "Could not prepare estimate PDF: ${error.message}") }
@@ -249,7 +250,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintDocument = project.authoritativeBlueprint()
             )
         }.onSuccess { uri ->
             if (uri != null) {
@@ -273,7 +274,7 @@ class ExportViewModel @Inject constructor(
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
-                blueprintSpaces = project.spaces
+                blueprintDocument = project.authoritativeBlueprint()
             )
         }.onFailure { error ->
             _uiState.update { it.copy(error = "Could not build PDF bytes: ${error.message}") }
