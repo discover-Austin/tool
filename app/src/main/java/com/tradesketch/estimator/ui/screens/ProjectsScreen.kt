@@ -57,9 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
-import com.tradesketch.estimator.domain.model.Geometry
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.areaSqFt
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
@@ -114,7 +112,7 @@ fun ProjectsScreen(
                 } else {
                     val query = searchQuery.trim().lowercase()
                     project.name.lowercase().contains(query) ||
-                        project.spaces.any { it.name.lowercase().contains(query) }
+                        project.blueprintDocument.rooms.any { it.name.lowercase().contains(query) }
                 }
             }
             .sortedWith(sortMode.comparator)
@@ -239,8 +237,8 @@ private fun ProjectsContent(
     onDeleteProject: (Project) -> Unit,
     onCreateBlank: () -> Unit
 ) {
-    val totalSpaces = allProjects.sumOf { it.spaces.size }
-    val totalArea = allProjects.sumOf { project -> project.spaces.sumOf { it.geometry.areaSqFt() } }
+    val totalSpaces = allProjects.sumOf { it.blueprintDocument.elementCount() }
+    val totalArea = allProjects.sumOf { it.blueprintDocument.totalAreaSqFt() }
     val stagedDelay: (Int) -> Int = { base -> if (settings.reducedMotionEnabled) 0 else base }
 
     LazyColumn(
@@ -311,7 +309,7 @@ private fun ProjectsContent(
                                 onTone = MaterialTheme.colorScheme.onSurface
                             )
                             MetricPill(
-                                label = "Spaces",
+                                label = "Elements",
                                 value = totalSpaces.toString(),
                                 tone = MaterialTheme.colorScheme.surface,
                                 onTone = MaterialTheme.colorScheme.onSurface
@@ -441,7 +439,8 @@ private fun ProjectCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val projectArea = project.spaces.sumOf { it.geometry.areaSqFt() }
+    val projectArea = project.blueprintDocument.totalAreaSqFt()
+    val elementCount = project.blueprintDocument.elementCount()
     val laneTags = projectLaneTags(project)
 
     Card(
@@ -463,7 +462,7 @@ private fun ProjectCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "${project.spaces.size} spaces • ${Formatters.formatArea(projectArea)}",
+                    text = "$elementCount elements • ${Formatters.formatArea(projectArea)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -678,27 +677,18 @@ private enum class ProjectSortMode(
         comparator = compareBy<Project> { it.name.lowercase() }
     ),
     SPACES(
-        label = "Most Spaces",
-        comparator = compareByDescending<Project> { it.spaces.size }
+        label = "Most Elements",
+        comparator = compareByDescending<Project> { it.blueprintDocument.elementCount() }
             .thenByDescending { it.updatedAt }
     )
 }
 
 private fun projectLaneTags(project: Project): List<String> {
-    var hasDrywall = false
-    var hasConcrete = false
-    var hasRooms = false
-    project.spaces.forEach { space ->
-        when (space.geometry) {
-            is Geometry.Wall -> hasDrywall = true
-            is Geometry.Slab -> hasConcrete = true
-            else -> hasRooms = true
-        }
-    }
     val tags = mutableListOf<String>()
-    if (hasDrywall) tags += "Drywall"
-    if (hasConcrete) tags += "Concrete"
-    if (hasRooms) tags += "Rooms"
+    val blueprint = project.blueprintDocument
+    if (blueprint.walls.isNotEmpty()) tags += "Drywall"
+    if (blueprint.slabs.isNotEmpty()) tags += "Concrete"
+    if (blueprint.rooms.isNotEmpty()) tags += "Rooms"
     return tags
 }
 
