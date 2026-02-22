@@ -56,12 +56,19 @@ import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.utils.Formatters
 
+enum class TakeoffScreenMode {
+    MATERIALS,
+    QUANTITIES
+}
+
 @Composable
 fun TakeoffScreen(
     projectId: String,
     modifier: Modifier = Modifier,
+    screenMode: TakeoffScreenMode = TakeoffScreenMode.MATERIALS,
     onOpenModel: () -> Unit = {},
     onOpenBlueprint: () -> Unit = {},
+    onOpenMaterials: () -> Unit = {},
     onOpenExport: () -> Unit = {},
     viewModel: TakeoffViewModel = hiltViewModel()
 ) {
@@ -93,6 +100,7 @@ fun TakeoffScreen(
     } else {
         TakeoffType.entries.toList()
     }
+    val isMaterialsMode = screenMode == TakeoffScreenMode.MATERIALS
     LaunchedEffect(projectId) {
         viewModel.setProjectId(projectId)
         viewModel.recordTap("takeoff_screen_opened")
@@ -116,11 +124,13 @@ fun TakeoffScreen(
         item {
             AnimatedEntry(delayMs = staggeredDelay(70)) {
                 TitledSectionCard(
-                    title = "Estimate Type",
+                    title = if (isMaterialsMode) "Estimate Type" else "Quantity Scope",
                     subtitle = if (uiState.settings.simplifiedHome && focusedType != null && !showAllTradeScopes) {
                         "Focused on ${uiState.settings.primaryTrade.displayLabel()}."
-                    } else {
+                    } else if (isMaterialsMode) {
                         "Set the trade for this estimate."
+                    } else {
+                        "Set the trade for quantity review."
                     },
                     modifier = Modifier.animateContentSize()
                 ) {
@@ -207,7 +217,7 @@ fun TakeoffScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${scopeSummary.spaceCount} matching space(s) in this project.",
+                            text = "${scopeSummary.spaceCount} matching blueprint surface(s) in this project.",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
@@ -228,12 +238,12 @@ fun TakeoffScreen(
                             ) {
                                 SecondaryActionButton(
                                     onClick = {
-                                        viewModel.recordTap("takeoff_open_model")
+                                        viewModel.recordTap("takeoff_open_export")
                                         onOpenModel()
                                     },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Open Model")
+                                    Text("Open Export")
                                 }
                                 SecondaryActionButton(
                                     onClick = {
@@ -471,289 +481,343 @@ fun TakeoffScreen(
                 }
             }
 
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    modifier = Modifier.animateContentSize()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+            if (isMaterialsMode) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        modifier = Modifier.animateContentSize()
                     ) {
-                        Text(
-                            text = "Pricing Inputs",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Labor ${Formatters.formatQuantity(uiState.pricingParams.laborPercent)}% • " +
-                                "Markup ${Formatters.formatQuantity(uiState.pricingParams.markupPercent)}% • " +
-                                "Tax ${Formatters.formatQuantity(uiState.pricingParams.taxPercent)}%",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        SecondaryActionButton(
-                            onClick = {
-                                viewModel.recordTap("takeoff_toggle_pricing_inputs")
-                                showPricingInputs = !showPricingInputs
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                if (showPricingInputs) {
-                                    "Hide Pricing Inputs"
-                                } else {
-                                    "Show Pricing Inputs"
-                                }
+                                text = "Pricing Inputs",
+                                style = MaterialTheme.typography.titleSmall
                             )
+                            Text(
+                                text = "Labor ${Formatters.formatQuantity(uiState.pricingParams.laborPercent)}% • " +
+                                    "Markup ${Formatters.formatQuantity(uiState.pricingParams.markupPercent)}% • " +
+                                    "Tax ${Formatters.formatQuantity(uiState.pricingParams.taxPercent)}%",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            SecondaryActionButton(
+                                onClick = {
+                                    viewModel.recordTap("takeoff_toggle_pricing_inputs")
+                                    showPricingInputs = !showPricingInputs
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    if (showPricingInputs) {
+                                        "Hide Pricing Inputs"
+                                    } else {
+                                        "Show Pricing Inputs"
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if (showPricingInputs) {
-                item {
-                    val pricing = uiState.pricingParams
-                    val typeSpecificPricing = when (type) {
-                        TakeoffType.DRYWALL -> listOf(
-                            NumberFieldSpec(
-                                label = "Sheet Cost ($/sheet)",
-                                value = pricing.drywallSheetCost.toString(),
-                                hint = "Material price",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(drywallSheetCost = value)
+                if (showPricingInputs) {
+                    item {
+                        val pricing = uiState.pricingParams
+                        val typeSpecificPricing = when (type) {
+                            TakeoffType.DRYWALL -> listOf(
+                                NumberFieldSpec(
+                                    label = "Sheet Cost ($/sheet)",
+                                    value = pricing.drywallSheetCost.toString(),
+                                    hint = "Material price",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(drywallSheetCost = value)
+                                        }
                                     }
-                                }
-                            ),
-                            NumberFieldSpec(
-                                label = "Screw Cost ($/screw)",
-                                value = pricing.drywallScrewCost.toString(),
-                                hint = "Fastener price",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(drywallScrewCost = value)
+                                ),
+                                NumberFieldSpec(
+                                    label = "Screw Cost ($/screw)",
+                                    value = pricing.drywallScrewCost.toString(),
+                                    hint = "Fastener price",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(drywallScrewCost = value)
+                                        }
                                     }
-                                }
-                            ),
-                            NumberFieldSpec(
-                                label = "Mud Cost ($/gallon)",
-                                value = pricing.drywallMudCost.toString(),
-                                hint = "Compound price",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(drywallMudCost = value)
+                                ),
+                                NumberFieldSpec(
+                                    label = "Mud Cost ($/gallon)",
+                                    value = pricing.drywallMudCost.toString(),
+                                    hint = "Compound price",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(drywallMudCost = value)
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
 
-                        TakeoffType.CONCRETE -> listOf(
-                            NumberFieldSpec(
-                                label = "Concrete Cost ($/cubic yard)",
-                                value = pricing.concreteYardCost.toString(),
-                                hint = "Batch price",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(concreteYardCost = value)
+                            TakeoffType.CONCRETE -> listOf(
+                                NumberFieldSpec(
+                                    label = "Concrete Cost ($/cubic yard)",
+                                    value = pricing.concreteYardCost.toString(),
+                                    hint = "Batch price",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(concreteYardCost = value)
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
 
-                        TakeoffType.GRAVEL_MULCH -> listOf(
-                            NumberFieldSpec(
-                                label = "Volume Cost ($/cubic yard)",
-                                value = pricing.gravelYardCost.toString(),
-                                hint = "Yard pricing",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(gravelYardCost = value)
+                            TakeoffType.GRAVEL_MULCH -> listOf(
+                                NumberFieldSpec(
+                                    label = "Volume Cost ($/cubic yard)",
+                                    value = pricing.gravelYardCost.toString(),
+                                    hint = "Yard pricing",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(gravelYardCost = value)
+                                        }
                                     }
-                                }
-                            ),
-                            NumberFieldSpec(
-                                label = "Weight Cost ($/ton)",
-                                value = pricing.gravelTonCost.toString(),
-                                hint = "Ton pricing",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(gravelTonCost = value)
+                                ),
+                                NumberFieldSpec(
+                                    label = "Weight Cost ($/ton)",
+                                    value = pricing.gravelTonCost.toString(),
+                                    hint = "Ton pricing",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(gravelTonCost = value)
+                                        }
                                     }
-                                }
+                                )
                             )
-                        )
 
-                        TakeoffType.PAINT -> listOf(
-                            NumberFieldSpec(
-                                label = "Paint Cost ($/gallon)",
-                                value = pricing.paintGallonCost.toString(),
-                                hint = "Can price",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(paintGallonCost = value)
+                            TakeoffType.PAINT -> listOf(
+                                NumberFieldSpec(
+                                    label = "Paint Cost ($/gallon)",
+                                    value = pricing.paintGallonCost.toString(),
+                                    hint = "Can price",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(paintGallonCost = value)
+                                        }
                                     }
-                                }
+                                )
+                            )
+                        }
+
+                        ParameterCard(
+                            title = "Pricing",
+                            description = "Material costs and business percentages used in this estimate.",
+                            fields = typeSpecificPricing + listOf(
+                                NumberFieldSpec(
+                                    label = "Labor %",
+                                    value = pricing.laborPercent.toString(),
+                                    hint = "Crew labor burden",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(laborPercent = value)
+                                        }
+                                    }
+                                ),
+                                NumberFieldSpec(
+                                    label = "Markup %",
+                                    value = pricing.markupPercent.toString(),
+                                    hint = "Gross margin add",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(markupPercent = value)
+                                        }
+                                    }
+                                ),
+                                NumberFieldSpec(
+                                    label = "Tax %",
+                                    value = pricing.taxPercent.toString(),
+                                    hint = "Final tax applied",
+                                    onChange = {
+                                        it.toDoubleOrNull()?.let { value ->
+                                            viewModel.updatePricingParams(taxPercent = value)
+                                        }
+                                    }
+                                )
                             )
                         )
                     }
-
-                    ParameterCard(
-                        title = "Pricing",
-                        description = "Material costs and business percentages used in this estimate.",
-                        fields = typeSpecificPricing + listOf(
-                            NumberFieldSpec(
-                                label = "Labor %",
-                                value = pricing.laborPercent.toString(),
-                                hint = "Crew labor burden",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(laborPercent = value)
-                                    }
-                                }
-                            ),
-                            NumberFieldSpec(
-                                label = "Markup %",
-                                value = pricing.markupPercent.toString(),
-                                hint = "Gross margin add",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(markupPercent = value)
-                                    }
-                                }
-                            ),
-                            NumberFieldSpec(
-                                label = "Tax %",
-                                value = pricing.taxPercent.toString(),
-                                hint = "Final tax applied",
-                                onChange = {
-                                    it.toDoubleOrNull()?.let { value ->
-                                        viewModel.updatePricingParams(taxPercent = value)
-                                    }
-                                }
-                            )
-                        )
-                    )
                 }
             }
 
 
             uiState.result?.let { result ->
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = "Estimate Total",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Line items: ${result.items.size}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            result.materialSubtotal?.let { materials ->
-                                Text(
-                                    text = "Material subtotal: ${Formatters.formatMoney(materials)}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            result.totalCost?.let { total ->
-                                Text(
-                                    text = "Estimated total: ${Formatters.formatMoney(total)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            SecondaryActionButton(
-                                onClick = {
-                                    viewModel.recordTap("takeoff_open_export")
-                                    onOpenExport()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Continue to Export")
-                            }
-                            QuietActionButton(
-                                onClick = {
-                                    viewModel.recordTap("takeoff_toggle_detailed_results")
-                                    showDetailedResults = !showDetailedResults
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    if (showDetailedResults) {
-                                        "Hide Detailed Results"
-                                    } else {
-                                        "Show Detailed Results"
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (showDetailedResults) {
+                if (isMaterialsMode) {
                     item {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
                             )
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Summarize, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Estimate Total",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Line items: ${result.items.size}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                result.materialSubtotal?.let { materials ->
                                     Text(
-                                        text = "${type.displayLabel} Results",
-                                        style = MaterialTheme.typography.titleMedium
+                                        text = "Material subtotal: ${Formatters.formatMoney(materials)}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                result.totalCost?.let { total ->
+                                    Text(
+                                        text = "Estimated total: ${Formatters.formatMoney(total)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
-                                result.items.forEach { line ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = line.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            Text(
-                                                text = "${Formatters.formatQuantity(line.quantity)} ${line.unit}",
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
+                                SecondaryActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("takeoff_open_export")
+                                        onOpenExport()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Continue to Export")
+                                }
+                                QuietActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("takeoff_toggle_detailed_results")
+                                        showDetailedResults = !showDetailedResults
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        if (showDetailedResults) {
+                                            "Hide Detailed Results"
+                                        } else {
+                                            "Show Detailed Results"
                                         }
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            line.unitCost?.let { cost ->
-                                                Text(
-                                                    text = "@ ${Formatters.formatMoney(cost)}",
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                            line.extendedCost?.let { ext ->
-                                                Text(
-                                                    text = Formatters.formatMoney(ext),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    )
                                 }
                             }
                         }
                     }
 
+                    if (showDetailedResults) {
+                        item {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Summarize, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "${type.displayLabel} Results",
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    result.items.forEach { line ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = line.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = "${Formatters.formatQuantity(line.quantity)} ${line.unit}",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                line.unitCost?.let { cost ->
+                                                    Text(
+                                                        text = "@ ${Formatters.formatMoney(cost)}",
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                }
+                                                line.extendedCost?.let { ext ->
+                                                    Text(
+                                                        text = Formatters.formatMoney(ext),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.animateContentSize()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Material Quantities",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "${result.items.size} line item(s) derived from the blueprint.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                result.items.forEach { line ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = line.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = "${Formatters.formatQuantity(line.quantity)} ${line.unit}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                SecondaryActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("quantities_open_materials")
+                                        onOpenMaterials()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Open Materials & Pricing")
+                                }
+                            }
+                        }
+                    }
                 }
             } ?: item {
                 Card(
@@ -763,7 +827,11 @@ fun TakeoffScreen(
                     modifier = Modifier.animateContentSize()
                 ) {
                     Text(
-                        text = "Choose an estimate type above to generate quantities and pricing.",
+                        text = if (isMaterialsMode) {
+                            "Choose an estimate type above to generate quantities and pricing."
+                        } else {
+                            "Choose an estimate type above to generate material quantities."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(14.dp)
                     )
@@ -958,7 +1026,7 @@ private fun scopeSummaryForType(
             val wallCount = blueprint.walls.size
             val ceilingCount = if (includeDrywallCeilings) blueprint.rooms.size else 0
             val totalCount = wallCount + ceilingCount
-            
+
             val wallArea = blueprint.walls.sumOf {
                 val length = Millimeters(it.lengthMillimeters()).toFeet()
                 val height = Millimeters(it.heightMm).toFeet()
@@ -973,7 +1041,7 @@ private fun scopeSummaryForType(
                 0.0
             }
             val netArea = (wallArea - openingArea + ceilingArea).coerceAtLeast(0.0)
-            
+
             ScopeSummary(
                 spaceCount = totalCount,
                 measuredQuantity = netArea,
@@ -1013,9 +1081,7 @@ private fun scopeSummaryForType(
 
         TakeoffType.PAINT -> {
             val wallCount = blueprint.walls.size
-            val ceilingCount = blueprint.rooms.size
-            val totalCount = wallCount + ceilingCount
-            
+
             val wallArea = blueprint.walls.sumOf {
                 val length = Millimeters(it.lengthMillimeters()).toFeet()
                 val height = Millimeters(it.heightMm).toFeet()
@@ -1024,15 +1090,14 @@ private fun scopeSummaryForType(
             val openingArea = blueprint.openings.sumOf {
                 Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet()
             }
-            val ceilingArea = blueprint.rooms.sumOf { it.areaSqFt() }
-            val netArea = (wallArea - openingArea + ceilingArea).coerceAtLeast(0.0)
-            
+            val netArea = (wallArea - openingArea).coerceAtLeast(0.0)
+
             ScopeSummary(
-                spaceCount = totalCount,
+                spaceCount = wallCount,
                 measuredQuantity = netArea,
                 unit = "sq ft",
-                quantityLabel = "Paintable area",
-                guidance = "Walls and ceilings are included with openings deducted."
+                quantityLabel = "Paintable wall area",
+                guidance = "Wall surfaces are included with openings deducted."
             )
         }
     }

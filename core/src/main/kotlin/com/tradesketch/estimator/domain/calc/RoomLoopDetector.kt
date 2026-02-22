@@ -5,6 +5,7 @@ import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.roundToLong
 
 object RoomLoopDetector {
@@ -49,62 +50,103 @@ object RoomLoopDetector {
             edgeIds.getOrPut(edge.b to edge.a) { mutableListOf() }.add(edge.wall.id)
         }
 
-        val visited = mutableSetOf<Int>()
-        val rooms = mutableListOf<Room>()
-        var roomIndex = 1
+        val adjacencyDistinct = adjacency.mapValues { (_, neighbors) ->
+            neighbors.distinct()
+        }
+        val sortedNeighbors = adjacencyDistinct.mapValues { (node, neighbors) ->
+            neighbors.sortedBy { neighbor ->
+                atan2(
+                    (nodeCentroids[neighbor].y - nodeCentroids[node].y).toDouble(),
+                    (nodeCentroids[neighbor].x - nodeCentroids[node].x).toDouble()
+                )
+            }
+        }
 
-        adjacency.keys.forEach { startNode ->
-            if (startNode in visited) return@forEach
-            val componentNodes = mutableListOf<Int>()
+        val componentByNode = mutableMapOf<Int, Int>()
+        val visitedNodes = mutableSetOf<Int>()
+        var componentIndex = 0
+        adjacencyDistinct.keys.forEach { startNode ->
+            if (!visitedNodes.add(startNode)) return@forEach
             val queue = ArrayDeque<Int>()
             queue.add(startNode)
-            visited.add(startNode)
+            componentByNode[startNode] = componentIndex
             while (queue.isNotEmpty()) {
                 val node = queue.removeFirst()
-                componentNodes.add(node)
-                adjacency[node].orEmpty().forEach { neighbor ->
-                    if (visited.add(neighbor)) {
+                adjacencyDistinct[node].orEmpty().forEach { neighbor ->
+                    if (visitedNodes.add(neighbor)) {
+                        componentByNode[neighbor] = componentIndex
                         queue.addLast(neighbor)
                     }
                 }
             }
+            componentIndex += 1
+        }
 
-            if (componentNodes.size < 3) return@forEach
-            val degrees = componentNodes.map { adjacency[it].orEmpty().size }
-            if (degrees.any { it != 2 }) return@forEach
-            val componentEdgeCount = componentNodes.sumOf { adjacency[it].orEmpty().size } / 2
-            if (componentEdgeCount != componentNodes.size) return@forEach
+        data class TracedFace(
+            val nodes: List<Int>,
+            val directedEdges: List<Pair<Int, Int>>
+        )
 
-            val orderedNodes = mutableListOf<Int>()
-            val usedEdges = mutableSetOf<Pair<Int, Int>>()
-            var current = componentNodes.first()
-            var previous: Int? = null
-            while (true) {
-                orderedNodes.add(current)
-                val next = adjacency[current]
-                    .orEmpty()
-                    .firstOrNull { neighbor ->
-                        val edgeKey = if (current < neighbor) current to neighbor else neighbor to current
-                        edgeKey !in usedEdges && neighbor != previous
-                    } ?: break
-                val edgeKey = if (current < next) current to next else next to current
-                usedEdges.add(edgeKey)
-                previous = current
-                current = next
-                if (current == orderedNodes.first()) break
-                if (orderedNodes.size > componentNodes.size + 1) break
+        fun traceFace(startDirected: Pair<Int, Int>): TracedFace? {
+            val nodesTrace = mutableListOf<Int>()
+            val localEdges = mutableListOf<Pair<Int, Int>>()
+            val localEdgeSet = mutableSetOf<Pair<Int, Int>>()
+            var from = startDirected.first
+            var to = startDirected.second
+            val hardLimit = (edges.size * 2).coerceAtLeast(8)
+            while (localEdges.size <= hardLimit) {
+                val directed = from to to
+                if (!localEdgeSet.add(directed)) return null
+                localEdges += directed
+                if (nodesTrace.isEmpty()) {
+                    nodesTrace += from
+                }
+                nodesTrace += to
+
+                val neighbors = sortedNeighbors[to].orEmpty()
+                if (neighbors.size < 2) return null
+                val incomingIndex = neighbors.indexOf(from)
+                if (incomingIndex < 0) return null
+                val next = neighbors[(incomingIndex - 1 + neighbors.size) % neighbors.size]
+                val nextDirected = to to next
+                if (nextDirected == startDirected) {
+                    val cycleNodes = nodesTrace.dropLast(1)
+                    if (cycleNodes.size < 3) return null
+                    return TracedFace(nodes = cycleNodes, directedEdges = localEdges)
+                }
+                from = to
+                to = next
             }
-            if (orderedNodes.size < 3) return@forEach
+            return null
+        }
 
-            var polygon = orderedNodes.map { nodeCentroids[it] }
-            if (polygonSignedArea(polygon) < 0.0) {
-                // Keep a consistent winding direction for deterministic area/perimeter math.
-                polygon = polygon.reversed()
-            }
-            val cyclePairs = orderedNodes.zip(orderedNodes.drop(1) + orderedNodes.first())
+        val directedEdges = edges
+            .flatMap { edge -> listOf(edge.a to edge.b, edge.b to edge.a) }
+            .distinct()
+        val visitedDirectedEdges = mutableSetOf<Pair<Int, Int>>()
+        val seenCycles = mutableSetOf<String>()
+        val rooms = mutableListOf<Room>()
+        var roomIndex = 1
+
+        directedEdges.forEach { directedStart ->
+            if (directedStart in visitedDirectedEdges) return@forEach
+            val traced = traceFace(directedStart) ?: return@forEach
+            visitedDirectedEdges += traced.directedEdges
+
+            val polygon = traced.nodes.map { nodeCentroids[it] }
+            val area = polygonSignedArea(polygon)
+            if (area <= 0.0 || area < 20_000.0) return@forEach
+
+            val componentId = componentByNode[traced.nodes.first()] ?: return@forEach
+            val cycleKey = "$componentId:${canonicalCycleKey(traced.nodes)}"
+            if (!seenCycles.add(cycleKey)) return@forEach
+
+            val cyclePairs = traced.nodes.zip(traced.nodes.drop(1) + traced.nodes.first())
             val wallIds = cyclePairs.mapNotNull { (a, b) ->
-                edgeIds[a to b]?.firstOrNull()
-            }
+                edgeIds[a to b]?.firstOrNull() ?: edgeIds[b to a]?.firstOrNull()
+            }.distinct()
+            if (wallIds.size < 3) return@forEach
+
             rooms += Room(
                 id = "room-auto-$roomIndex",
                 name = "Room $roomIndex",
@@ -160,5 +202,29 @@ object RoomLoopDetector {
             area += (a.x.toDouble() * b.y.toDouble()) - (b.x.toDouble() * a.y.toDouble())
         }
         return area / 2.0
+    }
+
+    private fun canonicalCycleKey(nodes: List<Int>): String {
+        if (nodes.isEmpty()) return ""
+        val forward = canonicalRotationKey(nodes)
+        val reversed = canonicalRotationKey(nodes.reversed())
+        return if (forward <= reversed) forward else reversed
+    }
+
+    private fun canonicalRotationKey(nodes: List<Int>): String {
+        val n = nodes.size
+        var best: String? = null
+        for (shift in 0 until n) {
+            val key = buildString {
+                for (index in 0 until n) {
+                    if (index > 0) append('-')
+                    append(nodes[(index + shift) % n])
+                }
+            }
+            if (best == null || key < best) {
+                best = key
+            }
+        }
+        return best ?: ""
     }
 }

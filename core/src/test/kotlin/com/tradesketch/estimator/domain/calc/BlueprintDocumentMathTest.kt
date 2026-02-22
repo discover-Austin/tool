@@ -9,8 +9,11 @@ import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BlueprintDocumentMathTest {
@@ -50,6 +53,137 @@ class BlueprintDocumentMathTest {
     }
 
     @Test
+    fun applySnapping_anglePriority_prefersNinetyThenFortyFiveFamilies() {
+        val settings = BlueprintSnapSettings(
+            gridEnabled = false,
+            endpointEnabled = false,
+            midpointEnabled = false,
+            angleEnabled = true,
+            angleIncrementDegrees = 15,
+            thresholdFeet = 2.0
+        )
+        val start = PointMm(0, 0)
+
+        val nearNinety = BlueprintSnapMath.applySnapping(
+            rawPoint = PointMm(460, 3960),
+            drawingStart = start,
+            settings = settings,
+            walls = emptyList()
+        )
+        val ninetyAngle = Math.toDegrees(atan2(nearNinety.y.toDouble(), nearNinety.x.toDouble()))
+        assertTrue(abs(90.0 - ninetyAngle) <= 0.5, "Expected strongest preference to snap near 90°.")
+
+        val nearThirty = BlueprintSnapMath.applySnapping(
+            rawPoint = PointMm(1030, 620),
+            drawingStart = start,
+            settings = settings,
+            walls = emptyList()
+        )
+        val fortyFiveAngle = Math.toDegrees(atan2(nearThirty.y.toDouble(), nearThirty.x.toDouble()))
+        assertTrue(abs(45.0 - fortyFiveAngle) <= 0.6, "Expected next preference to snap near 45°.")
+    }
+
+    @Test
+    fun applySnapping_prefersPerpendicularFromConnectedWall() {
+        val baseWall = WallSegment(
+            id = "base",
+            start = PointMm(0, 0),
+            end = PointMm(4000, 0)
+        )
+        val settings = BlueprintSnapSettings(
+            gridEnabled = false,
+            endpointEnabled = false,
+            midpointEnabled = false,
+            angleEnabled = false,
+            thresholdFeet = 0.75
+        )
+
+        val snapped = BlueprintSnapMath.applySnapping(
+            rawPoint = PointMm(4300, 1800),
+            drawingStart = PointMm(4000, 0),
+            settings = settings,
+            walls = listOf(baseWall)
+        )
+
+        // Near-perpendicular draw from wall end should bias to true 90deg.
+        assertTrue(kotlin.math.abs(snapped.x - 4000L) <= 2L)
+        assertTrue(snapped.y > 0L)
+    }
+
+    @Test
+    fun applySnapping_softlyFavoursWholeFeetLengths() {
+        val settings = BlueprintSnapSettings(
+            gridEnabled = false,
+            endpointEnabled = false,
+            midpointEnabled = false,
+            angleEnabled = false,
+            thresholdFeet = 0.75
+        )
+        val start = PointMm(0, 0)
+        val nearTenFeet = PointMm(Millimeters.fromFeet(10.0).value + 28L, 0L)
+
+        val snapped = BlueprintSnapMath.applySnapping(
+            rawPoint = nearTenFeet,
+            drawingStart = start,
+            settings = settings,
+            walls = emptyList()
+        )
+
+        val rawDelta = kotlin.math.abs(nearTenFeet.x - Millimeters.fromFeet(10.0).value)
+        val snappedDelta = kotlin.math.abs(snapped.x - Millimeters.fromFeet(10.0).value)
+        assertTrue(snappedDelta < rawDelta)
+    }
+
+    @Test
+    fun applySnapping_softlyFavoursParallelLengths() {
+        val reference = WallSegment(
+            id = "ref",
+            start = PointMm(0, 0),
+            end = PointMm(5000, 0)
+        )
+        val settings = BlueprintSnapSettings(
+            gridEnabled = false,
+            endpointEnabled = false,
+            midpointEnabled = false,
+            angleEnabled = false,
+            thresholdFeet = 0.75
+        )
+        val start = PointMm(0, 2000)
+        val raw = PointMm(4850, 2050)
+
+        val snapped = BlueprintSnapMath.applySnapping(
+            rawPoint = raw,
+            drawingStart = start,
+            settings = settings,
+            walls = listOf(reference)
+        )
+
+        val rawLength = BlueprintSnapMath.distanceMillimeters(start, raw)
+        val snappedLength = BlueprintSnapMath.distanceMillimeters(start, snapped)
+        assertTrue(kotlin.math.abs(5000L - snappedLength) < kotlin.math.abs(5000L - rawLength))
+    }
+
+    @Test
+    fun roomClosureSnap_canCloseToNearbyDanglingEndpoint() {
+        val walls = listOf(
+            WallSegment("w1", PointMm(0, 0), PointMm(4000, 0)),
+            WallSegment("w2", PointMm(4000, 0), PointMm(4000, 3000))
+        )
+        val closure = BlueprintSnapMath.roomClosureSnap(
+            candidateEnd = PointMm(40, 35),
+            roomStart = PointMm(999_999, 999_999),
+            thresholdMm = 60L,
+            walls = walls
+        )
+
+        assertNotNull(closure)
+        assertTrue(
+            closure == PointMm(0, 0) || closure == PointMm(4000, 3000),
+            "Expected closure to snap to one dangling endpoint."
+        )
+    }
+
+    @Test
     fun detectRooms_findsClosedRectangleLoop() {
         val walls = listOf(
             WallSegment("w1", PointMm(0, 0), PointMm(4000, 0)),
@@ -62,6 +196,22 @@ class BlueprintDocumentMathTest {
 
         assertEquals(1, rooms.size)
         assertEquals(4, rooms.first().polygon.size)
+        assertEquals(12_000_000L, rooms.first().areaSquareMillimeters())
+    }
+
+    @Test
+    fun detectRooms_handlesRectangleWithBranchingWall() {
+        val walls = listOf(
+            WallSegment("w1", PointMm(0, 0), PointMm(4000, 0)),
+            WallSegment("w2", PointMm(4000, 0), PointMm(4000, 3000)),
+            WallSegment("w3", PointMm(4000, 3000), PointMm(0, 3000)),
+            WallSegment("w4", PointMm(0, 3000), PointMm(0, 0)),
+            WallSegment("branch", PointMm(4000, 1500), PointMm(5200, 1500))
+        )
+
+        val rooms = RoomLoopDetector.detectRooms(walls)
+
+        assertEquals(1, rooms.size)
         assertEquals(12_000_000L, rooms.first().areaSquareMillimeters())
     }
 

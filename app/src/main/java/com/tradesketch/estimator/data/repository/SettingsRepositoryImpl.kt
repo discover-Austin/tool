@@ -11,15 +11,15 @@ import javax.inject.Inject
 class SettingsRepositoryImpl @Inject constructor(
     private val settingsDataStore: SettingsDataStore
 ) : SettingsRepository {
-    
+
     override fun getSettings(): Flow<Settings> {
         return settingsDataStore.settings
     }
-    
+
     override suspend fun saveSettings(settings: Settings) {
         settingsDataStore.saveSettings(settings)
     }
-    
+
     override suspend fun resetSettings() {
         settingsDataStore.resetSettings()
     }

@@ -138,16 +138,13 @@ fun TradeSketchDesktopApp() {
                     Column(modifier = Modifier.fillMaxSize()) {
                         WorkspaceHeader(state = state)
                         when (state.activeTab) {
-                            WorkspaceTab.BLUEPRINT -> DesktopBlueprintTab(
-                                state = state,
-                                openAddonsByDefault = false
-                            )
-                            WorkspaceTab.MATERIALS -> TakeoffTab(state = state)
-                            WorkspaceTab.QUANTITIES -> TakeoffTab(state = state)
+                            WorkspaceTab.BLUEPRINT,
                             WorkspaceTab.ADDONS -> DesktopBlueprintTab(
                                 state = state,
-                                openAddonsByDefault = true
+                                openAddonsByDefault = state.activeTab == WorkspaceTab.ADDONS
                             )
+                            WorkspaceTab.MATERIALS,
+                            WorkspaceTab.QUANTITIES -> TakeoffTab(state = state)
                             WorkspaceTab.REVIEW -> ModelTab(state = state)
                             WorkspaceTab.EXPORT -> ExportTab(
                                 state = state,

@@ -7,13 +7,13 @@ import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.domain.model.defaultQuickStartTemplate
 import com.tradesketch.estimator.domain.usecase.CreateProjectFromTemplateUseCase
 import com.tradesketch.estimator.domain.usecase.DeleteProjectUseCase
 import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.GetProjectsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
-import com.tradesketch.estimator.ui.quickStartTemplate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -33,16 +33,16 @@ class ProjectsViewModel @Inject constructor(
     private val createFromTemplateUseCase: CreateProjectFromTemplateUseCase,
     private val uxMetricsRepository: UxMetricsRepository
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(ProjectsUiState())
     val uiState: StateFlow<ProjectsUiState> = _uiState.asStateFlow()
     private val _events = MutableSharedFlow<ProjectsEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<ProjectsEvent> = _events.asSharedFlow()
-    
+
     init {
         loadProjects()
     }
-    
+
     private fun loadProjects() {
         viewModelScope.launch {
             combine(
@@ -60,7 +60,7 @@ class ProjectsViewModel @Inject constructor(
                     }
                 }
                 .collect { (projects, settings) ->
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             projects = projects.sortedByDescending { p -> p.updatedAt },
                             settings = settings,
@@ -111,12 +111,14 @@ class ProjectsViewModel @Inject constructor(
             uxMetricsRepository.recordTap(task)
         }
     }
-    
+
     fun createBlankProject(name: String) {
         viewModelScope.launch {
             try {
                 uxMetricsRepository.recordTap("projects_create_blank")
-                val project = ProjectTemplate.BLANK.createProject(name)
+                val project = ProjectTemplate.BLANK.createProject(
+                    ensureUniqueProjectName(name)
+                )
                 saveProjectUseCase(project)
                 _events.emit(ProjectsEvent.NavigateToProject(project.id))
             } catch (e: Exception) {
@@ -124,13 +126,15 @@ class ProjectsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun createFromTemplate(template: ProjectTemplate, customName: String? = null) {
         viewModelScope.launch {
             try {
                 uxMetricsRepository.recordTap("projects_create_template_${template.name.lowercase()}")
                 val project = createFromTemplateUseCase(template, customName)
-                saveProjectUseCase(project)
+                saveProjectUseCase(
+                    project.copy(name = ensureUniqueProjectName(project.name))
+                )
                 _events.emit(ProjectsEvent.NavigateToProject(project.id))
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to create project: ${e.message}") }
@@ -143,10 +147,10 @@ class ProjectsViewModel @Inject constructor(
             try {
                 uxMetricsRepository.recordTap("projects_easy_start")
                 val trade = _uiState.value.settings.primaryTrade
-                val template = trade.quickStartTemplate()
+                val template = trade.defaultQuickStartTemplate()
                 val project = createFromTemplateUseCase(
                     template = template,
-                    customName = "My ${template.displayName()}"
+                    customName = ensureUniqueProjectName("My ${template.displayName()}")
                 )
                 saveProjectUseCase(project)
                 _events.emit(ProjectsEvent.NavigateToProject(project.id))
@@ -155,7 +159,27 @@ class ProjectsViewModel @Inject constructor(
             }
         }
     }
-    
+
+    fun renameProject(projectId: String, newName: String) {
+        viewModelScope.launch {
+            val normalized = newName.trim()
+            if (normalized.isEmpty()) return@launch
+            val existing = _uiState.value.projects.firstOrNull { it.id == projectId } ?: return@launch
+            val resolvedName = ensureUniqueProjectName(normalized, projectId)
+            if (existing.name == resolvedName) return@launch
+            runCatching {
+                saveProjectUseCase(
+                    existing.copy(
+                        name = resolvedName,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }.onFailure { error ->
+                _uiState.update { it.copy(error = "Failed to rename project: ${error.message}") }
+            }
+        }
+    }
+
     fun deleteProject(projectId: String) {
         viewModelScope.launch {
             try {
@@ -166,9 +190,28 @@ class ProjectsViewModel @Inject constructor(
             }
         }
     }
-    
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    private fun ensureUniqueProjectName(
+        requestedName: String,
+        excludingProjectId: String? = null
+    ): String {
+        val base = requestedName.trim().ifEmpty { "Project" }
+        val existingNames = _uiState.value.projects
+            .asSequence()
+            .filter { it.id != excludingProjectId }
+            .map { it.name.trim().lowercase() }
+            .toSet()
+        if (base.lowercase() !in existingNames) return base
+        var suffix = 2
+        while (true) {
+            val candidate = "$base ($suffix)"
+            if (candidate.lowercase() !in existingNames) return candidate
+            suffix++
+        }
     }
 }
 

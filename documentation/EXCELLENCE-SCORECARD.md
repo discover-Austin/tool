@@ -3,7 +3,10 @@
 ## TradeSketch Estimator
 Updated: February 11, 2026
 
-This is a practical quality scorecard for current implementation state.
+> Historical note (February 21, 2026): This scorecard reflects a prior iteration and is not the source of truth for current release readiness.
+> Use `documentation/ANDROID-AUDIT-2026-02-21.md` and `documentation/COMPLIANCE-CHECKLIST.md` for current status.
+
+This is a practical quality scorecard for a previous implementation state.
 
 ---
 

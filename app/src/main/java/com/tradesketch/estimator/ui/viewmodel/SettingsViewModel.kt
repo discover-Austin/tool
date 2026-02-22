@@ -23,15 +23,15 @@ class SettingsViewModel @Inject constructor(
     private val saveSettingsUseCase: SaveSettingsUseCase,
     private val uxMetricsRepository: UxMetricsRepository
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
-    
+
     init {
         loadSettings()
         observeMetrics()
     }
-    
+
     private fun loadSettings() {
         viewModelScope.launch {
             getSettingsUseCase()
@@ -39,7 +39,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update { it.copy(error = error.message ?: "Failed to load settings") }
                 }
                 .collect { settings ->
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             settings = settings,
                             isLoading = false,
@@ -49,14 +49,14 @@ class SettingsViewModel @Inject constructor(
                 }
         }
     }
-    
+
     fun updateDefaultWaste(wastePercent: Double) {
         viewModelScope.launch {
             val current = _uiState.value.settings
             saveSettingsUseCase(current.copy(defaultWastePercent = wastePercent))
         }
     }
-    
+
     fun updateUseMetric(useMetric: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -85,54 +85,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun completeWelcomeOnboarding() {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            if (current.firstRun || !current.hasCompletedTradeOnboarding) {
-                saveSettingsUseCase(
-                    current.copy(
-                        firstRun = false,
-                        hasCompletedTradeOnboarding = true
-                    )
-                )
-            }
-        }
-    }
-
-    fun updateSimplifiedHome(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            saveSettingsUseCase(current.copy(simplifiedHome = enabled))
-        }
-    }
-
-    fun updateCalmMode(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            saveSettingsUseCase(
-                current.copy(
-                    calmModeEnabled = enabled,
-                    simplifiedHome = if (enabled) true else current.simplifiedHome,
-                    workflowAidsEnabled = if (enabled) false else current.workflowAidsEnabled
-                )
-            )
-        }
-    }
-
-    fun updateWorkflowAidsEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            saveSettingsUseCase(current.copy(workflowAidsEnabled = enabled))
-        }
-    }
-
     fun updateReducedMotionEnabled(enabled: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.settings
             saveSettingsUseCase(current.copy(reducedMotionEnabled = enabled))
         }
     }
-    
+
     fun updateDrywallDefaults(sheetArea: Double? = null, screwsPerSheet: Int? = null, mudGallons: Double? = null) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -145,7 +104,7 @@ class SettingsViewModel @Inject constructor(
             )
         }
     }
-    
+
     fun updatePaintDefaults(coverage: Double? = null, coats: Int? = null) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -221,27 +180,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun applyBusinessPreset(preset: BusinessPreset) {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            val updated = when (preset) {
-                BusinessPreset.COMPETITIVE -> current.copy(
-                    laborPercent = 15.0,
-                    markupPercent = 10.0
-                )
-                BusinessPreset.BALANCED -> current.copy(
-                    laborPercent = 20.0,
-                    markupPercent = 15.0
-                )
-                BusinessPreset.PREMIUM -> current.copy(
-                    laborPercent = 24.0,
-                    markupPercent = 20.0
-                )
-            }
-            saveSettingsUseCase(updated)
-        }
-    }
-    
     fun resetToDefaults() {
         viewModelScope.launch {
             saveSettingsUseCase(Settings.DEFAULT)
@@ -254,17 +192,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun recordBacktrack(fromStep: Int, toStep: Int) {
-        viewModelScope.launch {
-            uxMetricsRepository.recordBacktrack(fromStep, toStep)
-        }
-    }
-
-    fun resetUxMetrics() {
-        viewModelScope.launch {
-            uxMetricsRepository.resetMetrics()
-        }
-    }
 }
 
 data class SettingsUiState(
@@ -273,9 +200,3 @@ data class SettingsUiState(
     val isLoading: Boolean = true,
     val error: String? = null
 )
-
-enum class BusinessPreset {
-    COMPETITIVE,
-    BALANCED,
-    PREMIUM
-}

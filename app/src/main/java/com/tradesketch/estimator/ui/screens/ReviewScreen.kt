@@ -16,14 +16,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.Millimeters
+import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
+import com.tradesketch.estimator.ui.viewmodel.TakeoffType
+import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
+import com.tradesketch.estimator.ui.viewmodel.calculateForType
 
 @Composable
 fun ReviewScreen(
@@ -38,7 +43,8 @@ fun ReviewScreen(
     }
 
     val document = uiState.document
-    if (uiState.isLoading || document == null) {
+    val project = uiState.project
+    if (uiState.isLoading || document == null || project == null) {
         Column(
             modifier = modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -49,25 +55,19 @@ fun ReviewScreen(
         return
     }
 
-    val drywall = BlueprintTakeoffCalculator.drywallTakeoff(
-        document = document,
-        sheetAreaSqFt = document.params.drywallSheetSqFt,
-        wastePercent = document.params.wasteFactorPercent,
-        screwsPerSheet = 32,
-        mudGallonsPer100SqFt = 0.5,
-        includeCeilings = true
-    )
-    val concrete = BlueprintTakeoffCalculator.concreteTakeoff(
-        document = document,
-        thicknessFeet = Millimeters(document.params.concreteThicknessMm).toFeet(),
-        wastePercent = document.params.wasteFactorPercent
-    )
-    val paint = BlueprintTakeoffCalculator.paintTakeoff(
-        document = document,
-        coverageSqFtPerGallon = 350.0,
-        coats = document.params.paintCoats,
-        wastePercent = document.params.wasteFactorPercent
-    )
+    val calculator = remember { CalculateTakeoffUseCase() }
+    val inputs = remember(project, uiState.project?.takeoffSession) {
+        buildTakeoffInputs(project = project, settings = Settings.DEFAULT)
+    }
+    val drywall = remember(project, inputs) {
+        calculator.calculateForType(project = project, type = TakeoffType.DRYWALL, inputs = inputs)
+    }
+    val concrete = remember(project, inputs) {
+        calculator.calculateForType(project = project, type = TakeoffType.CONCRETE, inputs = inputs)
+    }
+    val paint = remember(project, inputs) {
+        calculator.calculateForType(project = project, type = TakeoffType.PAINT, inputs = inputs)
+    }
 
     LazyColumn(
         modifier = modifier

@@ -1,7 +1,7 @@
-TradeSketch Estimator 1.0.1
+TradeSketch Estimator 1.0.3
 
-What is new:
-- Major Blueprint Studio usability polish with simplified in-canvas controls
-- Improved 3D workflow and quick-room guidance for faster project setup
-- Stability improvements and crash fixes across editor flows
-- Play submission readiness updates (privacy policy hosting + listing assets)
+What's new:
+- Blueprint-first workspace polish across drawing, takeoff, and export flows
+- Improved estimate scope switching for drywall, concrete, gravel/mulch, and paint
+- Export improvements for PDF, CSV, JSON, and share actions
+- Stability and performance fixes in release build path

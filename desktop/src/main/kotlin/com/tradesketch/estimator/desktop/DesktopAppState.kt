@@ -5,9 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.CostingInputs
-import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.model.BlueprintCommand
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.BlueprintDocumentCommand
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
@@ -60,8 +61,8 @@ enum class WorkspaceTab(val label: String) {
 class DesktopAppState(
     private val storage: DesktopStorage = DesktopStorage()
 ) {
-    private val blueprintUndo = ArrayDeque<BlueprintDocument>()
-    private val blueprintRedo = ArrayDeque<BlueprintDocument>()
+    private val blueprintUndo = ArrayDeque<BlueprintCommand>()
+    private val blueprintRedo = ArrayDeque<BlueprintCommand>()
 
     var projects by mutableStateOf<List<Project>>(emptyList())
         private set
@@ -163,10 +164,23 @@ class DesktopAppState(
         persistProjects("Project renamed")
     }
 
-    fun updateBlueprintDocument(updated: BlueprintDocument, trackHistory: Boolean = true) {
+    fun updateBlueprintDocument(
+        updated: BlueprintDocument,
+        trackHistory: Boolean = true,
+        label: String = "Blueprint updated"
+    ) {
         val project = selectedProject ?: return
+        val current = project.authoritativeBlueprint()
+        val normalizedUpdated = updated.copy(projectId = project.id)
+        if (normalizedUpdated == current) return
         if (trackHistory) {
-            blueprintUndo.addLast(project.authoritativeBlueprint())
+            blueprintUndo.addLast(
+                BlueprintDocumentCommand(
+                    label = label,
+                    before = current,
+                    after = normalizedUpdated
+                )
+            )
             if (blueprintUndo.size > 120) {
                 blueprintUndo.removeFirst()
             }
@@ -174,27 +188,37 @@ class DesktopAppState(
         }
         updateSelectedProject {
             it.copy(
-                blueprintDocument = updated.copy(projectId = it.id),
+                blueprintDocument = normalizedUpdated,
                 updatedAt = System.currentTimeMillis()
             )
         }
-        persistProjects("Blueprint updated")
+        persistProjects(label)
     }
 
     fun undoBlueprint() {
         val project = selectedProject ?: return
         if (blueprintUndo.isEmpty()) return
-        val previous = blueprintUndo.removeLast()
-        blueprintRedo.addLast(project.authoritativeBlueprint())
-        updateBlueprintDocument(previous, trackHistory = false)
+        val command = blueprintUndo.removeLast()
+        val previous = command.undo(project.authoritativeBlueprint())
+        blueprintRedo.addLast(command)
+        updateBlueprintDocument(
+            updated = previous,
+            trackHistory = false,
+            label = "Undo: ${command.label}"
+        )
     }
 
     fun redoBlueprint() {
         val project = selectedProject ?: return
         if (blueprintRedo.isEmpty()) return
-        val next = blueprintRedo.removeLast()
-        blueprintUndo.addLast(project.authoritativeBlueprint())
-        updateBlueprintDocument(next, trackHistory = false)
+        val command = blueprintRedo.removeLast()
+        val next = command.apply(project.authoritativeBlueprint())
+        blueprintUndo.addLast(command)
+        updateBlueprintDocument(
+            updated = next,
+            trackHistory = false,
+            label = "Redo: ${command.label}"
+        )
     }
 
     fun selectTakeoffType(type: DesktopTakeoffType) {

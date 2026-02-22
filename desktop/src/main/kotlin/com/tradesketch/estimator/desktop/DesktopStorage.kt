@@ -2,29 +2,36 @@ package com.tradesketch.estimator.desktop
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
-import com.tradesketch.estimator.domain.model.Geometry
+import com.tradesketch.estimator.domain.calc.RoomLoopDetector
+import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.BlueprintOpening
+import com.tradesketch.estimator.domain.model.BlueprintParams
+import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
 import com.tradesketch.estimator.domain.model.Millimeters
-import com.tradesketch.estimator.domain.model.Opening
 import com.tradesketch.estimator.domain.model.OpeningType
+import com.tradesketch.estimator.domain.model.PaintSessionParams
+import com.tradesketch.estimator.domain.model.PointMm
+import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
+import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.Space
-import com.tradesketch.estimator.domain.model.SpaceTransform
 import com.tradesketch.estimator.domain.model.TakeoffScope
-import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
 import com.tradesketch.estimator.domain.model.DrywallSessionParams
 import com.tradesketch.estimator.domain.model.ConcreteSessionParams
 import com.tradesketch.estimator.domain.model.GravelSessionParams
-import com.tradesketch.estimator.domain.model.PaintSessionParams
-import com.tradesketch.estimator.domain.model.PricingSessionParams
-import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.WallSegment
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.TRUNCATE_EXISTING
 import java.nio.file.StandardOpenOption.WRITE
+import java.util.UUID
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToLong
+import kotlin.math.sin
 
 class DesktopStorage(
     private val baseDir: Path = Paths.get(
@@ -102,9 +109,8 @@ private data class ProjectJson(
     val updatedAt: Long
 ) {
     fun toProject(): Project {
-        val legacySpaces = spaces.orEmpty().map { it.toSpace() }
         val blueprint = blueprintDocument?.copy(projectId = id)
-            ?: BlueprintDocument.fromLegacySpaces(projectId = id, spaces = legacySpaces)
+            ?: legacySpacesToBlueprint(projectId = id, spaces = spaces.orEmpty())
         return Project(
             id = id,
             name = name,
@@ -136,27 +142,7 @@ private data class SpaceJson(
     val tags: List<String> = emptyList(),
     val openings: List<OpeningJson>,
     val transform: SpaceTransformJson? = null
-) {
-    fun toSpace(): Space = Space(
-        id = id,
-        name = name,
-        geometry = geometry.toGeometry(),
-        tags = tags.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSet(),
-        openings = openings.map { it.toOpening() },
-        transform = transform?.toTransform() ?: SpaceTransform()
-    )
-
-    companion object {
-        fun fromSpace(space: Space): SpaceJson = SpaceJson(
-            id = space.id,
-            name = space.name,
-            geometry = GeometryJson.fromGeometry(space.geometry),
-            tags = space.tags.toList(),
-            openings = space.openings.map { OpeningJson.fromOpening(it) },
-            transform = SpaceTransformJson.fromTransform(space.transform)
-        )
-    }
-}
+)
 
 private data class GeometryJson(
     val type: String,
@@ -167,46 +153,12 @@ private data class GeometryJson(
     val radius: Long? = null,
     val rectA: RectJson? = null,
     val rectB: RectJson? = null
-) {
-    fun toGeometry(): Geometry = when (type) {
-        "Rect" -> Geometry.Rect(Millimeters(length), Millimeters(width!!))
-        "Wall" -> Geometry.Wall(Millimeters(length), Millimeters(height!!))
-        "Slab" -> Geometry.Slab(Millimeters(length), Millimeters(width!!), Millimeters(thickness!!))
-        "Circle" -> Geometry.Circle(Millimeters(radius!!))
-        "LShape" -> Geometry.LShape(rectA!!.toRect(), rectB!!.toRect())
-        else -> throw IllegalArgumentException("Unknown geometry type: $type")
-    }
-
-    companion object {
-        fun fromGeometry(geometry: Geometry): GeometryJson = when (geometry) {
-            is Geometry.Rect -> GeometryJson("Rect", geometry.length.value, geometry.width.value)
-            is Geometry.Wall -> GeometryJson("Wall", geometry.length.value, height = geometry.height.value)
-            is Geometry.Slab -> GeometryJson(
-                "Slab",
-                geometry.length.value,
-                geometry.width.value,
-                thickness = geometry.thickness.value
-            )
-            is Geometry.Circle -> GeometryJson("Circle", radius = geometry.radius.value)
-            is Geometry.LShape -> GeometryJson(
-                "LShape",
-                rectA = RectJson.fromRect(geometry.rectA),
-                rectB = RectJson.fromRect(geometry.rectB)
-            )
-        }
-    }
-}
+)
 
 private data class RectJson(
     val length: Long,
     val width: Long
-) {
-    fun toRect(): Geometry.Rect = Geometry.Rect(Millimeters(length), Millimeters(width))
-
-    companion object {
-        fun fromRect(rect: Geometry.Rect): RectJson = RectJson(rect.length.value, rect.width.value)
-    }
-}
+)
 
 private data class SpaceTransformJson(
     val xFeet: Double = 0.0,
@@ -214,25 +166,7 @@ private data class SpaceTransformJson(
     val zFeet: Double = 0.0,
     val yawDegrees: Double = 0.0,
     val colorHex: Long = 0xFF4E79A7
-) {
-    fun toTransform(): SpaceTransform = SpaceTransform(
-        xFeet = xFeet,
-        yFeet = yFeet,
-        zFeet = zFeet,
-        yawDegrees = yawDegrees,
-        colorHex = colorHex
-    )
-
-    companion object {
-        fun fromTransform(transform: SpaceTransform): SpaceTransformJson = SpaceTransformJson(
-            xFeet = transform.xFeet,
-            yFeet = transform.yFeet,
-            zFeet = transform.zFeet,
-            yawDegrees = transform.yawDegrees,
-            colorHex = transform.colorHex
-        )
-    }
-}
+)
 
 private data class ProjectTakeoffSessionJson(
     val selectedScope: String = TakeoffScope.DRYWALL.name,
@@ -446,27 +380,153 @@ private data class OpeningJson(
     val wallPositionT: Double? = null,
     val sillHeight: Long? = null,
     val id: String? = null
-) {
-    fun toOpening(): Opening = Opening(
-        width = Millimeters(width),
-        height = Millimeters(height),
-        count = count,
-        type = type?.let { runCatching { OpeningType.valueOf(it) }.getOrNull() }
-            ?: if (Millimeters(height).toFeet() >= 6.0) OpeningType.DOOR else OpeningType.WINDOW,
-        wallPositionT = wallPositionT ?: 0.5,
-        sillHeight = Millimeters(sillHeight ?: 0L),
-        id = id ?: java.util.UUID.randomUUID().toString()
-    )
+)
 
-    companion object {
-        fun fromOpening(opening: Opening): OpeningJson = OpeningJson(
-            width = opening.width.value,
-            height = opening.height.value,
-            count = opening.count,
-            type = opening.type.name,
-            wallPositionT = opening.wallPositionT,
-            sillHeight = opening.sillHeight.value,
-            id = opening.id
+private fun legacySpacesToBlueprint(
+    projectId: String,
+    spaces: List<SpaceJson>
+): BlueprintDocument {
+    if (spaces.isEmpty()) return BlueprintDocument.empty(projectId)
+    val defaultParams = BlueprintParams()
+    val walls = mutableListOf<WallSegment>()
+    val openings = mutableListOf<BlueprintOpening>()
+    val rooms = mutableListOf<Room>()
+
+    spaces.forEach { space ->
+        val wall = space.toLegacyWallSegmentOrNull(defaultWallHeightMm = defaultParams.wallHeightMm)
+            ?: return@forEach
+        walls += wall
+        space.openings.forEachIndexed { openingIndex, opening ->
+            val count = opening.count.coerceAtLeast(1)
+            repeat(count) { copyIndex ->
+                val inferredType = opening.type
+                    ?.let { raw -> runCatching { OpeningType.valueOf(raw.uppercase()) }.getOrNull() }
+                    ?: if (Millimeters(opening.height.coerceAtLeast(1L)).toFeet() >= 6.0) {
+                        OpeningType.DOOR
+                    } else {
+                        OpeningType.WINDOW
+                    }
+                openings += BlueprintOpening(
+                    id = opening.id
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "${wall.id}-opening-${openingIndex + 1}-${copyIndex + 1}",
+                    wallId = wall.id,
+                    t = opening.wallPositionT ?: 0.5,
+                    widthMm = opening.width.coerceAtLeast(1L),
+                    heightMm = opening.height.coerceAtLeast(1L),
+                    sillMm = (opening.sillHeight ?: 0L).coerceAtLeast(0L),
+                    type = inferredType
+                ).normalized()
+            }
+        }
+    }
+
+    spaces.forEachIndexed { index, space ->
+        val polygon = space.toLegacyRoomPolygonOrNull() ?: return@forEachIndexed
+        if (polygon.size >= 3) {
+            rooms += Room(
+                id = space.id.ifBlank { "room-${index + 1}" },
+                name = space.name.ifBlank { "Room ${rooms.size + 1}" },
+                polygon = polygon,
+                tags = space.normalizedTags()
+            )
+        }
+    }
+
+    val resolvedRooms = if (rooms.isNotEmpty()) rooms else RoomLoopDetector.detectRooms(walls)
+    return BlueprintDocument(
+        projectId = projectId,
+        params = defaultParams,
+        walls = walls,
+        rooms = resolvedRooms,
+        openings = openings
+    )
+}
+
+private fun SpaceJson.normalizedTags(): Set<String> {
+    return tags.map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .toSet()
+}
+
+private fun SpaceJson.toLegacyWallSegmentOrNull(defaultWallHeightMm: Long): WallSegment? {
+    if (geometry.type != "Wall") return null
+    val localTransform = transform ?: SpaceTransformJson()
+    val lengthMm = geometry.length.coerceAtLeast(1L)
+    val centerXmm = Millimeters.fromFeet(localTransform.xFeet).value
+    val centerYmm = Millimeters.fromFeet(localTransform.zFeet).value
+    val halfLengthFeet = Millimeters(lengthMm).toFeet() / 2.0
+    val yawRadians = Math.toRadians(localTransform.yawDegrees)
+    val dxMm = Millimeters.fromFeet(cos(yawRadians) * halfLengthFeet).value
+    val dyMm = Millimeters.fromFeet(sin(yawRadians) * halfLengthFeet).value
+    return WallSegment(
+        id = id.ifBlank { UUID.randomUUID().toString() },
+        start = PointMm(centerXmm - dxMm, centerYmm - dyMm),
+        end = PointMm(centerXmm + dxMm, centerYmm + dyMm),
+        height = Millimeters((geometry.height ?: defaultWallHeightMm).coerceAtLeast(1L)),
+        tags = normalizedTags()
+    )
+}
+
+private fun SpaceJson.toLegacyRoomPolygonOrNull(): List<PointMm>? {
+    val localTransform = transform ?: SpaceTransformJson()
+    val centerXmm = Millimeters.fromFeet(localTransform.xFeet).value
+    val centerYmm = Millimeters.fromFeet(localTransform.zFeet).value
+    return when (geometry.type) {
+        "Rect", "Slab" -> rectanglePolygon(
+            centerX = centerXmm,
+            centerY = centerYmm,
+            lengthMm = geometry.length.coerceAtLeast(1L),
+            widthMm = (geometry.width ?: geometry.length).coerceAtLeast(1L),
+            yawDegrees = localTransform.yawDegrees
+        )
+        "LShape" -> {
+            val rectA = geometry.rectA ?: return null
+            val rectB = geometry.rectB ?: return null
+            rectanglePolygon(
+                centerX = centerXmm,
+                centerY = centerYmm,
+                lengthMm = maxOf(rectA.length, rectB.length).coerceAtLeast(1L),
+                widthMm = maxOf(rectA.width, rectB.width).coerceAtLeast(1L),
+                yawDegrees = localTransform.yawDegrees
+            )
+        }
+        "Circle" -> {
+            val radius = geometry.radius?.coerceAtLeast(1L) ?: return null
+            List(16) { index ->
+                val radians = (2.0 * PI * index.toDouble()) / 16.0
+                PointMm(
+                    x = centerXmm + (cos(radians) * radius.toDouble()).roundToLong(),
+                    y = centerYmm + (sin(radians) * radius.toDouble()).roundToLong()
+                )
+            }
+        }
+        else -> null
+    }
+}
+
+private fun rectanglePolygon(
+    centerX: Long,
+    centerY: Long,
+    lengthMm: Long,
+    widthMm: Long,
+    yawDegrees: Double
+): List<PointMm> {
+    val halfLength = lengthMm / 2.0
+    val halfWidth = widthMm / 2.0
+    val radians = Math.toRadians(yawDegrees)
+    val localCorners = listOf(
+        Pair(-halfLength, -halfWidth),
+        Pair(halfLength, -halfWidth),
+        Pair(halfLength, halfWidth),
+        Pair(-halfLength, halfWidth)
+    )
+    return localCorners.map { (lx, ly) ->
+        val rotatedX = (lx * cos(radians)) - (ly * sin(radians))
+        val rotatedY = (lx * sin(radians)) + (ly * cos(radians))
+        PointMm(
+            x = centerX + rotatedX.roundToLong(),
+            y = centerY + rotatedY.roundToLong()
         )
     }
 }

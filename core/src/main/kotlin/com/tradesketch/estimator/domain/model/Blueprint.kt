@@ -2,12 +2,10 @@ package com.tradesketch.estimator.domain.model
 
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
-import kotlin.math.sin
 
 data class PointMm(
     val x: Long,
@@ -188,57 +186,6 @@ data class BlueprintDocument(
         fun empty(projectId: String): BlueprintDocument {
             return BlueprintDocument(projectId = projectId)
         }
-
-        fun fromLegacySpaces(
-            projectId: String,
-            spaces: List<Space>,
-            params: BlueprintParams = BlueprintParams()
-        ): BlueprintDocument {
-            val walls = spaces.mapNotNull { it.toWallSegmentOrNull() }
-            val roomSpaces = spaces.filter { it.geometry is Geometry.Rect || it.geometry is Geometry.LShape }
-            val rooms = roomSpaces.mapIndexed { index, space ->
-                Room(
-                    id = "room-${index + 1}",
-                    name = space.name,
-                    polygon = spacePolygon(space),
-                    tags = space.tags
-                )
-            }
-            val openings = spaces.flatMap { space ->
-                space.openings.mapIndexed { index, opening ->
-                    BlueprintOpening(
-                        id = opening.id.ifBlank { "${space.id}-opening-${index + 1}" },
-                        wallId = space.id,
-                        t = opening.wallPositionT,
-                        widthMm = opening.width.value,
-                        heightMm = opening.height.value,
-                        sillMm = opening.sillHeight.value,
-                        type = opening.type
-                    ).normalized()
-                }
-            }
-            return BlueprintDocument(
-                projectId = projectId,
-                params = params,
-                walls = walls,
-                rooms = rooms,
-                openings = openings
-            )
-        }
-
-        private fun spacePolygon(space: Space): List<PointMm> {
-            val geometry = space.geometry as? Geometry.Rect ?: return emptyList()
-            val centerX = Millimeters.fromFeet(space.transform.xFeet).value
-            val centerY = Millimeters.fromFeet(space.transform.zFeet).value
-            val halfLength = geometry.length.value / 2
-            val halfWidth = geometry.width.value / 2
-            return listOf(
-                PointMm(centerX - halfLength, centerY - halfWidth),
-                PointMm(centerX + halfLength, centerY - halfWidth),
-                PointMm(centerX + halfLength, centerY + halfWidth),
-                PointMm(centerX - halfLength, centerY + halfWidth)
-            )
-        }
     }
 
     fun wallById(id: String): WallSegment? = walls.firstOrNull { it.id == id }
@@ -287,31 +234,6 @@ data class BlueprintSnapSettings(
     val thresholdFeet: Double = 0.75
 )
 
-fun Space.toWallSegmentOrNull(): WallSegment? {
-    val wall = geometry as? Geometry.Wall ?: return null
-    val halfLength = wall.length.toFeet() / 2.0
-    val yawRadians = Math.toRadians(transform.yawDegrees)
-    val dx = cos(yawRadians) * halfLength
-    val dy = sin(yawRadians) * halfLength
-    val centerX = Millimeters.fromFeet(transform.xFeet).value
-    val centerY = Millimeters.fromFeet(transform.zFeet).value
-    val start = PointMm(
-        x = (centerX - Millimeters.fromFeet(dx).value),
-        y = (centerY - Millimeters.fromFeet(dy).value)
-    )
-    val end = PointMm(
-        x = (centerX + Millimeters.fromFeet(dx).value),
-        y = (centerY + Millimeters.fromFeet(dy).value)
-    )
-    return WallSegment(
-        id = id,
-        start = start,
-        end = end,
-        height = wall.height,
-        tags = tags
-    )
-}
-
 fun Project.authoritativeBlueprint(): BlueprintDocument {
     val current = blueprintDocument
     if (current.projectId == id) {
@@ -321,71 +243,6 @@ fun Project.authoritativeBlueprint(): BlueprintDocument {
         return current.copy(projectId = id)
     }
     return BlueprintDocument.empty(projectId = id)
-}
-
-fun BlueprintDocument.toLegacySpaces(): List<Space> {
-    val roomSpaces = rooms.map { room ->
-        val polygon = room.polygon
-        val minX = polygon.minOfOrNull { it.x } ?: 0L
-        val maxX = polygon.maxOfOrNull { it.x } ?: 0L
-        val minY = polygon.minOfOrNull { it.y } ?: 0L
-        val maxY = polygon.maxOfOrNull { it.y } ?: 0L
-        val lengthMm = (maxX - minX).coerceAtLeast(1L)
-        val widthMm = (maxY - minY).coerceAtLeast(1L)
-        Space(
-            id = room.id,
-            name = room.name,
-            geometry = Geometry.Rect(
-                length = Millimeters(lengthMm),
-                width = Millimeters(widthMm)
-            ),
-            tags = room.tags,
-            transform = SpaceTransform(
-                xFeet = Millimeters((minX + maxX) / 2).toFeet(),
-                zFeet = Millimeters((minY + maxY) / 2).toFeet()
-            )
-        )
-    }
-
-    val openingsByWall = openings.groupBy { it.wallId }
-    val wallSpaces = walls.map { wall ->
-        val openingModels = openingsByWall[wall.id].orEmpty().map { opening ->
-            Opening(
-                width = Millimeters(opening.widthMm),
-                height = Millimeters(opening.heightMm),
-                count = 1,
-                type = opening.type,
-                wallPositionT = opening.t,
-                sillHeight = Millimeters(opening.sillMm),
-                id = opening.id
-            )
-        }
-        val centerX = ((wall.start.x + wall.end.x) / 2.0).roundToLong()
-        val centerY = ((wall.start.y + wall.end.y) / 2.0).roundToLong()
-        val yaw = Math.toDegrees(
-            atan2(
-                (wall.end.y - wall.start.y).toDouble(),
-                (wall.end.x - wall.start.x).toDouble()
-            )
-        )
-        Space(
-            id = wall.id,
-            name = "Wall",
-            geometry = Geometry.Wall(
-                length = Millimeters(wall.lengthMillimeters().coerceAtLeast(1L)),
-                height = wall.height
-            ),
-            tags = wall.tags,
-            openings = openingModels,
-            transform = SpaceTransform(
-                xFeet = Millimeters(centerX).toFeet(),
-                zFeet = Millimeters(centerY).toFeet(),
-                yawDegrees = yaw
-            )
-        )
-    }
-
-    return wallSpaces + roomSpaces
 }
 
 fun List<PointMm>.boundsOrNull(): Pair<PointMm, PointMm>? {
@@ -403,9 +260,7 @@ fun List<PointMm>.boundsOrNull(): Pair<PointMm, PointMm>? {
     return PointMm(minX, minY) to PointMm(maxX, maxY)
 }
 
-/**
- * Helper functions for migrating from Space-based to BlueprintDocument-based code.
- */
+/** Helper functions for working with authoritative blueprint elements. */
 fun BlueprintDocument.allElementIds(): Set<String> {
     return (walls.map { it.id } + rooms.map { it.id } + openings.map { it.id }).toSet()
 }

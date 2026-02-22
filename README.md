@@ -1,248 +1,80 @@
 # TradeSketch Estimator
 
-**Material takeoff estimates for skilled trades—completely offline**
+Offline, blueprint-first material takeoffs for skilled trades.
 
-[![API](https://img.shields.io/badge/API-26%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=26)
-[![Kotlin](https://img.shields.io/badge/kotlin-2.0.21-blue.svg?logo=kotlin)](http://kotlinlang.org)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+## Current Release Snapshot (Audited: February 21, 2026)
 
-## Overview
+- Package: `com.tradesketch.estimator`
+- Version: `1.0.3` (`versionCode = 5`)
+- SDK levels: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
+- Output artifact: `app/build/outputs/bundle/release/app-release.aab`
 
-TradeSketch Estimator is a privacy-first, offline Android app for calculating material quantities for construction projects. Built for contractors, skilled trades, and serious DIY users.
+## Product Flow (Current UI)
 
-### Key Features
+1. Welcome screen (`WelcomeScreenPro`)
+2. Project Ritual (name + primary trade)
+3. Workspace with rail tabs:
+   - Blueprint
+   - Materials
+   - Quantities
+   - Export
+   - Settings/About
 
-- ✅ **100% Offline** - No internet required, no data collection
-- 🔒 **Privacy First** - All data stays on your device
-- 📐 **Multiple Trade Types** - Drywall, concrete, paint, gravel/mulch
-- 📋 **Smart Templates** - Pre-built projects for common scenarios
-- 📊 **Accurate Calculations** - Industry-standard formulas with waste factors
-- 📄 **Export Options** - PDF, CSV, share as text
-- 🎨 **Material Design 3** - Modern, accessible UI
-- ♿ **Accessible** - TalkBack compatible, 48dp touch targets
+Key capabilities:
 
-## Tech Stack
+- Blueprint drafting with wall, door, and window placement
+- Trade-specific takeoffs: drywall, concrete, gravel/mulch, paint
+- Quantity and pricing parameter controls
+- Export/share as PDF, CSV, JSON, or text intent
+- Local project persistence with DataStore
 
-- **Language:** Kotlin
-- **UI:** Jetpack Compose + Material Design 3
-- **Architecture:** MVVM + Clean Architecture
-- **DI:** Hilt (Dagger)
-- **Async:** Kotlin Coroutines + Flow
-- **Storage:** DataStore (key-value pairs)
-- **Navigation:** Navigation Compose
-- **Build:** Gradle Kotlin DSL
-- **Min SDK:** 26 (Android 8.0)
-- **Target SDK:** 35 (Android 15)
+## Privacy and Policy Posture
 
-## Project Structure
+- No `INTERNET` permission in manifest
+- No analytics or crash-reporting SDKs
+- No account/login requirement
+- `android:allowBackup="false"` to keep project data local-only by default
 
-```
-core/src/main/kotlin/com/tradesketch/estimator/
-├── domain/
-│   ├── model/            # Shared domain models (BlueprintDocument, WallSegment, Room, Units, Money)
-│   └── calc/             # Shared takeoff calculation engine (BlueprintTakeoffCalculator)
-└── utils/                # Shared non-Android utilities (DimensionParser)
+## Build and Validation
 
-app/src/main/java/com/tradesketch/estimator/
-├── ui/                   # Android Compose UI (BlueprintScreen, TakeoffScreen, etc.)
-├── data/                 # Android persistence + repositories
-├── domain/usecase/       # Android use case wiring
-├── di/                   # Hilt dependency injection modules
-└── utils/                # Android-only utilities (e.g. export manager)
+Windows (PowerShell):
 
-desktop/src/main/kotlin/com/tradesketch/estimator/desktop/
-└── Compose Desktop app shell
+```powershell
+./gradlew.bat :app:testDebugUnitTest
+./gradlew.bat :core:test
+./gradlew.bat :app:lint
+./gradlew.bat :app:lintRelease
+./gradlew.bat :app:bundleRelease
 ```
 
-## Domain Model
+Scripted release path:
 
-### Core Concepts
-
-1. **Millimeters** - All lengths stored as `Long` (millimeters) to avoid floating-point precision issues
-2. **Money** - Currency stored as `Long` (cents) for exact calculations
-3. **Geometry** - Sealed class hierarchy: Rect, Wall, Slab, Circle, LShape
-4. **Space** - Represents a measurable area with geometry and optional openings
-5. **Project** - Collection of spaces with metadata
-
-### Takeoff Types
-
-- **Drywall:** Calculates sheets, screws, and joint compound
-- **Concrete:** Calculates cubic yards (and optional bag equivalent)
-- **Gravel/Mulch:** Calculates cubic yards and tons based on density
-- **Paint:** Calculates gallons based on coverage and number of coats
-
-## Building
-
-### Prerequisites
-
-- JDK 17+
-- Android SDK with API 34
-- Android Studio Hedgehog or later (recommended)
-
-### Build Commands
-
-```bash
-# Clean build
-./gradlew clean
-
-# Run tests
-./gradlew :app:testDebugUnitTest
-
-# Run lint
-./gradlew :app:lint
-
-# Build debug APK
-./gradlew assembleDebug
-
-# Build release AAB (requires signing configuration)
-./gradlew :app:bundleRelease
-
-# Run desktop app (Compose Desktop)
-./gradlew :desktop:run
+```powershell
+./scripts/01-check-prerequisites.ps1
+./scripts/02-generate-keystore.ps1
+./scripts/03-build-release.ps1
 ```
 
-### Desktop App
+## Signing Configuration
 
-A Compose Desktop version is included in `desktop/` and reuses shared logic from the `:core` module.
+Release signing values are resolved from environment variables first, then `local.properties`:
 
-- Desktop docs: `desktop/README.md`
-- Run: `./gradlew :desktop:run`
-- Package installer: `./gradlew :desktop:packageDistributionForCurrentOS`
+- `KEYSTORE_FILE`
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
 
-### Release Build
+`./scripts/03-build-release.ps1` now fails fast if signing values are missing or invalid. It does not auto-generate fallback keys for Play builds.
 
-1. Generate a keystore (if you don't have one):
-```bash
-keytool -genkey -v -keystore release.keystore \
-  -alias release-key -keyalg RSA -keysize 2048 -validity 10000
-```
+## Play-Store Docs
 
-2. Set environment variables:
-```bash
-export KEYSTORE_PASSWORD=your_keystore_password
-export KEY_ALIAS=release-key
-export KEY_PASSWORD=your_key_password
-```
-
-3. Update `app/build.gradle.kts` with signing configuration (see BUILD-INSTRUCTIONS.md)
-
-4. Build:
-```bash
-./gradlew bundleRelease
-```
-
-The signed AAB will be at: `app/build/outputs/bundle/release/app-release.aab`
-
-## Testing
-
-```bash
-# Unit tests
-./gradlew test
-
-# View test report
-open app/build/reports/tests/testDebugUnitTest/index.html
-```
-
-Test coverage includes:
-- Takeoff calculator formulas
-- Unit conversions (feet/inches ↔ millimeters)
-- Geometry area calculations
-- Edge cases and negative input handling
-
-## Architecture
-
-### Clean Architecture Layers
-
-1. **UI Layer** (`ui/`) - Jetpack Compose screens and components
-2. **Domain Layer** (`domain/`) - Business logic, independent of frameworks
-3. **Data Layer** (`data/`) - Persistence and data sources
-
-### MVVM Pattern
-
-- **Model:** Domain entities and business logic
-- **View:** Compose UI with no business logic
-- **ViewModel:** Manages UI state, handles user events, calls use cases
-
-### Dependency Injection
-
-Hilt provides:
-- Application-scoped singletons (DataStore, repositories)
-- ViewModel injection
-- Easy testing with test modules
-
-## Privacy & Security
-
-- ✅ **No data collection** - Zero analytics, crash reporting, or tracking
-- ✅ **No network calls** - Completely offline
-- ✅ **No dangerous permissions** - Only SAF for user-initiated exports
-- ✅ **No accounts** - No sign-in or authentication
-- ✅ **Local storage only** - DataStore for projects and settings
-- ✅ **R8 enabled** - Code shrinking and obfuscation for release builds
-
-## Play Store Compliance
-
-- ✅ targetSdk 35
-- ✅ Privacy policy (in-app + hosted)
-- ✅ Data safety form completed (no data collected)
-- ✅ Content rating: Everyone (E)
-- ✅ OSS license attribution
-- ✅ No misleading claims (disclaimers present)
-- ✅ Accessibility validated
-
-## Roadmap
-
-### v1.0.0 (Current)
-- Basic geometry models
-- 4 takeoff types
-- Templates
-- PDF/CSV export
-- Offline persistence
-
-### Future Considerations
-- L-shaped rooms
-- Circular spaces
-- Custom material libraries
-- Imperial + Metric units
-- Backup/restore projects
-
-## Contributing
-
-This project follows standard Android development practices:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run lint and tests
-5. Submit a pull request
-
-## License
-
-```
-Copyright 2026 TradeSketch
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
-
-## Support
-
-- **Email:** built.to.cell@gmail.com
-- **Privacy Policy:** See `store-assets/legal/privacy-policy.html`
-- **Issues:** GitHub Issues (for bug reports and feature requests)
+- Launch runbook: `PLAY-STORE-LAUNCH-GUIDE.md`
+- Submission guide: `documentation/SUBMISSION-GUIDE.md`
+- Compliance checklist: `documentation/COMPLIANCE-CHECKLIST.md`
+- Testing checklist: `documentation/TESTING-NOTES.md`
+- Build details: `documentation/BUILD-INSTRUCTIONS.md`
+- Audit report: `documentation/ANDROID-AUDIT-2026-02-21.md`
 
 ## Disclaimer
 
-TradeSketch Estimator provides material takeoff estimates for informational purposes only. Always verify quantities, measurements, and pricing with actual site conditions, local building codes, and material suppliers before proceeding with construction work. The developers assume no liability for any decisions made based on estimates from this app.
-
----
-
-**Built with ❤️ for the skilled trades community**
+TradeSketch provides estimate-only material quantities. Always verify site conditions, local code requirements, and supplier pricing before purchase or build execution.

@@ -16,15 +16,7 @@ class UxMetricsRepositoryImpl @Inject constructor(
         dataStore.recordTap(task)
     }
 
-    override suspend fun recordBacktrack(fromStep: Int, toStep: Int) {
-        dataStore.recordBacktrack(fromStep, toStep)
-    }
-
     override suspend fun recordTimeToFirstEstimate(timeMs: Long) {
         dataStore.recordTimeToFirstEstimate(timeMs)
-    }
-
-    override suspend fun resetMetrics() {
-        dataStore.resetMetrics()
     }
 }

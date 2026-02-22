@@ -1,51 +1,32 @@
-TradeSketch Estimator: Fast, Accurate Material Takeoffs for Skilled Trades
+TradeSketch Estimator: Offline Blueprint-First Material Takeoffs
 
-Make professional material estimates for drywall, concrete, paint, and gravel/mulch projects—completely offline, with no account required.
+Build faster, cleaner estimates for drywall, concrete, gravel/mulch, and paint work. TradeSketch is designed for contractors, estimators, and serious DIY users who need practical quantity numbers without cloud accounts or subscriptions.
 
 FEATURES:
-• Model spaces with simple measurements (rooms, walls, slabs, yard beds)
-• Account for doors and windows automatically
-• Choose from preset templates or start from scratch
-• Instant calculations for drywall sheets, concrete yards, paint gallons, and more
-• Customize waste percentages, sheet sizes, and material parameters
-• Export estimates as PDF or CSV
-• Share estimates via text or email
-• No internet required—works anywhere
+- Blueprint-first workflow for walls, openings, and room surfaces
+- Trade-specific takeoff modes: drywall, concrete, gravel/mulch, paint
+- Materials and quantities views with adjustable waste and pricing inputs
+- Smart warnings to catch low/high waste and margin assumptions
+- Export options: PDF, CSV, JSON, and shareable report text
+- Business identity fields for branded estimate output
 
 BUILT FOR:
-• Contractors and estimators
-• Skilled trades (drywall, concrete, painting)
-• Remodelers and builders
-• Serious DIY enthusiasts
-• Anyone who needs fast, reliable quantity takeoffs
+- Drywall crews and remodelers
+- Concrete and sitework estimators
+- General contractors and project managers
+- Skilled trades teams needing fast field-side estimates
 
-TEMPLATES INCLUDED:
-• Bedroom (4 walls + ceiling with openings)
-• Garage (concrete slab)
-• Driveway (concrete slab)
-• Yard bed (gravel/mulch)
+OFFLINE + PRIVACY:
+- No account required
+- No ads or tracking SDKs
+- No internet permission required
+- Data stays local to your app install
 
-ESTIMATES PROVIDED:
-• Drywall: sheets, screws, joint compound
-• Concrete: cubic yards (with optional bag equivalent)
-• Gravel/Mulch: cubic yards and tons
-• Paint: gallons based on coverage and coats
+OUTPUT YOU CAN USE:
+- Drywall: sheet counts, screws, mud, totals
+- Concrete: slab-based yardage and pricing
+- Gravel/Mulch: yards/tons with density controls
+- Paint: wall-area-based gallons and pricing
 
-PRIVACY & SECURITY:
-• 100% offline—no data collection
-• No account or sign-in required
-• No ads or tracking
-• All data stays on your device
-• Minimal permissions (export files only when you choose)
-
-ACCURACY & DISCLAIMERS:
-All estimates include industry-standard waste factors and are clearly labeled as "Estimate Only." Always verify quantities with actual site conditions, local building codes, and material suppliers before purchasing or starting work.
-
-PERFECT FOR QUICK ESTIMATES:
-Get a ballpark quantity in under 60 seconds using templates, or model complex spaces with precision. Whether you're bidding a job, planning a DIY project, or comparing quotes, TradeSketch Estimator gives you confidence in your numbers.
-
-NO HIDDEN COSTS:
-One-time purchase. No subscriptions. No in-app purchases. No surprises.
-
-START ESTIMATING TODAY:
-Download TradeSketch Estimator and take the guesswork out of material takeoffs.
+IMPORTANT:
+TradeSketch provides estimate-only planning values. Always verify field dimensions, site conditions, and supplier pricing before purchase or construction.
