@@ -1,5 +1,8 @@
 # TradeSketch UX Benchmark (February 12, 2026)
 
+> Historical benchmark note (February 21, 2026): This document records research and design direction from an earlier phase.
+> It should not be treated as the current product behavior spec.
+
 ## Scope
 This note captures UX patterns from successful estimating/takeoff products and maps them to TradeSketch refinements implemented in this sprint.
 

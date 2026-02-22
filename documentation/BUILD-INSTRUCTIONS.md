@@ -1,18 +1,16 @@
 # Build Instructions
 
 ## TradeSketch Estimator
-Updated: February 11, 2026
-
-This document reflects the current build setup in this repository.
+Updated: February 21, 2026
 
 ---
 
 ## 1) Prerequisites
 
 - JDK 17+
-- Android SDK with Platform 35 installed
+- Android SDK Platform 35 + build tools
 - Android Studio (recent stable)
-- ADB available for device install/testing
+- ADB (for optional device testing)
 
 Project baseline:
 
@@ -22,7 +20,7 @@ Project baseline:
 
 ---
 
-## 2) Recommended Script-First Workflow (Windows)
+## 2) Script-First Workflow (Windows)
 
 From repo root:
 
@@ -32,10 +30,10 @@ From repo root:
 ./scripts/03-build-release.ps1
 ```
 
-What these scripts cover:
+What this covers:
 
 - Environment checks
-- Keystore generation/signing variable setup
+- Keystore generation/signing config setup
 - Unit tests + lint + release AAB build
 
 ---
@@ -48,28 +46,19 @@ Debug build:
 ./gradlew.bat assembleDebug
 ```
 
-Unit tests:
+Automated validation:
 
 ```powershell
 ./gradlew.bat :app:testDebugUnitTest
-```
-
-Lint:
-
-```powershell
+./gradlew.bat :core:test
 ./gradlew.bat :app:lint
+./gradlew.bat :app:lintRelease
 ```
 
 Release bundle:
 
 ```powershell
 ./gradlew.bat :app:bundleRelease
-```
-
-Desktop build (separate pipeline):
-
-```powershell
-./gradlew.bat :desktop:build
 ```
 
 Expected release output:
@@ -87,15 +76,25 @@ Release signing values are read from environment variables or `local.properties`
 - `KEY_ALIAS`
 - `KEY_PASSWORD`
 
-If these are missing, `scripts/03-build-release.ps1` now auto-generates a local fallback keystore at:
+Important:
 
-- `keystore/local-release.keystore`
-
-and exports temporary local signing values so release still builds signed.
+- `scripts/03-build-release.ps1` now fails if signing keys are missing/invalid.
+- The release script does not auto-generate fallback signing keys for Play builds.
 
 ---
 
-## 5) Install Debug Build to Device
+## 5) Release Build Behavior
+
+In `app/build.gradle.kts`, release shrinking is currently disabled:
+
+- `isMinifyEnabled = false`
+- `isShrinkResources = false`
+
+This is allowed for Play submission, but update docs/scripts together if enabling shrink in future.
+
+---
+
+## 6) Optional Device Install (Debug APK)
 
 ```powershell
 adb devices -l
@@ -105,40 +104,35 @@ adb shell am start -n com.tradesketch.estimator/.MainActivity
 
 ---
 
-## 6) Current Release Build Behavior
-
-In `app/build.gradle.kts`, release minification/shrinking is currently disabled:
-
-- `isMinifyEnabled = false`
-- `isShrinkResources = false`
-
-This is acceptable for Play submission, but if you enable shrinking later, update this file and release docs/scripts together.
-
----
-
 ## 7) Troubleshooting
 
-### ADB shows no device
-- Reconnect USB
-- Ensure USB debugging is enabled
-- Accept RSA prompt on phone
-- Run `adb kill-server && adb start-server`
+### Signing failure
 
-### Build fails due to signing
 - Re-run `./scripts/02-generate-keystore.ps1`
-- Verify signing env vars
+- Validate keys in `local.properties`
+- Ensure `KEYSTORE_FILE` path and alias/password values are correct
 
 ### Gradle dependency issues
-- `./gradlew.bat --refresh-dependencies`
-- Verify internet access and SDK setup
+
+```powershell
+./gradlew.bat --refresh-dependencies
+```
+
+### ADB shows no devices
+
+```powershell
+adb kill-server
+adb start-server
+adb devices -l
+```
 
 ---
 
-## 8) Keep In Sync
+## 8) Keep in Sync
 
-Whenever SDK levels, signing flow, or build type flags change, update:
+When SDK/signing/release behavior changes, update these in the same PR:
 
 - `documentation/BUILD-INSTRUCTIONS.md`
 - `documentation/COMPLIANCE-CHECKLIST.md`
 - `documentation/SUBMISSION-GUIDE.md`
-- Relevant scripts under `scripts/`
+- `PLAY-STORE-LAUNCH-GUIDE.md`

@@ -51,12 +51,11 @@ class TakeoffViewModel @Inject constructor(
         projectObserverJob?.cancel()
         _uiState.update { it.copy(isLoading = true, error = null) }
         projectObserverJob = viewModelScope.launch {
-            combine(
-                repository.getProjects().map { it.find { p -> p.id == projectId } },
-                settingsRepository.getSettings()
-            ) { project, settings ->
-                Pair(project, settings)
-            }.collect { (project, settings) ->
+            projectAndSettingsFlow(
+                projectRepository = repository,
+                settingsRepository = settingsRepository,
+                projectId = projectId
+            ).collect { (project, settings) ->
                 if (project != null) {
                     val session = project.takeoffSession
                     val hasPersistedSession = session != ProjectTakeoffSession()
@@ -446,42 +445,48 @@ enum class TakeoffPlaybook {
     SAFETY_FIRST
 }
 
+private val DEFAULT_DRYWALL_SESSION = DrywallSessionParams()
+private val DEFAULT_CONCRETE_SESSION = ConcreteSessionParams()
+private val DEFAULT_GRAVEL_SESSION = GravelSessionParams()
+private val DEFAULT_PAINT_SESSION = PaintSessionParams()
+private val DEFAULT_PRICING_SESSION = PricingSessionParams()
+
 data class DrywallParams(
-    val sheetAreaSqFt: Double = 32.0,
-    val wastePercent: Double = 10.0,
-    val screwsPerSheet: Int = 32,
-    val mudGallonsPer100SqFt: Double = 0.5,
-    val includeCeilings: Boolean = true
+    val sheetAreaSqFt: Double = DEFAULT_DRYWALL_SESSION.sheetAreaSqFt,
+    val wastePercent: Double = DEFAULT_DRYWALL_SESSION.wastePercent,
+    val screwsPerSheet: Int = DEFAULT_DRYWALL_SESSION.screwsPerSheet,
+    val mudGallonsPer100SqFt: Double = DEFAULT_DRYWALL_SESSION.mudGallonsPer100SqFt,
+    val includeCeilings: Boolean = DEFAULT_DRYWALL_SESSION.includeCeilings
 )
 
 data class ConcreteParams(
-    val thicknessFeet: Double = 0.33,
-    val wastePercent: Double = 5.0
+    val thicknessFeet: Double = DEFAULT_CONCRETE_SESSION.thicknessFeet,
+    val wastePercent: Double = DEFAULT_CONCRETE_SESSION.wastePercent
 )
 
 data class GravelParams(
-    val depthFeet: Double = 0.25,
-    val densityTonsPerYard: Double = 1.4,
-    val wastePercent: Double = 10.0
+    val depthFeet: Double = DEFAULT_GRAVEL_SESSION.depthFeet,
+    val densityTonsPerYard: Double = DEFAULT_GRAVEL_SESSION.densityTonsPerYard,
+    val wastePercent: Double = DEFAULT_GRAVEL_SESSION.wastePercent
 )
 
 data class PaintParams(
-    val coverageSqFtPerGallon: Double = 350.0,
-    val coats: Int = 2,
-    val wastePercent: Double = 5.0
+    val coverageSqFtPerGallon: Double = DEFAULT_PAINT_SESSION.coverageSqFtPerGallon,
+    val coats: Int = DEFAULT_PAINT_SESSION.coats,
+    val wastePercent: Double = DEFAULT_PAINT_SESSION.wastePercent
 )
 
 data class PricingParams(
-    val drywallSheetCost: Double = 17.5,
-    val drywallScrewCost: Double = 0.01,
-    val drywallMudCost: Double = 9.5,
-    val concreteYardCost: Double = 165.0,
-    val gravelYardCost: Double = 52.0,
-    val gravelTonCost: Double = 36.0,
-    val paintGallonCost: Double = 38.0,
-    val laborPercent: Double = 20.0,
-    val markupPercent: Double = 15.0,
-    val taxPercent: Double = 8.0
+    val drywallSheetCost: Double = DEFAULT_PRICING_SESSION.drywallSheetCost,
+    val drywallScrewCost: Double = DEFAULT_PRICING_SESSION.drywallScrewCost,
+    val drywallMudCost: Double = DEFAULT_PRICING_SESSION.drywallMudCost,
+    val concreteYardCost: Double = DEFAULT_PRICING_SESSION.concreteYardCost,
+    val gravelYardCost: Double = DEFAULT_PRICING_SESSION.gravelYardCost,
+    val gravelTonCost: Double = DEFAULT_PRICING_SESSION.gravelTonCost,
+    val paintGallonCost: Double = DEFAULT_PRICING_SESSION.paintGallonCost,
+    val laborPercent: Double = DEFAULT_PRICING_SESSION.laborPercent,
+    val markupPercent: Double = DEFAULT_PRICING_SESSION.markupPercent,
+    val taxPercent: Double = DEFAULT_PRICING_SESSION.taxPercent
 ) {
     companion object {
         fun fromSettings(settings: Settings): PricingParams {

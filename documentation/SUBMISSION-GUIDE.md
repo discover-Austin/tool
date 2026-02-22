@@ -1,38 +1,57 @@
 # Google Play Submission Guide
 
 ## TradeSketch Estimator
-Updated: February 12, 2026
+Updated: February 21, 2026
 
-This guide is aligned with the current repo structure and scripts.
+Use this as the concise checklist for submission day.
 
 ---
 
-## 1) Release Prep (Local)
+## 1) Build Gate (Must Pass)
 
-Run from repo root on Windows PowerShell:
+From repo root:
 
 ```powershell
-./scripts/01-check-prerequisites.ps1
+./gradlew.bat :app:testDebugUnitTest
+./gradlew.bat :core:test
+./gradlew.bat :app:lint
+./gradlew.bat :app:lintRelease
+./gradlew.bat :app:bundleRelease
+```
+
+Expected artifact:
+
+- `app/build/outputs/bundle/release/app-release.aab`
+
+Expected metadata for current release:
+
+- Package: `com.tradesketch.estimator`
+- Version: `1.0.3` (`versionCode = 5`)
+
+---
+
+## 2) Signing Gate
+
+Release signing values must be configured in env vars or `local.properties`:
+
+- `KEYSTORE_FILE`
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+- `KEY_PASSWORD`
+
+Recommended helper scripts:
+
+```powershell
 ./scripts/02-generate-keystore.ps1
 ./scripts/03-build-release.ps1
 ```
 
-Expected release artifact:
-
-- `app/build/outputs/bundle/release/app-release.aab`
-
-Recommended quick validation after build:
-
-```powershell
-./gradlew.bat testDebugUnitTest
-./gradlew.bat lint
-```
-
 ---
 
-## 2) Required Store Files (Repo Paths)
+## 3) Required Store Files
 
-### Store Listing Text
+### Listing Text
+
 - `store-assets/listing/title.txt`
 - `store-assets/listing/short-description.txt`
 - `store-assets/listing/full-description.txt`
@@ -40,114 +59,48 @@ Recommended quick validation after build:
 - `store-assets/listing/category.txt`
 
 ### Legal / Policy
+
 - `store-assets/legal/privacy-policy.html`
-- `store-assets/PRIVACY_POLICY_URL.txt`
 - `store-assets/legal/open-source-licenses.txt`
 - `store-assets/listing/data-safety-answers.txt`
 - `store-assets/listing/content-rating-answers.txt`
+- Hosted URL: `store-assets/PRIVACY_POLICY_URL.txt`
 
-### Graphics / Screenshots
-- Screenshots (already present): `store-assets/screenshots/*.png`
-- Required Play icon: `store-assets/graphics/ic_launcher_512.png`
-- Required feature graphic: `store-assets/graphics/feature_graphic_1024x500.png`
+### Graphics
 
----
-
-## 3) Screenshot Refresh Workflow
-
-Use the guided capture script:
-
-```powershell
-./scripts/04-capture-screenshots.ps1
-```
-
-Current expected screenshot file set:
-
-1. `01_projects.png`
-2. `02_spaces.png`
-3. `03_editor.png`
-4. `04_drywall.png`
-5. `05_concrete.png`
-6. `06_export.png`
+- Icon: `store-assets/graphics/ic_launcher_512.png`
+- Feature graphic: `store-assets/graphics/feature_graphic_1024x500.png`
+- Screenshots: `store-assets/screenshots/*.png`
 
 ---
 
-## 4) Privacy Policy Hosting Workflow
+## 4) Play Console Steps
 
-Deploy/update hosted privacy page:
-
-```powershell
-./scripts/05-deploy-privacy-policy.ps1
-```
-
-This updates:
-
-- `store-assets/PRIVACY_POLICY_URL.txt`
-
-Use that URL in Play Console for both:
-- Store listing privacy policy URL
-- Data Safety privacy policy URL
+1. Open Play Console and select/create app `com.tradesketch.estimator`.
+2. Fill Store listing from `store-assets/listing/` files.
+3. Upload icon/feature graphic/screenshots.
+4. Complete Data safety and Content rating forms from prepared answer files.
+5. Open Release > Production > Create new release.
+6. Upload `app-release.aab`.
+7. Confirm parsed version matches current build (`5` / `1.0.3`).
+8. Paste release notes from `store-assets/listing/whats-new.txt`.
+9. Review and roll out.
 
 ---
 
-## 5) Play Console Setup Checklist
+## 5) Final Submit Checklist
 
-### App Setup
-- App name: from `store-assets/listing/title.txt`
-- Category: Productivity
-- App type: App
-- Free/Paid: choose business model
-
-### Policy Declarations
-- Ads: No
-- App access restrictions: No (no login required)
-- Data safety: use `store-assets/listing/data-safety-answers.txt`
-- Content rating: use `store-assets/listing/content-rating-answers.txt`
-- Government app: No
-- News app: No
-- COVID tracing app: No
-
-### Store Listing
-- Paste title/short/full description from `store-assets/listing/`
-- Upload icon + feature graphic from `store-assets/graphics/`
-- Upload screenshots from `store-assets/screenshots/`
-- Set contact email: `built.to.cell@gmail.com`
+- [ ] AAB exists and is signed.
+- [ ] Tests/lint/build all passed on release commit.
+- [ ] Privacy policy URL is publicly accessible.
+- [ ] Data safety declarations match current code behavior.
+- [ ] Screenshots reflect current app UI (welcome + blueprint-first workspace).
+- [ ] No placeholder or stale version text in listing fields.
 
 ---
 
-## 6) Production Release Steps
+## 6) Notes
 
-1. Open **Release > Production** in Play Console.
-2. Create new release.
-3. Upload `app-release.aab`.
-4. Paste release notes from `store-assets/listing/whats-new.txt`.
-5. Review generated device support.
-6. Submit for review.
-
----
-
-## 7) Must-Pass Final Gate
-
-Before pressing submit:
-
-- [ ] `app-release.aab` exists and is signed
-- [ ] Privacy policy URL is live and publicly accessible
-- [ ] Play icon uploaded
-- [ ] Feature graphic uploaded
-- [ ] All 6 screenshots uploaded
-- [ ] Data safety form submitted
-- [ ] Content rating form submitted
-- [ ] Store listing has no placeholders
-- [ ] Launch smoke test passed on current build
-
----
-
-## 8) Project Technical Baseline (Current)
-
-- Package: `com.tradesketch.estimator`
-- `minSdk = 26`
-- `targetSdk = 35`
-- Offline-first architecture
-- No dangerous permissions in manifest
-
-If any of these change, update this document and `documentation/COMPLIANCE-CHECKLIST.md` in the same PR.
+- App is offline-first and has no `INTERNET` permission.
+- `android:allowBackup` is disabled for local-only data posture.
+- If release flow changes, update this file and `documentation/COMPLIANCE-CHECKLIST.md` in the same change.

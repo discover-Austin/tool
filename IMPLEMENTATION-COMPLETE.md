@@ -1,5 +1,9 @@
 # TradeSketch Pro Blueprint Editor - Implementation Summary
 
+> Status note (2026-02-20): Historical implementation report.
+> Feature completion percentages and branch references below may be outdated after subsequent refactors.
+> Validate against current code/tests before using this as a release checklist.
+
 **Date:** 2026-02-18  
 **Status:** Core Features Implemented  
 **Branch:** `copilot/update-welcome-screen-flow`

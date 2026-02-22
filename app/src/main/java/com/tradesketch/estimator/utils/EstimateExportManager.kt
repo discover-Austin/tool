@@ -1,6 +1,5 @@
 package com.tradesketch.estimator.utils
 
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -8,10 +7,6 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import androidx.annotation.RequiresApi
-import androidx.core.content.FileProvider
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffLine
@@ -21,9 +16,6 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 object EstimateExportManager {
     fun buildEstimatePdfBytes(
@@ -50,7 +42,11 @@ object EstimateExportManager {
         result: TakeoffResult,
         blueprintDocument: BlueprintDocument? = null
     ): Uri? = withContext(Dispatchers.IO) {
-        val fileName = buildFileName(projectName = projectName, extension = "pdf")
+        val fileName = ExportStorage.buildFileName(
+            projectName = projectName,
+            suffix = "estimate",
+            extension = "pdf"
+        )
         val pdfBytes = renderEstimatePdfBytes(
             projectName = projectName,
             takeoffType = takeoffType,
@@ -59,14 +55,14 @@ object EstimateExportManager {
             blueprintDocument = blueprintDocument
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveBytesToPublicDownloads(
+            ExportStorage.saveBytesToPublicDownloads(
                 context = context,
                 bytes = pdfBytes,
                 fileName = fileName,
                 mimeType = "application/pdf"
             )
         } else {
-            saveBytesToAppDownloads(
+            ExportStorage.saveBytesToAppDownloads(
                 context = context,
                 bytes = pdfBytes,
                 fileName = fileName
@@ -83,7 +79,14 @@ object EstimateExportManager {
         blueprintDocument: BlueprintDocument? = null
     ): Intent? = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "estimate-share").apply { mkdirs() }
-        val shareFile = File(cacheDir, buildFileName(projectName = projectName, extension = "pdf"))
+        val shareFile = File(
+            cacheDir,
+            ExportStorage.buildFileName(
+                projectName = projectName,
+                suffix = "estimate",
+                extension = "pdf"
+            )
+        )
         val pdfBytes = renderEstimatePdfBytes(
             projectName = projectName,
             takeoffType = takeoffType,
@@ -94,20 +97,13 @@ object EstimateExportManager {
         FileOutputStream(shareFile).use { output ->
             output.write(pdfBytes)
         }
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            shareFile
-        )
-        Intent.createChooser(
-            Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_SUBJECT, "$projectName Estimate")
-                putExtra(Intent.EXTRA_TEXT, "Professional estimate generated from TradeSketch")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            "Share Estimate PDF"
+        ExportStorage.createShareIntent(
+            context = context,
+            shareFile = shareFile,
+            mimeType = "application/pdf",
+            subject = "$projectName Estimate",
+            text = "Professional estimate generated from TradeSketch",
+            chooserTitle = "Share Estimate PDF"
         )
     }
 
@@ -212,19 +208,19 @@ object EstimateExportManager {
         canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
         y += 28f
 
-        val hasBlueprintGeometry = blueprintDocument != null && (
-            blueprintDocument.walls.isNotEmpty() ||
-                blueprintDocument.rooms.isNotEmpty() ||
-                blueprintDocument.openings.isNotEmpty()
+        val blueprint = blueprintDocument
+        val hasBlueprintGeometry = blueprint != null && (
+            blueprint.walls.isNotEmpty() ||
+                blueprint.rooms.isNotEmpty() ||
+                blueprint.openings.isNotEmpty()
             )
         if (hasBlueprintGeometry) {
-            val document = blueprintDocument!!
             ensureSpace(340f)
             canvas.drawText("Blueprint Snapshot", margin, y, headingPaint)
             y += 20f
             val bitmap = BlueprintExportManager.renderBlueprintBitmap(
                 projectName = projectName,
-                document = document,
+                document = blueprint,
                 widthPx = 1200,
                 heightPx = 900
             )
@@ -431,68 +427,4 @@ object EstimateExportManager {
         return lines.ifEmpty { listOf(text) }
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private fun saveBytesToPublicDownloads(
-        context: Context,
-        bytes: ByteArray,
-        fileName: String,
-        mimeType: String
-    ): Uri? {
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/TradeSketch")
-            put(MediaStore.MediaColumns.IS_PENDING, 1)
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
-        return try {
-            resolver.openOutputStream(uri)?.use { output ->
-                output.write(bytes)
-            }
-            values.clear()
-            values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-            uri
-        } catch (_: Exception) {
-            resolver.delete(uri, null, null)
-            null
-        }
-    }
-
-    private fun saveBytesToAppDownloads(
-        context: Context,
-        bytes: ByteArray,
-        fileName: String
-    ): Uri? {
-        return try {
-            val downloadsDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                "TradeSketch"
-            ).apply { mkdirs() }
-            val file = File(downloadsDir, fileName)
-            FileOutputStream(file).use { output ->
-                output.write(bytes)
-            }
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun buildFileName(projectName: String, extension: String): String {
-        val cleanName = projectName
-            .trim()
-            .ifBlank { "project" }
-            .replace(Regex("[^A-Za-z0-9_-]"), "_")
-            .replace(Regex("_+"), "_")
-            .take(40)
-            .ifBlank { "project" }
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return "${cleanName}_estimate_$stamp.$extension"
-    }
 }

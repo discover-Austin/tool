@@ -1,6 +1,5 @@
 package com.tradesketch.estimator.utils
 
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -13,10 +12,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import androidx.annotation.RequiresApi
-import androidx.core.content.FileProvider
+import com.tradesketch.estimator.domain.calc.BlueprintSnapMath
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.BlueprintOpening
 import com.tradesketch.estimator.domain.model.Millimeters
@@ -48,11 +44,23 @@ object BlueprintExportManager {
     ): Uri? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
         val bitmap = renderBlueprintBitmap(projectName = projectName, document = document)
-        val fileName = buildFileName(projectName = projectName, extension = "png")
+        val fileName = ExportStorage.buildFileName(
+            projectName = projectName,
+            suffix = "blueprint",
+            extension = "png"
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveToPublicDownloads(context = context, bitmap = bitmap, fileName = fileName)
+            ExportStorage.saveBitmapToPublicDownloads(
+                context = context,
+                bitmap = bitmap,
+                fileName = fileName
+            )
         } else {
-            saveToAppDownloads(context = context, bitmap = bitmap, fileName = fileName)
+            ExportStorage.saveBitmapToAppDownloads(
+                context = context,
+                bitmap = bitmap,
+                fileName = fileName
+            )
         }
     }
 
@@ -64,24 +72,24 @@ object BlueprintExportManager {
         if (!document.hasGeometry()) return@withContext null
         val bitmap = renderBlueprintBitmap(projectName = projectName, document = document)
         val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
-        val shareFile = File(cacheDir, buildFileName(projectName = projectName, extension = "png"))
+        val shareFile = File(
+            cacheDir,
+            ExportStorage.buildFileName(
+                projectName = projectName,
+                suffix = "blueprint",
+                extension = "png"
+            )
+        )
         FileOutputStream(shareFile).use { output ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
         }
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            shareFile
-        )
-        Intent.createChooser(
-            Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_SUBJECT, "$projectName Blueprint")
-                putExtra(Intent.EXTRA_TEXT, "Blueprint export from TradeSketch")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            "Share Blueprint"
+        ExportStorage.createShareIntent(
+            context = context,
+            shareFile = shareFile,
+            mimeType = "image/png",
+            subject = "$projectName Blueprint",
+            text = "Blueprint export from TradeSketch",
+            chooserTitle = "Share Blueprint"
         )
     }
 
@@ -91,17 +99,21 @@ object BlueprintExportManager {
         document: BlueprintDocument
     ): Uri? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
-        val fileName = buildFileName(projectName = projectName, extension = "pdf")
+        val fileName = ExportStorage.buildFileName(
+            projectName = projectName,
+            suffix = "blueprint",
+            extension = "pdf"
+        )
         val pdfBytes = renderBlueprintPdfBytes(projectName = projectName, document = document)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveBytesToPublicDownloads(
+            ExportStorage.saveBytesToPublicDownloads(
                 context = context,
                 bytes = pdfBytes,
                 fileName = fileName,
                 mimeType = "application/pdf"
             )
         } else {
-            saveBytesToAppDownloads(
+            ExportStorage.saveBytesToAppDownloads(
                 context = context,
                 bytes = pdfBytes,
                 fileName = fileName
@@ -116,25 +128,25 @@ object BlueprintExportManager {
     ): Intent? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
         val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
-        val shareFile = File(cacheDir, buildFileName(projectName = projectName, extension = "pdf"))
+        val shareFile = File(
+            cacheDir,
+            ExportStorage.buildFileName(
+                projectName = projectName,
+                suffix = "blueprint",
+                extension = "pdf"
+            )
+        )
         val pdfBytes = renderBlueprintPdfBytes(projectName = projectName, document = document)
         FileOutputStream(shareFile).use { output ->
             output.write(pdfBytes)
         }
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            shareFile
-        )
-        Intent.createChooser(
-            Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_SUBJECT, "$projectName Blueprint PDF")
-                putExtra(Intent.EXTRA_TEXT, "Blueprint PDF export from TradeSketch")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            "Share Blueprint PDF"
+        ExportStorage.createShareIntent(
+            context = context,
+            shareFile = shareFile,
+            mimeType = "application/pdf",
+            subject = "$projectName Blueprint PDF",
+            text = "Blueprint PDF export from TradeSketch",
+            chooserTitle = "Share Blueprint PDF"
         )
     }
 
@@ -391,27 +403,42 @@ private fun drawOpenings(
         val halfT = (opening.widthMm / 2.0) / wallLengthMm
         val startT = (opening.t - halfT).coerceIn(0.0, 1.0)
         val endT = (opening.t + halfT).coerceIn(0.0, 1.0)
-        val startPoint = wallPointAt(wall, startT)
-        val endPoint = wallPointAt(wall, endT)
-        val centerPoint = wallPointAt(wall, opening.t.coerceIn(0.0, 1.0))
+        val startPoint = BlueprintSnapMath.pointOnWall(wall, startT)
+        val endPoint = BlueprintSnapMath.pointOnWall(wall, endT)
+        val centerPoint = BlueprintSnapMath.pointOnWall(wall, opening.t.coerceIn(0.0, 1.0))
         val start = toScreen(startPoint)
         val end = toScreen(endPoint)
         val center = toScreen(centerPoint)
 
         canvas.drawLine(start.x, start.y, end.x, end.y, openingPaint)
 
-        if (opening.type == OpeningType.DOOR) {
-            drawDoorArc(
-                canvas = canvas,
-                wall = wall,
-                opening = opening,
-                hinge = start,
-                center = center,
-                arcPaint = doorArcPaint,
-                scale = scale
-            )
-        } else {
-            drawWindowBreak(canvas = canvas, start = start, end = end, paint = doorArcPaint)
+        when (opening.type) {
+            OpeningType.DOOR -> {
+                drawDoorArc(
+                    canvas = canvas,
+                    wall = wall,
+                    opening = opening,
+                    hinge = start,
+                    center = center,
+                    arcPaint = doorArcPaint,
+                    scale = scale
+                )
+            }
+
+            OpeningType.WINDOW -> {
+                drawWindowBreak(canvas = canvas, start = start, end = end, paint = doorArcPaint)
+            }
+
+            OpeningType.STAIR_UP,
+            OpeningType.STAIR_DOWN -> {
+                drawStairBreak(
+                    canvas = canvas,
+                    start = start,
+                    end = end,
+                    paint = doorArcPaint,
+                    upDirection = opening.type == OpeningType.STAIR_UP
+                )
+            }
         }
     }
 }
@@ -463,6 +490,71 @@ private fun drawWindowBreak(
         centerY - normalY * marker,
         centerX + normalX * marker,
         centerY + normalY * marker,
+        paint
+    )
+}
+
+private fun drawStairBreak(
+    canvas: Canvas,
+    start: ScreenPoint,
+    end: ScreenPoint,
+    paint: Paint,
+    upDirection: Boolean
+) {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val length = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(1f)
+    val nx = -dy / length
+    val ny = dx / length
+    val depth = (length * 0.42f).coerceIn(8f, 18f)
+
+    val a = start
+    val b = end
+    val c = ScreenPoint(x = end.x + (nx * depth), y = end.y + (ny * depth))
+    val d = ScreenPoint(x = start.x + (nx * depth), y = start.y + (ny * depth))
+
+    fun drawEdge(from: ScreenPoint, to: ScreenPoint) {
+        canvas.drawLine(from.x, from.y, to.x, to.y, paint)
+    }
+    drawEdge(a, b)
+    drawEdge(b, c)
+    drawEdge(c, d)
+    drawEdge(d, a)
+
+    val stepCount = 4
+    for (index in 1 until stepCount) {
+        val t = index.toFloat() / stepCount.toFloat()
+        val sx = a.x + ((d.x - a.x) * t)
+        val sy = a.y + ((d.y - a.y) * t)
+        val ex = b.x + ((c.x - b.x) * t)
+        val ey = b.y + ((c.y - b.y) * t)
+        canvas.drawLine(sx, sy, ex, ey, paint)
+    }
+
+    val direction = if (upDirection) 1f else -1f
+    val ux = dx / length
+    val uy = dy / length
+    val centerX = (a.x + b.x + c.x + d.x) / 4f
+    val centerY = (a.y + b.y + c.y + d.y) / 4f
+    val arrowHalf = (length * 0.2f).coerceIn(6f, 12f)
+    val fromX = centerX - (ux * arrowHalf * direction)
+    val fromY = centerY - (uy * arrowHalf * direction)
+    val toX = centerX + (ux * arrowHalf * direction)
+    val toY = centerY + (uy * arrowHalf * direction)
+    canvas.drawLine(fromX, fromY, toX, toY, paint)
+    val head = 5f
+    canvas.drawLine(
+        toX,
+        toY,
+        toX - (ux * head * direction) + (nx * head * 0.65f),
+        toY - (uy * head * direction) + (ny * head * 0.65f),
+        paint
+    )
+    canvas.drawLine(
+        toX,
+        toY,
+        toX - (ux * head * direction) - (nx * head * 0.65f),
+        toY - (uy * head * direction) - (ny * head * 0.65f),
         paint
     )
 }
@@ -570,123 +662,6 @@ private fun renderBlueprintPdfBytes(
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.Q)
-private fun saveToPublicDownloads(
-    context: Context,
-    bitmap: Bitmap,
-    fileName: String
-): Uri? {
-    val resolver = context.contentResolver
-    val values = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-        put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/TradeSketch")
-        put(MediaStore.MediaColumns.IS_PENDING, 1)
-    }
-    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
-    return try {
-        resolver.openOutputStream(uri)?.use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        }
-        values.clear()
-        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        uri
-    } catch (_: Exception) {
-        resolver.delete(uri, null, null)
-        null
-    }
-}
-
-private fun saveToAppDownloads(
-    context: Context,
-    bitmap: Bitmap,
-    fileName: String
-): Uri? {
-    return try {
-        val downloadsDir = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "TradeSketch"
-        ).apply { mkdirs() }
-        val file = File(downloadsDir, fileName)
-        FileOutputStream(file).use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        }
-        FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-    } catch (_: Exception) {
-        null
-    }
-}
-
-@RequiresApi(Build.VERSION_CODES.Q)
-private fun saveBytesToPublicDownloads(
-    context: Context,
-    bytes: ByteArray,
-    fileName: String,
-    mimeType: String
-): Uri? {
-    val resolver = context.contentResolver
-    val values = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-        put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/TradeSketch")
-        put(MediaStore.MediaColumns.IS_PENDING, 1)
-    }
-    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
-    return try {
-        resolver.openOutputStream(uri)?.use { output ->
-            output.write(bytes)
-        }
-        values.clear()
-        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        uri
-    } catch (_: Exception) {
-        resolver.delete(uri, null, null)
-        null
-    }
-}
-
-private fun saveBytesToAppDownloads(
-    context: Context,
-    bytes: ByteArray,
-    fileName: String
-): Uri? {
-    return try {
-        val downloadsDir = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "TradeSketch"
-        ).apply { mkdirs() }
-        val file = File(downloadsDir, fileName)
-        FileOutputStream(file).use { output ->
-            output.write(bytes)
-        }
-        FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun buildFileName(projectName: String, extension: String): String {
-    val cleanName = projectName
-        .trim()
-        .ifBlank { "project" }
-        .replace(Regex("[^A-Za-z0-9_-]"), "_")
-        .replace(Regex("_+"), "_")
-        .take(40)
-        .ifBlank { "project" }
-    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-    return "${cleanName}_blueprint_$stamp.$extension"
-}
-
 private data class WorldBounds(
     val minX: Long,
     val maxX: Long,
@@ -742,9 +717,3 @@ private fun List<PointMm>.centroid(): PointMm {
     )
 }
 
-private fun wallPointAt(wall: WallSegment, t: Double): PointMm {
-    val clamped = t.coerceIn(0.0, 1.0)
-    val x = wall.start.x + ((wall.end.x - wall.start.x).toDouble() * clamped).roundToLong()
-    val y = wall.start.y + ((wall.end.y - wall.start.y).toDouble() * clamped).roundToLong()
-    return PointMm(x = x, y = y)
-}

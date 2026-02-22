@@ -26,8 +26,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -67,14 +65,11 @@ class ExportViewModel @Inject constructor(
         projectObserverJob?.cancel()
         _uiState.update { it.copy(isLoading = true, error = null) }
         projectObserverJob = viewModelScope.launch {
-            combine(
-                projectRepository.getProjects().map { projects ->
-                    projects.find { it.id == projectId }
-                },
-                settingsRepository.getSettings()
-            ) { project, settings ->
-                Pair(project, settings)
-            }.collect { (project, settings) ->
+            projectAndSettingsFlow(
+                projectRepository = projectRepository,
+                settingsRepository = settingsRepository,
+                projectId = projectId
+            ).collect { (project, settings) ->
                 if (project == null) {
                     _uiState.update {
                         it.copy(
@@ -123,23 +118,12 @@ class ExportViewModel @Inject constructor(
         val project = state.project ?: return
         val settings = state.settings
         val selectedType = state.selectedType ?: TakeoffType.DRYWALL
-        val persistedSession = project.takeoffSession.takeIf { it != ProjectTakeoffSession() }
-        val drywallParams = persistedSession?.drywall?.toUiParams() ?: settings.defaultDrywallParams()
-        val concreteParams = persistedSession?.concrete?.toUiParams() ?: settings.defaultConcreteParams()
-        val gravelParams = persistedSession?.gravel?.toUiParams() ?: settings.defaultGravelParams()
-        val paintParams = persistedSession?.paint?.toUiParams() ?: settings.defaultPaintParams()
-        val pricingParams = persistedSession?.pricing?.toUiParams() ?: settings.defaultPricingParams()
+        val inputs = buildTakeoffInputs(project = project, settings = state.settings)
         val result = try {
             calculateTakeoffUseCase.calculateForType(
                 project = project,
                 type = selectedType,
-                inputs = TakeoffCalculationInputs(
-                    drywall = drywallParams,
-                    concrete = concreteParams,
-                    gravel = gravelParams,
-                    paint = paintParams,
-                    pricing = pricingParams
-                )
+                inputs = inputs
             )
         } catch (e: Exception) {
             _uiState.update { it.copy(error = "Failed to calculate export: ${e.message}") }
@@ -147,17 +131,17 @@ class ExportViewModel @Inject constructor(
         }
 
         val label = selectedType.displayLabel
-                _uiState.update {
-                    it.copy(
-                        result = result,
-                        takeoffType = label,
-                        textContent = ExportFormatter.formatAsText(project, settings, label, result),
-                        summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
-                        csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
-                        jsonContent = ExportFormatter.formatAsJson(project, settings, label, result),
-                        error = null
-                    )
-                }
+        _uiState.update {
+            it.copy(
+                result = result,
+                takeoffType = label,
+                textContent = ExportFormatter.formatAsText(project, settings, label, result),
+                summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
+                csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
+                jsonContent = ExportFormatter.formatAsJson(project, settings, label, result),
+                error = null
+            )
+        }
     }
 
     fun copySummaryToClipboard(): Boolean {

@@ -18,6 +18,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,28 +35,33 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Straighten
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
@@ -72,17 +79,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
+import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.PrimaryTrade
-import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.ui.screens.BlueprintScreen
 import com.tradesketch.estimator.ui.screens.ExportScreen
 import com.tradesketch.estimator.ui.screens.ProjectRitualScreen1_Name
 import com.tradesketch.estimator.ui.screens.ProjectRitualScreen2_EstimateType
-import com.tradesketch.estimator.ui.screens.ReviewScreen
 import com.tradesketch.estimator.ui.screens.SettingsScreen
 import com.tradesketch.estimator.ui.screens.TakeoffScreen
+import com.tradesketch.estimator.ui.screens.TakeoffScreenMode
 import com.tradesketch.estimator.ui.screens.WelcomeScreenPro
 import com.tradesketch.estimator.ui.theme.Midnight900
 import com.tradesketch.estimator.ui.theme.Midnight950
@@ -229,9 +240,7 @@ private fun TradeSketchRoot() {
 
             RootStage.WORKSPACE -> {
                 WorkspaceShell(
-                    appSettings = settingsUiState.settings,
                     onRecordTap = settingsViewModel::recordTap,
-                    onUpdatePrimaryTrade = settingsViewModel::updatePrimaryTrade,
                     initialProjectId = startupProjectId,
                     modifier = Modifier
                         .fillMaxSize()
@@ -354,9 +363,7 @@ private fun ProjectRitualFlow(
 
 @Composable
 private fun WorkspaceShell(
-    appSettings: Settings,
     onRecordTap: (String) -> Unit,
-    onUpdatePrimaryTrade: (PrimaryTrade) -> Unit,
     initialProjectId: String?,
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = hiltViewModel()
@@ -364,12 +371,23 @@ private fun WorkspaceShell(
     val projectsUiState by projectsViewModel.uiState.collectAsState()
     var selectedTab by rememberSaveable { mutableStateOf(DetailTab.BLUEPRINT) }
     var selectedProjectId by rememberSaveable { mutableStateOf<String?>(initialProjectId) }
+    var showSavedProjects by rememberSaveable { mutableStateOf(false) }
+    var showNewProjectConfirm by rememberSaveable { mutableStateOf(false) }
+    var leftRailCollapsed by rememberSaveable { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val activeProject = remember(selectedProjectId, projectsUiState.projects) {
+        projectsUiState.projects.firstOrNull { it.id == selectedProjectId }
+    }
+    var projectNameDraft by rememberSaveable(selectedProjectId) {
+        mutableStateOf(activeProject?.name.orEmpty())
+    }
 
     LaunchedEffect(Unit) {
         projectsViewModel.events.collect { event ->
             if (event is ProjectsEvent.NavigateToProject) {
                 selectedProjectId = event.projectId
                 selectedTab = DetailTab.BLUEPRINT
+                showSavedProjects = false
             }
         }
     }
@@ -390,126 +408,207 @@ private fun WorkspaceShell(
         }
     }
 
-    val navigateToTab: (DetailTab) -> Unit = { tab ->
+    LaunchedEffect(activeProject?.name) {
+        val latestName = activeProject?.name ?: ""
+        if (latestName != projectNameDraft) {
+            projectNameDraft = latestName
+        }
+    }
+
+    val normalizeTab: (DetailTab) -> DetailTab = { tab ->
+        when (tab) {
+            DetailTab.QUANTITIES -> DetailTab.MATERIALS
+            DetailTab.ADDONS -> DetailTab.BLUEPRINT
+            DetailTab.REVIEW -> DetailTab.EXPORT
+            else -> tab
+        }
+    }
+
+    val normalizedSelectedTab = normalizeTab(selectedTab)
+    if (selectedTab != normalizedSelectedTab) {
+        selectedTab = normalizedSelectedTab
+    }
+
+    val navigateToTab: (DetailTab) -> Unit = { rawTab ->
+        val tab = normalizeTab(rawTab)
         if (selectedTab != tab) {
             onRecordTap("workspace_tab_${selectedTab.route}_to_${tab.route}")
         }
         selectedTab = tab
     }
+    val launchNewProject: (Boolean) -> Unit = { keepCurrent ->
+        if (!keepCurrent) {
+            activeProject?.id?.let { projectId ->
+                projectsViewModel.deleteProject(projectId)
+                if (selectedProjectId == projectId) {
+                    selectedProjectId = null
+                }
+            }
+        }
+        projectsViewModel.createEasyStartProject()
+        showSavedProjects = false
+    }
 
     Row(modifier = modifier.fillMaxSize()) {
         WorkspaceLeftRail(
             currentTab = selectedTab,
+            collapsed = leftRailCollapsed,
             onSelectTab = navigateToTab,
+            showSavedProjects = showSavedProjects,
+            onCreateNewProject = {
+                if (activeProject != null) {
+                    showNewProjectConfirm = true
+                    showSavedProjects = false
+                } else {
+                    launchNewProject(true)
+                }
+            },
+            onToggleSavedProjects = {
+                showSavedProjects = !showSavedProjects
+            },
+            onToggleCollapsed = { leftRailCollapsed = !leftRailCollapsed },
             modifier = Modifier.fillMaxHeight()
         )
-        VerticalDivider(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-        )
+        if (!leftRailCollapsed) {
+            VerticalDivider(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            )
+        }
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
         ) {
-            when (selectedTab) {
-                DetailTab.BLUEPRINT -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        BlueprintScreen(
-                            projectId = projectId,
-                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.MATERIALS -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        TakeoffScreen(
-                            projectId = projectId,
-                            onOpenModel = { navigateToTab(DetailTab.REVIEW) },
-                            onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
-                            onOpenExport = { navigateToTab(DetailTab.EXPORT) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.QUANTITIES -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        TakeoffScreen(
-                            projectId = projectId,
-                            onOpenModel = { navigateToTab(DetailTab.REVIEW) },
-                            onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
-                            onOpenExport = { navigateToTab(DetailTab.EXPORT) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.ADDONS -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        BlueprintScreen(
-                            projectId = projectId,
-                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.REVIEW -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        ReviewScreen(
-                            projectId = projectId,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.EXPORT -> {
-                    ProjectScopedTab(
-                        selectedProjectId = selectedProjectId,
-                        onCreateStarterProject = {
-                            projectsViewModel.createEasyStartProject()
-                        }
-                    ) { projectId ->
-                        ExportScreen(
-                            projectId = projectId,
-                            onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-
-                DetailTab.SETTINGS_ABOUT -> {
-                    SettingsScreen(
+            val projectTabContent: (@Composable (String) -> Unit)? = when (selectedTab) {
+                DetailTab.BLUEPRINT -> { projectId ->
+                    BlueprintScreen(
+                        projectId = projectId,
+                        initialShowAddons = false,
+                        initialShowParams = false,
+                        onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
                         modifier = Modifier.fillMaxSize()
                     )
                 }
+
+                DetailTab.MATERIALS -> { projectId ->
+                    TakeoffScreen(
+                        projectId = projectId,
+                        screenMode = TakeoffScreenMode.MATERIALS,
+                        onOpenModel = { navigateToTab(DetailTab.EXPORT) },
+                        onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
+                        onOpenMaterials = { navigateToTab(DetailTab.MATERIALS) },
+                        onOpenExport = { navigateToTab(DetailTab.EXPORT) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                DetailTab.REVIEW,
+                DetailTab.EXPORT -> { projectId ->
+                    ExportScreen(
+                        projectId = projectId,
+                        onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                DetailTab.QUANTITIES,
+                DetailTab.ADDONS,
+                DetailTab.SETTINGS_ABOUT -> null
+            }
+
+            if (projectTabContent == null) {
+                SettingsScreen(
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                ProjectScopedTab(
+                    selectedProjectId = selectedProjectId,
+                    onCreateStarterProject = {
+                        projectsViewModel.createEasyStartProject()
+                    },
+                    content = projectTabContent
+                )
+            }
+
+            if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
+                OutlinedTextField(
+                    value = projectNameDraft,
+                    onValueChange = { projectNameDraft = it },
+                    label = { Text("Name", style = MaterialTheme.typography.labelSmall) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            projectsViewModel.renameProject(activeProject.id, projectNameDraft)
+                            focusManager.clearFocus()
+                        }
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 6.dp)
+                        .widthIn(min = 156.dp, max = 232.dp)
+                        .height(52.dp)
+                )
+            }
+
+            SavedProjectsPanel(
+                expanded = showSavedProjects,
+                projects = projectsUiState.projects,
+                selectedProjectId = selectedProjectId,
+                onSelectProject = { projectId ->
+                    selectedProjectId = projectId
+                    selectedTab = DetailTab.BLUEPRINT
+                    showSavedProjects = false
+                },
+                onDeleteProject = { projectId ->
+                    if (selectedProjectId == projectId) {
+                        selectedProjectId = projectsUiState.projects.firstOrNull { it.id != projectId }?.id
+                        selectedTab = DetailTab.BLUEPRINT
+                    }
+                    projectsViewModel.deleteProject(projectId)
+                },
+                onDismiss = { showSavedProjects = false },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 10.dp, top = 8.dp)
+            )
+
+            if (showNewProjectConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showNewProjectConfirm = false },
+                    title = { Text("Start New Project?") },
+                    text = {
+                        Text(
+                            "Save current project and keep it, or continue without saving and delete it."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showNewProjectConfirm = false
+                                launchNewProject(true)
+                            }
+                        ) {
+                            Text("Save & New")
+                        }
+                    },
+                    dismissButton = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = {
+                                    showNewProjectConfirm = false
+                                    launchNewProject(false)
+                                }
+                            ) {
+                                Text("Delete & New")
+                            }
+                            TextButton(onClick = { showNewProjectConfirm = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
+                )
             }
         }
     }
@@ -518,10 +617,44 @@ private fun WorkspaceShell(
 @Composable
 private fun WorkspaceLeftRail(
     currentTab: DetailTab,
+    collapsed: Boolean,
     onSelectTab: (DetailTab) -> Unit,
+    showSavedProjects: Boolean,
+    onCreateNewProject: () -> Unit,
+    onToggleSavedProjects: () -> Unit,
+    onToggleCollapsed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val primaryTabs = DetailTab.entries.filterNot { tab ->
+        tab == DetailTab.QUANTITIES ||
+            tab == DetailTab.ADDONS ||
+            tab == DetailTab.REVIEW ||
+            tab == DetailTab.SETTINGS_ABOUT
+    }
+    val blueprintTab = primaryTabs.firstOrNull { it == DetailTab.BLUEPRINT } ?: DetailTab.BLUEPRINT
+    val secondaryTabs = primaryTabs.filterNot { it == DetailTab.BLUEPRINT }
+    if (collapsed) {
+        Column(
+            modifier = modifier
+                .width(24.dp)
+                .padding(top = 8.dp, bottom = 8.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Surface(
+                onClick = onToggleCollapsed,
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+            ) {
+                Text(
+                    text = ">>",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 6.dp)
+                )
+            }
+        }
+        return
+    }
     NavigationRail(
         modifier = modifier.width(62.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f),
@@ -531,6 +664,17 @@ private fun WorkspaceLeftRail(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Surface(
+                    onClick = onToggleCollapsed,
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                ) {
+                    Text(
+                        text = "<<",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
                 Icon(
                     imageVector = Icons.Filled.Architecture,
                     contentDescription = "TradeSketch",
@@ -540,32 +684,234 @@ private fun WorkspaceLeftRail(
             }
         }
     ) {
-        DetailTab.entries.forEach { tab ->
-            NavigationRailItem(
-                selected = currentTab == tab,
-                onClick = { onSelectTab(tab) },
-                modifier = Modifier.pointerInput(tab) {
-                    detectTapGestures(
+        Column(
+            modifier = Modifier.fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                WorkspaceRailActionItem(
+                    label = "New+",
+                    icon = Icons.Filled.Add,
+                    selected = false,
+                    onClick = onCreateNewProject,
+                    onLongPress = {
+                        Toast.makeText(context, "New Project", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                WorkspaceRailActionItem(
+                    label = "Saved",
+                    icon = Icons.Filled.Description,
+                    selected = showSavedProjects,
+                    onClick = onToggleSavedProjects,
+                    onLongPress = {
+                        Toast.makeText(context, "Saved Projects", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                WorkspaceRailItem(
+                    tab = blueprintTab,
+                    currentTab = currentTab,
+                    onSelectTab = onSelectTab,
+                    onLongPress = {
+                        Toast.makeText(context, blueprintTab.label, Toast.LENGTH_SHORT).show()
+                    }
+                )
+                secondaryTabs.forEach { tab ->
+                    WorkspaceRailItem(
+                        tab = tab,
+                        currentTab = currentTab,
+                        onSelectTab = onSelectTab,
                         onLongPress = {
                             Toast.makeText(context, tab.label, Toast.LENGTH_SHORT).show()
                         }
                     )
-                },
-                icon = {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label
-                    )
-                },
-                label = {
-                    Text(
-                        text = tab.label,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                },
-                alwaysShowLabel = false
+                }
+            }
+            WorkspaceRailItem(
+                tab = DetailTab.SETTINGS_ABOUT,
+                currentTab = currentTab,
+                onSelectTab = onSelectTab,
+                onLongPress = {
+                    Toast.makeText(context, DetailTab.SETTINGS_ABOUT.label, Toast.LENGTH_SHORT).show()
+                }
             )
         }
+    }
+}
+
+@Composable
+private fun WorkspaceRailActionItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    NavigationRailItem(
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier.pointerInput(label) {
+            detectTapGestures(
+                onLongPress = {
+                    onLongPress()
+                }
+            )
+        },
+        icon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = label
+            )
+        },
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall
+            )
+        },
+        alwaysShowLabel = true
+    )
+}
+
+@Composable
+private fun WorkspaceRailItem(
+    tab: DetailTab,
+    currentTab: DetailTab,
+    onSelectTab: (DetailTab) -> Unit,
+    onLongPress: () -> Unit
+) {
+    NavigationRailItem(
+        selected = currentTab == tab,
+        onClick = { onSelectTab(tab) },
+        modifier = Modifier.pointerInput(tab) {
+            detectTapGestures(
+                onLongPress = {
+                    onLongPress()
+                }
+            )
+        },
+        icon = {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = tab.label
+            )
+        },
+        label = {
+            Text(
+                text = tab.label,
+                style = MaterialTheme.typography.labelSmall
+            )
+        },
+        alwaysShowLabel = false
+    )
+}
+
+@Composable
+private fun SavedProjectsPanel(
+    expanded: Boolean,
+    projects: List<Project>,
+    selectedProjectId: String?,
+    onSelectProject: (String) -> Unit,
+    onDeleteProject: (String) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!expanded) return
+    var pendingDeleteProjectId by remember { mutableStateOf<String?>(null) }
+    Card(
+        modifier = modifier.widthIn(max = 280.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Saved Projects", style = MaterialTheme.typography.titleSmall)
+                Button(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
+                    Text("Close")
+                }
+            }
+            if (projects.isEmpty()) {
+                Text(
+                    "No projects saved yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .height(260.dp)
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    projects.take(24).forEach { project ->
+                        Surface(
+                            onClick = { onSelectProject(project.id) },
+                            shape = MaterialTheme.shapes.small,
+                            color = if (project.id == selectedProjectId) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 10.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = project.name,
+                                    modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                IconButton(
+                                    onClick = { pendingDeleteProjectId = project.id },
+                                    modifier = Modifier.height(30.dp).width(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Delete project ${project.name}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val pendingProject = projects.firstOrNull { it.id == pendingDeleteProjectId }
+    if (pendingProject != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteProjectId = null },
+            title = { Text("Delete project?") },
+            text = { Text("Delete \"${pendingProject.name}\" permanently?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteProject(pendingProject.id)
+                        pendingDeleteProjectId = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteProjectId = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -617,11 +963,11 @@ private enum class DetailTab(
     val label: String,
     val icon: ImageVector
 ) {
-    BLUEPRINT("tab_blueprint", "Blueprint", Icons.Filled.AutoFixHigh),
+    BLUEPRINT("tab_blueprint", "Blueprint", Icons.Filled.Architecture),
     MATERIALS("tab_materials", "Materials", Icons.Filled.Assessment),
     QUANTITIES("tab_quantities", "Quantities", Icons.Filled.Straighten),
     ADDONS("tab_addons", "Add-ons", Icons.Filled.Add),
     REVIEW("tab_review", "Review", Icons.Filled.Description),
     EXPORT("tab_export", "Export", Icons.Filled.Share),
-    SETTINGS_ABOUT("tab_settings_about", "Settings/About", Icons.Filled.Tune)
+    SETTINGS_ABOUT("tab_settings_about", "Settings/About", Icons.Filled.Settings)
 }

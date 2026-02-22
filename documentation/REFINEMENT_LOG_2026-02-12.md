@@ -1,5 +1,8 @@
 # Refinement Log - 2026-02-12
 
+> Historical log (February 21, 2026): This file captures a past sprint and may reference removed screens/components.
+> Current release behavior is documented in `documentation/ANDROID-AUDIT-2026-02-21.md`.
+
 ## Session Notes
 - Owner: Codex
 - Focus: Android UX flow simplification + pro-depth features + dark sleek polish

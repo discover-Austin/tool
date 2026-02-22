@@ -1,9 +1,9 @@
 # Testing Notes
 
 ## TradeSketch Estimator
-Updated: February 11, 2026
+Updated: February 21, 2026
 
-This checklist is aligned with the current UI and workflows in the app.
+This checklist targets the current blueprint-first UI.
 
 ---
 
@@ -12,12 +12,13 @@ This checklist is aligned with the current UI and workflows in the app.
 Run before device QA:
 
 ```powershell
-./gradlew.bat compileDebugKotlin
-./gradlew.bat testDebugUnitTest
-./gradlew.bat lint
+./gradlew.bat :app:testDebugUnitTest
+./gradlew.bat :core:test
+./gradlew.bat :app:lint
+./gradlew.bat :app:lintRelease
 ```
 
-Expected: no failing unit tests, no blocking lint errors.
+Expected: zero failing tests and no lint task failures.
 
 ---
 
@@ -36,62 +37,45 @@ Crash scan:
 adb logcat -d -v brief | findstr /C:"FATAL EXCEPTION" /C:"AndroidRuntime" /C:"com.tradesketch.estimator"
 ```
 
-Expected: no fatal exception for normal navigation.
+Expected: no startup/runtime fatal exceptions on normal flows.
 
 ---
 
-## 3) Core Manual QA Checklist
+## 3) Core Manual QA Checklist (Current Flow)
 
-### Projects + Navigation
-- [ ] App launches to projects screen
-- [ ] Template project creation works
-- [ ] Project opens into workspace
-- [ ] Bottom nav transitions between Model / Takeoff / Export are smooth
+### First-Run and Project Setup
+- [ ] Welcome screen renders and Continue works.
+- [ ] Project Ritual step 1 validates project name entry.
+- [ ] Project Ritual step 2 trade selection completes and opens workspace.
 
-### Project Workspace (3D + List)
-- [ ] 3D Workspace mode renders scene
-- [ ] Space List mode renders correctly
-- [ ] Add Space / Room button opens add flow
-- [ ] Auto Arrange button works with multiple spaces
-- [ ] Project snapshot metrics render (spaces/openings/gross/net/volume)
+### Workspace Navigation
+- [ ] Rail opens tabs: Blueprint, Materials, Quantities, Export, Settings/About.
+- [ ] Saved projects panel opens/closes.
+- [ ] Creating a starter/new project works.
+- [ ] Switching projects from Saved list updates active project.
 
-### 3D Builder
-- [ ] Camera gestures work (orbit/zoom)
-- [ ] View presets work (Iso / Front / Top / Side)
-- [ ] Object selection works
-- [ ] Transform sliders update preview
-- [ ] Nudge controls (X/Z/Raise/Lower) work
-- [ ] Yaw snap controls apply expected orientation
-- [ ] Apply Transform persists final transform
+### Blueprint
+- [ ] Draw wall interactions work without crashes.
+- [ ] Door/window placement on walls works.
+- [ ] Undo/redo and delete actions behave correctly.
+- [ ] Blueprint-derived live quantities update as geometry changes.
 
-### Quick Room Wizard
-- [ ] Add Space -> Quick Room opens wizard
-- [ ] Live Room Summary updates as dimensions change
-- [ ] Presets apply dimensions/door/window defaults
-- [ ] Optional wall editing works
-- [ ] Optional custom doors/windows work
-- [ ] Optional ceiling toggle works
-- [ ] Continue to next room keeps wizard open and resets entry state
-- [ ] Create Room adds expected spaces to project
-
-### Space Editor
-- [ ] Open existing space editor from list/3D object actions
-- [ ] Geometry editing works for supported geometry types
-- [ ] Opening edits save correctly
-- [ ] Duplicate and delete actions work
-
-### Takeoff
-- [ ] Trade scope cards switch between drywall/concrete/gravel-paint workflows
-- [ ] "Detected Scope" card displays matching project geometry context
-- [ ] Parameter edits recalculate results
-- [ ] Result Snapshot and detailed lines render correctly
-- [ ] Job Cost Stack values render correctly when costs present
+### Materials and Quantities
+- [ ] Estimate type switching (drywall/concrete/gravel-paint) works.
+- [ ] Parameter changes recalculate outputs.
+- [ ] Smart checks/warnings display when expected.
 
 ### Export
-- [ ] Export screen opens without errors
-- [ ] Preview content loads
-- [ ] Copy/share actions function
-- [ ] CSV/PDF generation path behaves as expected
+- [ ] Estimate summary renders for selected scope.
+- [ ] Share Full Report opens Android share sheet.
+- [ ] Save CSV/PDF/JSON via SAF works.
+- [ ] Download/Share estimate PDF actions complete.
+
+### Settings/About
+- [ ] Core preference toggles persist (trade, units, reduced motion).
+- [ ] Quantity/pricing defaults persist after restart.
+- [ ] Business identity fields persist and appear in exports.
+- [ ] Reset Settings restores defaults after confirmation.
 
 ---
 
@@ -99,26 +83,26 @@ Expected: no fatal exception for normal navigation.
 
 Retest these whenever related code changes:
 
-- 3D color rendering and selection highlighting
-- Quick Room validation + opening distribution logic
-- Takeoff type switching and live recomputation
-- Space transform persistence in DataStore
+- Blueprint editing gestures and snapping behavior
+- Trade scope switching and recomputation
+- Export SAF write flows (CSV/PDF/JSON)
+- DataStore persistence and project switching
 
 ---
 
 ## 5) Play Submission QA Gate
 
-Before submitting to Play Console, ensure:
+Before production rollout:
 
-- [ ] Release AAB built and signed (`bundleRelease`)
-- [ ] Final smoke test run on same commit used for release
-- [ ] No startup crash in logcat
-- [ ] All listing screenshots represent current UI
-- [ ] Privacy policy URL resolves publicly
+- [ ] Build signed AAB from release commit (`:app:bundleRelease`)
+- [ ] Run final smoke test on same commit
+- [ ] Verify no fatal exceptions in logcat on main flows
+- [ ] Confirm listing screenshots match current UI
+- [ ] Confirm privacy policy URL resolves publicly
 
 ---
 
 ## 6) Notes
 
-- If a crash occurs, capture full stack trace first and patch from root cause.
-- Any UI flow changes should trigger screenshot refresh (`scripts/04-capture-screenshots.ps1`).
+- If a crash occurs, capture full stack trace and fix root cause.
+- Refresh screenshots after major UI changes using `scripts/04-capture-screenshots.ps1`.

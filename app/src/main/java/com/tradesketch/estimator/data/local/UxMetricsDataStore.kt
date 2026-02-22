@@ -29,7 +29,6 @@ class UxMetricsDataStore @Inject constructor(
         private val FIRST_ESTIMATE_COUNT = intPreferencesKey("first_estimate_count")
         private val FIRST_ESTIMATE_TOTAL_MS = longPreferencesKey("first_estimate_total_ms")
         private val TOTAL_TAP_COUNT = intPreferencesKey("total_tap_count")
-        private val BACKTRACK_COUNT = intPreferencesKey("backtrack_count")
         private val TAPS_BY_TASK_JSON = stringPreferencesKey("taps_by_task_json")
         private val LAST_EVENT_AT = longPreferencesKey("last_event_at")
     }
@@ -39,7 +38,6 @@ class UxMetricsDataStore @Inject constructor(
             firstEstimateCount = preferences[FIRST_ESTIMATE_COUNT] ?: 0,
             firstEstimateTotalMs = preferences[FIRST_ESTIMATE_TOTAL_MS] ?: 0L,
             totalTapCount = preferences[TOTAL_TAP_COUNT] ?: 0,
-            backtrackCount = preferences[BACKTRACK_COUNT] ?: 0,
             tapsByTask = parseTaskMap(preferences[TAPS_BY_TASK_JSON]),
             lastEventAt = preferences[LAST_EVENT_AT] ?: 0L
         )
@@ -56,26 +54,12 @@ class UxMetricsDataStore @Inject constructor(
         }
     }
 
-    suspend fun recordBacktrack(fromStep: Int, toStep: Int) {
-        if (toStep >= fromStep) return
-        context.uxMetricsDataStore.edit { preferences ->
-            preferences[BACKTRACK_COUNT] = (preferences[BACKTRACK_COUNT] ?: 0) + 1
-            preferences[LAST_EVENT_AT] = System.currentTimeMillis()
-        }
-    }
-
     suspend fun recordTimeToFirstEstimate(timeMs: Long) {
         if (timeMs <= 0L) return
         context.uxMetricsDataStore.edit { preferences ->
             preferences[FIRST_ESTIMATE_COUNT] = (preferences[FIRST_ESTIMATE_COUNT] ?: 0) + 1
             preferences[FIRST_ESTIMATE_TOTAL_MS] = (preferences[FIRST_ESTIMATE_TOTAL_MS] ?: 0L) + timeMs
             preferences[LAST_EVENT_AT] = System.currentTimeMillis()
-        }
-    }
-
-    suspend fun resetMetrics() {
-        context.uxMetricsDataStore.edit { preferences ->
-            preferences.clear()
         }
     }
 

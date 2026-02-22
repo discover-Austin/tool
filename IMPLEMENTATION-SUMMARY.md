@@ -1,5 +1,9 @@
 # Implementation Summary - TradeSketch Estimator
 
+> Status note (2026-02-20): Historical snapshot from an earlier implementation phase.
+> Treat metrics/percentages below as archival context, not current repository truth.
+> Use current build/test outputs and active docs for release decisions.
+
 ## Master Implementation Achievement
 
 **Status:** ✅ COMPLETE (98%)

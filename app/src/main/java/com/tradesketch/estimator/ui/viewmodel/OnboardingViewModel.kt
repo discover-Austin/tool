@@ -5,8 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
-import com.tradesketch.estimator.domain.model.ProjectTemplate
-import com.tradesketch.estimator.domain.model.TakeoffScope
+import com.tradesketch.estimator.domain.model.defaultQuickStartTemplate
+import com.tradesketch.estimator.domain.model.defaultTakeoffScope
 import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
@@ -40,7 +40,7 @@ class OnboardingViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, error = null, completedProjectId = null) }
             runCatching {
                 val settings = getSettingsUseCase().first()
-                val template = templateForTrade(trade)
+                val template = trade.defaultQuickStartTemplate()
                 val baseProject = template.createProject(normalizedName)
                 val project = baseProject.withTradeScope(trade)
                 saveProjectUseCase(project)
@@ -78,26 +78,10 @@ class OnboardingViewModel @Inject constructor(
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
-
-    private fun templateForTrade(trade: PrimaryTrade): ProjectTemplate {
-        return when (trade) {
-            PrimaryTrade.DRYWALL -> ProjectTemplate.BEDROOM
-            PrimaryTrade.CONCRETE -> ProjectTemplate.GARAGE
-            PrimaryTrade.PAINT -> ProjectTemplate.BEDROOM
-            PrimaryTrade.GRAVEL_MULCH -> ProjectTemplate.YARD_BED
-            PrimaryTrade.MULTI -> ProjectTemplate.BLANK
-        }
-    }
 }
 
 private fun Project.withTradeScope(trade: PrimaryTrade): Project {
-    val mappedScope = when (trade) {
-        PrimaryTrade.DRYWALL -> TakeoffScope.DRYWALL
-        PrimaryTrade.CONCRETE -> TakeoffScope.CONCRETE
-        PrimaryTrade.PAINT -> TakeoffScope.PAINT
-        PrimaryTrade.GRAVEL_MULCH -> TakeoffScope.GRAVEL_MULCH
-        PrimaryTrade.MULTI -> takeoffSession.selectedScope
-    }
+    val mappedScope = trade.defaultTakeoffScope(takeoffSession.selectedScope)
     val blueprint = if (blueprintDocument.projectId == id) {
         blueprintDocument
     } else {

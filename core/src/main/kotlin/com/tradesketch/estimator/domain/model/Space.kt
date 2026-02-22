@@ -4,7 +4,9 @@ import java.util.UUID
 
 enum class OpeningType {
     DOOR,
-    WINDOW
+    WINDOW,
+    STAIR_UP,
+    STAIR_DOWN
 }
 
 data class Opening(

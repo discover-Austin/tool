@@ -8,9 +8,5 @@ interface UxMetricsRepository {
 
     suspend fun recordTap(task: String)
 
-    suspend fun recordBacktrack(fromStep: Int, toStep: Int)
-
     suspend fun recordTimeToFirstEstimate(timeMs: Long)
-
-    suspend fun resetMetrics()
 }

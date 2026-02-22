@@ -9,7 +9,7 @@ import javax.inject.Inject
  * This is the authoritative calculator - all quantities derive from blueprint geometry.
  */
 class CalculateTakeoffUseCase @Inject constructor() {
-    
+
     fun calculateDrywall(
         document: BlueprintDocument,
         sheetAreaSqFt: Double,
@@ -29,7 +29,7 @@ class CalculateTakeoffUseCase @Inject constructor() {
             costing = costing
         )
     }
-    
+
     fun calculateConcrete(
         document: BlueprintDocument,
         thicknessFeet: Double,
@@ -43,7 +43,7 @@ class CalculateTakeoffUseCase @Inject constructor() {
             costing = costing
         )
     }
-    
+
     fun calculateGravelMulch(
         document: BlueprintDocument,
         depthFeet: Double,
@@ -59,7 +59,7 @@ class CalculateTakeoffUseCase @Inject constructor() {
             costing = costing
         )
     }
-    
+
     fun calculatePaint(
         document: BlueprintDocument,
         coverageSqFtPerGallon: Double,

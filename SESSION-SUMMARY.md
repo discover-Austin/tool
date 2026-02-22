@@ -1,5 +1,9 @@
 # Session Summary - TradeSketch Estimator Completion
 
+> Status note (2026-02-20): Historical session artifact.
+> Completion percentages, file counts, and screen inventory below may not reflect the current repo state.
+> Treat this as archival context and rely on current build/tests plus active coordination logs for truth.
+
 ## Overview
 
 **Session Goal:** Continue implementation from 98% to completion

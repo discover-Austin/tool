@@ -1,3 +1,4 @@
+NOTE (February 21, 2026): Historical file listing from an earlier snapshot; entries may not match current repository state.
 AGENTS.md
 app\build.gradle.kts
 app\proguard-rules.pro

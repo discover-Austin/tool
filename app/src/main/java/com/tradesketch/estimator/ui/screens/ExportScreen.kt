@@ -51,10 +51,8 @@ import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
+import com.tradesketch.estimator.utils.ExportStorage
 import com.tradesketch.estimator.utils.Formatters
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,8 +77,10 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(viewModel.csvContent().toByteArray())
+            val output = context.contentResolver.openOutputStream(uri)
+                ?: error("Unable to open CSV output stream")
+            output.use { stream ->
+                stream.write(viewModel.csvContent().toByteArray())
             }
         }.onSuccess {
             Toast.makeText(context, "CSV exported.", Toast.LENGTH_SHORT).show()
@@ -93,8 +93,10 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(viewModel.jsonContent().toByteArray())
+            val output = context.contentResolver.openOutputStream(uri)
+                ?: error("Unable to open JSON output stream")
+            output.use { stream ->
+                stream.write(viewModel.jsonContent().toByteArray())
             }
         }.onSuccess {
             Toast.makeText(context, "JSON exported.", Toast.LENGTH_SHORT).show()
@@ -109,8 +111,10 @@ fun ExportScreen(
         coroutineScope.launch {
             val bytes = viewModel.buildEstimatePdfBytes() ?: return@launch
             runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { output ->
-                    output.write(bytes)
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: error("Unable to open PDF output stream")
+                output.use { stream ->
+                    stream.write(bytes)
                 }
             }.onSuccess {
                 Toast.makeText(context, "PDF exported.", Toast.LENGTH_SHORT).show()
@@ -339,7 +343,13 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            csvSafLauncher.launch(buildSafFileName(name, "quantities", "csv"))
+                            csvSafLauncher.launch(
+                                ExportStorage.buildFileName(
+                                    projectName = name,
+                                    suffix = "quantities",
+                                    extension = "csv"
+                                )
+                            )
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -350,7 +360,13 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            jsonSafLauncher.launch(buildSafFileName(name, "traceability", "json"))
+                            jsonSafLauncher.launch(
+                                ExportStorage.buildFileName(
+                                    projectName = name,
+                                    suffix = "traceability",
+                                    extension = "json"
+                                )
+                            )
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -361,7 +377,13 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            pdfSafLauncher.launch(buildSafFileName(name, "estimate", "pdf"))
+                            pdfSafLauncher.launch(
+                                ExportStorage.buildFileName(
+                                    projectName = name,
+                                    suffix = "estimate",
+                                    extension = "pdf"
+                                )
+                            )
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -428,17 +450,3 @@ fun ExportScreen(
         }
     }
 }
-
-private fun buildSafFileName(projectName: String, suffix: String, extension: String): String {
-    val cleanName = projectName
-        .trim()
-        .ifBlank { "project" }
-        .replace(Regex("[^A-Za-z0-9_-]"), "_")
-        .replace(Regex("_+"), "_")
-        .take(40)
-        .ifBlank { "project" }
-    val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-    return "${cleanName}_${suffix}_$stamp.$extension"
-}
-
-

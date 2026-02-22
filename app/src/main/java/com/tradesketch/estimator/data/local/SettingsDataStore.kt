@@ -49,46 +49,52 @@ class SettingsDataStore @Inject constructor(
         private val BUSINESS_ADDRESS = stringPreferencesKey("business_address")
         private val BUSINESS_LICENSE = stringPreferencesKey("business_license")
     }
-    
+
     val settings: Flow<Settings> = context.settingsDataStore.data
         .map { preferences ->
+            val defaults = Settings.DEFAULT
             val storedTrade = preferences[PRIMARY_TRADE]
             val primaryTrade = storedTrade
                 ?.let { raw -> runCatching { PrimaryTrade.valueOf(raw) }.getOrNull() }
-                ?: PrimaryTrade.DRYWALL
+                ?: defaults.primaryTrade
             Settings(
                 primaryTrade = primaryTrade,
-                simplifiedHome = preferences[SIMPLIFIED_HOME] ?: true,
-                calmModeEnabled = preferences[CALM_MODE_ENABLED] ?: true,
-                workflowAidsEnabled = preferences[WORKFLOW_AIDS_ENABLED] ?: false,
-                reducedMotionEnabled = preferences[REDUCED_MOTION_ENABLED] ?: true,
-                firstRun = preferences[FIRST_RUN] ?: true,
-                hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING] ?: false,
-                defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: 10.0,
-                useMetric = preferences[USE_METRIC] ?: false,
-                defaultDrywallSheetArea = preferences[DEFAULT_DRYWALL_SHEET_AREA] ?: 32.0,
-                defaultScrewsPerSheet = preferences[DEFAULT_SCREWS_PER_SHEET] ?: 32,
-                defaultMudGallonsPer100SqFt = preferences[DEFAULT_MUD_GALLONS_PER_100_SQFT] ?: 0.5,
-                defaultCoveragePerGallon = preferences[DEFAULT_COVERAGE_PER_GALLON] ?: 350.0,
-                defaultCoatsOfPaint = preferences[DEFAULT_COATS_OF_PAINT] ?: 2,
-                drywallSheetUnitCost = preferences[DRYWALL_SHEET_UNIT_COST] ?: 17.5,
-                drywallScrewUnitCost = preferences[DRYWALL_SCREW_UNIT_COST] ?: 0.01,
-                drywallMudUnitCost = preferences[DRYWALL_MUD_UNIT_COST] ?: 9.5,
-                concreteYardUnitCost = preferences[CONCRETE_YARD_UNIT_COST] ?: 165.0,
-                gravelYardUnitCost = preferences[GRAVEL_YARD_UNIT_COST] ?: 52.0,
-                gravelTonUnitCost = preferences[GRAVEL_TON_UNIT_COST] ?: 36.0,
-                paintGallonUnitCost = preferences[PAINT_GALLON_UNIT_COST] ?: 38.0,
-                laborPercent = preferences[LABOR_PERCENT] ?: 20.0,
-                markupPercent = preferences[MARKUP_PERCENT] ?: 15.0,
-                taxPercent = preferences[TAX_PERCENT] ?: 8.0,
-                businessName = preferences[BUSINESS_NAME] ?: "",
-                businessPhone = preferences[BUSINESS_PHONE] ?: "",
-                businessEmail = preferences[BUSINESS_EMAIL] ?: "",
-                businessAddress = preferences[BUSINESS_ADDRESS] ?: "",
-                businessLicense = preferences[BUSINESS_LICENSE] ?: ""
+                simplifiedHome = preferences[SIMPLIFIED_HOME] ?: defaults.simplifiedHome,
+                calmModeEnabled = preferences[CALM_MODE_ENABLED] ?: defaults.calmModeEnabled,
+                workflowAidsEnabled = preferences[WORKFLOW_AIDS_ENABLED] ?: defaults.workflowAidsEnabled,
+                reducedMotionEnabled = preferences[REDUCED_MOTION_ENABLED] ?: defaults.reducedMotionEnabled,
+                firstRun = preferences[FIRST_RUN] ?: defaults.firstRun,
+                hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING]
+                    ?: defaults.hasCompletedTradeOnboarding,
+                defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: defaults.defaultWastePercent,
+                useMetric = preferences[USE_METRIC] ?: defaults.useMetric,
+                defaultDrywallSheetArea = preferences[DEFAULT_DRYWALL_SHEET_AREA]
+                    ?: defaults.defaultDrywallSheetArea,
+                defaultScrewsPerSheet = preferences[DEFAULT_SCREWS_PER_SHEET]
+                    ?: defaults.defaultScrewsPerSheet,
+                defaultMudGallonsPer100SqFt = preferences[DEFAULT_MUD_GALLONS_PER_100_SQFT]
+                    ?: defaults.defaultMudGallonsPer100SqFt,
+                defaultCoveragePerGallon = preferences[DEFAULT_COVERAGE_PER_GALLON]
+                    ?: defaults.defaultCoveragePerGallon,
+                defaultCoatsOfPaint = preferences[DEFAULT_COATS_OF_PAINT] ?: defaults.defaultCoatsOfPaint,
+                drywallSheetUnitCost = preferences[DRYWALL_SHEET_UNIT_COST] ?: defaults.drywallSheetUnitCost,
+                drywallScrewUnitCost = preferences[DRYWALL_SCREW_UNIT_COST] ?: defaults.drywallScrewUnitCost,
+                drywallMudUnitCost = preferences[DRYWALL_MUD_UNIT_COST] ?: defaults.drywallMudUnitCost,
+                concreteYardUnitCost = preferences[CONCRETE_YARD_UNIT_COST] ?: defaults.concreteYardUnitCost,
+                gravelYardUnitCost = preferences[GRAVEL_YARD_UNIT_COST] ?: defaults.gravelYardUnitCost,
+                gravelTonUnitCost = preferences[GRAVEL_TON_UNIT_COST] ?: defaults.gravelTonUnitCost,
+                paintGallonUnitCost = preferences[PAINT_GALLON_UNIT_COST] ?: defaults.paintGallonUnitCost,
+                laborPercent = preferences[LABOR_PERCENT] ?: defaults.laborPercent,
+                markupPercent = preferences[MARKUP_PERCENT] ?: defaults.markupPercent,
+                taxPercent = preferences[TAX_PERCENT] ?: defaults.taxPercent,
+                businessName = preferences[BUSINESS_NAME] ?: defaults.businessName,
+                businessPhone = preferences[BUSINESS_PHONE] ?: defaults.businessPhone,
+                businessEmail = preferences[BUSINESS_EMAIL] ?: defaults.businessEmail,
+                businessAddress = preferences[BUSINESS_ADDRESS] ?: defaults.businessAddress,
+                businessLicense = preferences[BUSINESS_LICENSE] ?: defaults.businessLicense
             )
         }
-    
+
     suspend fun saveSettings(settings: Settings) {
         context.settingsDataStore.edit { preferences ->
             preferences[PRIMARY_TRADE] = settings.primaryTrade.name
@@ -122,7 +128,7 @@ class SettingsDataStore @Inject constructor(
             preferences[BUSINESS_LICENSE] = settings.businessLicense
         }
     }
-    
+
     suspend fun resetSettings() {
         context.settingsDataStore.edit { preferences ->
             preferences.clear()

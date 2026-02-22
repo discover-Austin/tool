@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.BuildConfig
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
@@ -352,7 +353,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "TradeSketch Estimator v1.0.1",
+                        text = "TradeSketch Estimator v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))

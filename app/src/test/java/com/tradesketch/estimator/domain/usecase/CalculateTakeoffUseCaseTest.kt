@@ -9,9 +9,9 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class CalculateTakeoffUseCaseTest {
-    
+
     private val useCase = CalculateTakeoffUseCase()
-    
+
     @Test
     fun `calculateDrywall returns result from blueprint`() {
         val wall = WallSegment(
@@ -24,7 +24,7 @@ class CalculateTakeoffUseCaseTest {
             projectId = "test",
             walls = listOf(wall)
         )
-        
+
         val result = useCase.calculateDrywall(
             document = document,
             sheetAreaSqFt = 32.0,
@@ -32,11 +32,11 @@ class CalculateTakeoffUseCaseTest {
             screwsPerSheet = 32,
             mudGallonsPer100SqFt = 0.5
         )
-        
+
         assertTrue(result.items.isNotEmpty())
         assertTrue(result.items.any { it.name == "Drywall sheets" })
     }
-    
+
     @Test
     fun `calculateConcrete returns result from blueprint`() {
         val room = Room(
@@ -53,17 +53,17 @@ class CalculateTakeoffUseCaseTest {
             projectId = "test",
             rooms = listOf(room)
         )
-        
+
         val result = useCase.calculateConcrete(
             document = document,
             thicknessFeet = 0.33,
             wastePercent = 5.0
         )
-        
+
         assertTrue(result.items.isNotEmpty())
         assertTrue(result.items.any { it.unit == "cubic yards" })
     }
-    
+
     @Test
     fun `calculatePaint returns result from blueprint`() {
         val wall = WallSegment(
@@ -76,14 +76,14 @@ class CalculateTakeoffUseCaseTest {
             projectId = "test",
             walls = listOf(wall)
         )
-        
+
         val result = useCase.calculatePaint(
             document = document,
             coverageSqFtPerGallon = 350.0,
             coats = 2,
             wastePercent = 10.0
         )
-        
+
         assertTrue(result.items.isNotEmpty())
         assertTrue(result.items.any { it.name == "Paint" })
     }

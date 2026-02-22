@@ -8,6 +8,7 @@ import com.tradesketch.estimator.domain.model.GravelSessionParams
 import com.tradesketch.estimator.domain.model.PaintSessionParams
 import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.Project
+import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffScope
@@ -25,26 +26,29 @@ internal object TakeoffLineItemNames {
 }
 
 internal fun Settings.defaultDrywallParams(): DrywallParams {
+    val defaults = DrywallSessionParams()
     return DrywallParams(
         sheetAreaSqFt = defaultDrywallSheetArea,
         wastePercent = defaultWastePercent,
         screwsPerSheet = defaultScrewsPerSheet,
         mudGallonsPer100SqFt = defaultMudGallonsPer100SqFt,
-        includeCeilings = true
+        includeCeilings = defaults.includeCeilings
     )
 }
 
 internal fun Settings.defaultConcreteParams(): ConcreteParams {
+    val defaults = ConcreteSessionParams()
     return ConcreteParams(
-        thicknessFeet = 0.33,
+        thicknessFeet = defaults.thicknessFeet,
         wastePercent = defaultWastePercent
     )
 }
 
 internal fun Settings.defaultGravelParams(): GravelParams {
+    val defaults = GravelSessionParams()
     return GravelParams(
-        depthFeet = 0.25,
-        densityTonsPerYard = 1.4,
+        depthFeet = defaults.depthFeet,
+        densityTonsPerYard = defaults.densityTonsPerYard,
         wastePercent = defaultWastePercent
     )
 }
@@ -131,6 +135,20 @@ internal data class TakeoffCalculationInputs(
     val paint: PaintParams,
     val pricing: PricingParams
 )
+
+internal fun buildTakeoffInputs(
+    project: Project,
+    settings: Settings
+): TakeoffCalculationInputs {
+    val persistedSession = project.takeoffSession.takeIf { it != ProjectTakeoffSession() }
+    return TakeoffCalculationInputs(
+        drywall = persistedSession?.drywall?.toUiParams() ?: settings.defaultDrywallParams(),
+        concrete = persistedSession?.concrete?.toUiParams() ?: settings.defaultConcreteParams(),
+        gravel = persistedSession?.gravel?.toUiParams() ?: settings.defaultGravelParams(),
+        paint = persistedSession?.paint?.toUiParams() ?: settings.defaultPaintParams(),
+        pricing = persistedSession?.pricing?.toUiParams() ?: settings.defaultPricingParams()
+    )
+}
 
 internal fun CalculateTakeoffUseCase.calculateForType(
     project: Project,
