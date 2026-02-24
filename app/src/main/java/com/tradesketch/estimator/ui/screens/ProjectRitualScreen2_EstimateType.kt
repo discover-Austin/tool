@@ -42,7 +42,7 @@ fun ProjectRitualScreen2_EstimateType(
             tint = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = "Project Ritual 2/2",
+            text = "Project Setup 2 of 2",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -52,7 +52,7 @@ fun ProjectRitualScreen2_EstimateType(
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "Choose the primary estimate type. You can expand scope later from Blueprint.",
+            text = "Choose the main estimate type for this project. You can change it later.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -104,7 +104,7 @@ fun ProjectRitualScreen2_EstimateType(
             enabled = selectedTrade != null,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Enter Workspace")
+            Text("Open Project")
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
@@ -130,12 +130,12 @@ private fun estimateOptions(): List<EstimateTypeOption> {
         EstimateTypeOption(
             trade = PrimaryTrade.CONCRETE,
             title = "Concrete",
-            description = "Room footprint and thickness-based slab takeoff from blueprint loops."
+            description = "Slab quantities based on footprint and depth."
         ),
         EstimateTypeOption(
             trade = PrimaryTrade.PAINT,
             title = "Paint",
-            description = "Wall/opening-derived paint quantities with coat and waste controls."
+            description = "Paint quantities based on wall area, coats, and waste."
         ),
         EstimateTypeOption(
             trade = PrimaryTrade.GRAVEL_MULCH,
@@ -145,7 +145,7 @@ private fun estimateOptions(): List<EstimateTypeOption> {
         EstimateTypeOption(
             trade = PrimaryTrade.MULTI,
             title = "Multi-Trade",
-            description = "Blueprint-first workflow with flexible scope expansion."
+            description = "Flexible blueprint workflow across all trade types."
         )
     )
 }

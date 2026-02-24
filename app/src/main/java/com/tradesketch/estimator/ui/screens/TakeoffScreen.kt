@@ -217,7 +217,7 @@ fun TakeoffScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${scopeSummary.spaceCount} matching blueprint surface(s) in this project.",
+                            text = "${scopeSummary.spaceCount} matching blueprint surfaces in this project.",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
@@ -270,13 +270,13 @@ fun TakeoffScreen(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "Smart Checks",
+                                text = "Review Checks",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${warnings.size} item(s) to review before sharing this estimate.",
+                                text = "${warnings.size} items to review before sharing this estimate.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )

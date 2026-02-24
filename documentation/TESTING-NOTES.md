@@ -45,8 +45,8 @@ Expected: no startup/runtime fatal exceptions on normal flows.
 
 ### First-Run and Project Setup
 - [ ] Welcome screen renders and Continue works.
-- [ ] Project Ritual step 1 validates project name entry.
-- [ ] Project Ritual step 2 trade selection completes and opens workspace.
+- [ ] Project setup step 1 validates project name entry.
+- [ ] Project setup step 2 trade selection completes and opens workspace.
 
 ### Workspace Navigation
 - [ ] Rail opens tabs: Blueprint, Materials, Quantities, Export, Settings/About.
@@ -68,7 +68,7 @@ Expected: no startup/runtime fatal exceptions on normal flows.
 ### Export
 - [ ] Estimate summary renders for selected scope.
 - [ ] Share Full Report opens Android share sheet.
-- [ ] Save CSV/PDF/JSON via SAF works.
+- [ ] Save CSV/PDF/JSON works.
 - [ ] Download/Share estimate PDF actions complete.
 
 ### Settings/About

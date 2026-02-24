@@ -103,11 +103,15 @@ private val desktopToolChipSpecs = listOf(
 private fun OpeningType.toolKey(): String = when (this) {
     OpeningType.DOOR -> TOOL_DOOR
     OpeningType.WINDOW -> TOOL_WINDOW
+    OpeningType.STAIR_UP -> TOOL_DRAW
+    OpeningType.STAIR_DOWN -> TOOL_DRAW
 }
 
 private fun OpeningType.label(): String = when (this) {
     OpeningType.DOOR -> "Door"
     OpeningType.WINDOW -> "Window"
+    OpeningType.STAIR_UP -> "Stair Up"
+    OpeningType.STAIR_DOWN -> "Stair Down"
 }
 
 @Composable

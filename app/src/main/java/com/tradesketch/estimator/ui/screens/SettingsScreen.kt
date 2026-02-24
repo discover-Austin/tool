@@ -21,6 +21,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -157,6 +158,130 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+        }
+
+        item {
+            TitledSectionCard(
+                title = "Blueprint Controls",
+                subtitle = "Snap and joystick behavior for the Blueprint tab."
+            ) {
+                Text(
+                    text = "Snap Toggles",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = uiState.settings.blueprintSnapGridEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintSnapDefaults(gridEnabled = !uiState.settings.blueprintSnapGridEnabled)
+                        },
+                        label = { Text("Grid") }
+                    )
+                    FilterChip(
+                        selected = uiState.settings.blueprintSnapAngleEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintSnapDefaults(angleEnabled = !uiState.settings.blueprintSnapAngleEnabled)
+                        },
+                        label = { Text("Angle") }
+                    )
+                    FilterChip(
+                        selected = uiState.settings.blueprintSnapEndpointEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintSnapDefaults(endpointEnabled = !uiState.settings.blueprintSnapEndpointEnabled)
+                        },
+                        label = { Text("Endpoints") }
+                    )
+                    FilterChip(
+                        selected = uiState.settings.blueprintSnapMidpointEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintSnapDefaults(midpointEnabled = !uiState.settings.blueprintSnapMidpointEnabled)
+                        },
+                        label = { Text("Midpoints") }
+                    )
+                    FilterChip(
+                        selected = uiState.settings.blueprintSnapClosureEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintSnapDefaults(closureEnabled = !uiState.settings.blueprintSnapClosureEnabled)
+                        },
+                        label = { Text("Room closure") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Controls",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = uiState.settings.blueprintDualJoysticksEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintControlDefaults(
+                                dualJoysticksEnabled = !uiState.settings.blueprintDualJoysticksEnabled
+                            )
+                        },
+                        label = { Text("Dual joysticks") }
+                    )
+                    FilterChip(
+                        selected = uiState.settings.blueprintLargeCursorEnabled,
+                        onClick = {
+                            haptics.tap()
+                            viewModel.updateBlueprintControlDefaults(
+                                largeCursorEnabled = !uiState.settings.blueprintLargeCursorEnabled
+                            )
+                        },
+                        label = { Text("Large cursor") }
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Joystick sensitivity: ${"%.2f".format(uiState.settings.blueprintJoystickSensitivity)}x",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = uiState.settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
+                    onValueChange = {
+                        viewModel.updateBlueprintControlDefaults(
+                            joystickSensitivity = it.coerceIn(0.55f, 2.2f)
+                        )
+                    },
+                    valueRange = 0.55f..2.2f,
+                    steps = 16
+                )
+                Text(
+                    text = "Joystick deadzone: ${(uiState.settings.blueprintJoystickDeadzone * 100f).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = uiState.settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
+                    onValueChange = {
+                        viewModel.updateBlueprintControlDefaults(
+                            joystickDeadzone = it.coerceIn(0.08f, 0.30f)
+                        )
+                    },
+                    valueRange = 0.08f..0.30f,
+                    steps = 10
+                )
             }
         }
 

@@ -9,7 +9,7 @@ Shared business logic comes from the cross-platform `:core` module.
 - Space editor (wall, room, slab, circle, L-shape, openings)
 - Takeoff calculations (drywall, concrete, gravel/mulch, paint)
 - Costing rollups (material, labor, markup, tax)
-- Export preview and copy (summary, full report, CSV)
+- Export preview and copy (summary, full report, CSV, JSON)
 - Local JSON persistence in:
   - `~/.tradesketch-estimator/projects.json`
   - `~/.tradesketch-estimator/settings.json`

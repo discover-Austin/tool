@@ -12,7 +12,7 @@ Offline, blueprint-first material takeoffs for skilled trades.
 ## Product Flow (Current UI)
 
 1. Welcome screen (`WelcomeScreenPro`)
-2. Project Ritual (name + primary trade)
+2. Project setup (name + primary trade)
 3. Workspace with rail tabs:
    - Blueprint
    - Materials
@@ -22,7 +22,8 @@ Offline, blueprint-first material takeoffs for skilled trades.
 
 Key capabilities:
 
-- Blueprint drafting with wall, door, and window placement
+- Blueprint drafting with wall, door, window, and stair placement
+- Multi-floor planning with Ground, upper floors, and basement levels
 - Trade-specific takeoffs: drywall, concrete, gravel/mulch, paint
 - Quantity and pricing parameter controls
 - Export/share as PDF, CSV, JSON, or text intent

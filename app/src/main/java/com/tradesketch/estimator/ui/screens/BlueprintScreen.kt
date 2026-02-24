@@ -4,6 +4,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
 import android.view.MotionEvent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -11,8 +18,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdsClick
@@ -62,13 +68,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -78,6 +84,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -88,11 +95,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -100,6 +109,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -121,6 +131,7 @@ import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
+import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -151,10 +162,7 @@ private enum class OpeningPanelType {
     STAIR_DOWN
 }
 
-private enum class BlueprintFloorLevel {
-    LOWER,
-    UPPER
-}
+private typealias BlueprintFloorLevel = Int
 
 private data class OpeningPlacementCandidate(
     val wall: WallSegment,
@@ -266,8 +274,9 @@ private val CANVAS_TAP_AIM_OFFSET_PX = Offset(0f, -68f)
 private const val WALL_POINTER_RELEASE_HOLD_MS = 360L
 private const val WALL_SCOPE_TAG_PREFIX = "trade_scope:"
 private const val FLOOR_TAG_PREFIX = "floor:"
-private const val FLOOR_LOWER_TAG = "floor:lower"
-private const val FLOOR_UPPER_TAG = "floor:upper"
+private const val FLOOR_GROUND_LEVEL = 0
+private const val FLOOR_LEGACY_LOWER_TAG = "${FLOOR_TAG_PREFIX}lower"
+private const val FLOOR_LEGACY_UPPER_TAG = "${FLOOR_TAG_PREFIX}upper"
 private const val DOOR_SWING_POS_TAG = "door_swing:pos"
 private const val DOOR_SWING_NEG_TAG = "door_swing:neg"
 private const val WALL_LENGTH_LABEL_TEXT_SP = 11.2f
@@ -287,18 +296,32 @@ private const val JOYSTICK_MAX_FRAME_DELTA_SEC = 1f / 30f
 private const val JOYSTICK_CURSOR_RESPONSE_EXPONENT = 1f
 private const val JOYSTICK_PAN_RESPONSE_EXPONENT = 1f
 private const val JOYSTICK_DEADZONE_DEFAULT = 0.08f
+private const val JOYSTICK_SELECT_BOOST_MULTIPLIER = 1.65f
+private const val MOVING_WALL_ROTATE_INCREMENT_DEG = 5.0
+private const val MOVING_WALL_AUTO_SNAP_THRESHOLD_MULTIPLIER = 1.4
+private const val MOVING_WALL_AUTO_SNAP_MIN_THRESHOLD_MM = 90L
+private const val POINTER_LENS_ZOOM = 2.1f
+private const val POINTER_LENS_RADIUS_PX = 52f
+private val POINTER_LENS_OFFSET_PX = Offset(102f, -94f)
 private val DEFAULT_PANEL_BOTTOM_PADDING = 130.dp
-private val BLUEPRINT_BACKGROUND_TOP = Color(0xFF060F1A)
-private val BLUEPRINT_BACKGROUND_BOTTOM = Color(0xFF0B1E34)
-private val BLUEPRINT_CANVAS_TOP = Color(0xFF040E18)
-private val BLUEPRINT_CANVAS_BOTTOM = Color(0xFF0A1B30)
-private val BLUEPRINT_CANVAS_GLOW = Color(0x142C5E8E)
-private val GRID_MINOR_COLOR = Color(0x2D4E6B88)
-private val GRID_MAJOR_COLOR = Color(0x5F7EA4C8)
-private val GRID_FIVE_FOOT_COLOR = Color(0xA4BBDDFD)
-private val GRID_AXIS_COLOR = Color(0xE0CCE6FF)
+private val BLUEPRINT_BACKGROUND_TOP = Color(0xFF071A30)
+private val BLUEPRINT_BACKGROUND_BOTTOM = Color(0xFF0E2A49)
+private val BLUEPRINT_CANVAS_TOP = Color(0xFF051423)
+private val BLUEPRINT_CANVAS_BOTTOM = Color(0xFF0C2845)
+private val BLUEPRINT_CANVAS_GLOW = Color(0x1D67B7F2)
+private val BLUEPRINT_TEXTURE_DIAGONAL_A = Color(0x1C88B8E8)
+private val BLUEPRINT_TEXTURE_DIAGONAL_B = Color(0x11709BC8)
+private val BLUEPRINT_TEXTURE_NOISE_DOT = Color(0x145C86B5)
+private val GRID_MINOR_COLOR = Color(0x326D90AE)
+private val GRID_MAJOR_COLOR = Color(0x7BA4C8E8)
+private val GRID_FIVE_FOOT_COLOR = Color(0xD0D7EEFF)
+private val GRID_AXIS_COLOR = Color(0xF0D5E9FF)
 private val GEOMETRY_SELECTION_COLOR = Color(0xFFFFF2BF)
 private val GEOMETRY_HALO_COLOR = Color(0xC0020A14)
+private val GEOMETRY_DEPTH_SHADOW = Color(0xB000040A)
+private val GEOMETRY_DEPTH_HIGHLIGHT = Color(0xA6E8F6FF)
+private val GEOMETRY_SELECTION_PULSE = Color(0x99FFDFA0)
+private val GEOMETRY_SNAP_PULSE = Color(0xB89ED8FF)
 private val OPENING_DOOR_COLOR = Color(0xFFFFCF8C)
 private val OPENING_WINDOW_COLOR = Color(0xFFB0EEFF)
 private val OPENING_PREVIEW_DOOR_COLOR = Color(0xFFFFDEAE)
@@ -330,12 +353,6 @@ private data class BlueprintIconToggleSpec(
     val contentDescription: String,
     val selected: Boolean,
     val onClick: () -> Unit
-)
-
-private data class BlueprintSnapToggleSpec(
-    val label: String,
-    val selected: Boolean,
-    val onToggle: () -> Unit
 )
 
 private data class GravelMaterialPreset(
@@ -386,9 +403,12 @@ fun BlueprintScreen(
     initialShowParams: Boolean = false,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
-    viewModel: BlueprintEditorViewModel = hiltViewModel()
+    viewModel: BlueprintEditorViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val settingsUiState by settingsViewModel.uiState.collectAsState()
+    val appSettings = settingsUiState.settings
 
     var tool by remember { mutableStateOf(BlueprintDraftTool.DRAW_WALL) }
     var drawingStart by remember { mutableStateOf<PointMm?>(null) }
@@ -397,7 +417,17 @@ fun BlueprintScreen(
     var detachedWalls by remember { mutableStateOf(false) }
     var movingWallPreview by remember { mutableStateOf<WallSegment?>(null) }
     var restartLineFromNearestWallStart by remember { mutableStateOf(false) }
-    var snapSettings by remember { mutableStateOf(BlueprintSnapSettings()) }
+    var snapSettings by remember {
+        mutableStateOf(
+            BlueprintSnapSettings(
+                gridEnabled = appSettings.blueprintSnapGridEnabled,
+                endpointEnabled = appSettings.blueprintSnapEndpointEnabled,
+                midpointEnabled = appSettings.blueprintSnapMidpointEnabled,
+                angleEnabled = appSettings.blueprintSnapAngleEnabled,
+                closureEnabled = appSettings.blueprintSnapClosureEnabled
+            )
+        )
+    }
     var scale by remember { mutableFloatStateOf(0.82f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var activeOpeningPanel by rememberSaveable(projectId) {
@@ -441,18 +471,27 @@ fun BlueprintScreen(
     var clearAllButtonBounds by remember { mutableStateOf<Rect?>(null) }
     var gridScaleEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var railHelpBounds by remember { mutableStateOf<Rect?>(null) }
-    var dualJoysticksEnabled by rememberSaveable(projectId) { mutableStateOf(true) }
-    var joystickSensitivity by rememberSaveable(projectId) { mutableFloatStateOf(1.0f) }
-    var joystickDeadzone by rememberSaveable(projectId) { mutableFloatStateOf(JOYSTICK_DEADZONE_DEFAULT) }
+    var wallRotateButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var dualJoysticksEnabled by rememberSaveable(projectId) {
+        mutableStateOf(appSettings.blueprintDualJoysticksEnabled)
+    }
+    var largeCursorEnabled by rememberSaveable(projectId) {
+        mutableStateOf(appSettings.blueprintLargeCursorEnabled)
+    }
+    var joystickSensitivity by rememberSaveable(projectId) {
+        mutableFloatStateOf(appSettings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f))
+    }
+    var joystickDeadzone by rememberSaveable(projectId) {
+        mutableFloatStateOf(appSettings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f))
+    }
     var rightJoystickVector by remember { mutableStateOf(Offset.Zero) }
     var leftJoystickVector by remember { mutableStateOf(Offset.Zero) }
+    var rightJoystickPressed by remember { mutableStateOf(false) }
     var joystickCursorLocal by remember { mutableStateOf<Offset?>(null) }
-    var joystickTapToken by remember { mutableIntStateOf(0) }
-    var joystickRightTapToken by remember { mutableIntStateOf(0) }
     var blockedTouchAttempts by rememberSaveable(projectId) { mutableIntStateOf(0) }
     var showJoystickTouchDialog by rememberSaveable(projectId) { mutableStateOf(false) }
     var gridScaleInput by rememberSaveable(projectId) { mutableStateOf("1'") }
-    var selectedFloor by rememberSaveable(projectId) { mutableStateOf(BlueprintFloorLevel.LOWER) }
+    var selectedFloor by rememberSaveable(projectId) { mutableStateOf(FLOOR_GROUND_LEVEL) }
     val rootView = LocalView.current
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
@@ -464,6 +503,33 @@ fun BlueprintScreen(
         showClearAllConfirm = false
         panelBeforeDrag = null
     }
+    LaunchedEffect(
+        appSettings.blueprintSnapGridEnabled,
+        appSettings.blueprintSnapEndpointEnabled,
+        appSettings.blueprintSnapMidpointEnabled,
+        appSettings.blueprintSnapAngleEnabled,
+        appSettings.blueprintSnapClosureEnabled
+    ) {
+        snapSettings = snapSettings.copy(
+            gridEnabled = appSettings.blueprintSnapGridEnabled,
+            endpointEnabled = appSettings.blueprintSnapEndpointEnabled,
+            midpointEnabled = appSettings.blueprintSnapMidpointEnabled,
+            angleEnabled = appSettings.blueprintSnapAngleEnabled,
+            closureEnabled = appSettings.blueprintSnapClosureEnabled
+        )
+    }
+    LaunchedEffect(appSettings.blueprintDualJoysticksEnabled) {
+        dualJoysticksEnabled = appSettings.blueprintDualJoysticksEnabled
+    }
+    LaunchedEffect(appSettings.blueprintLargeCursorEnabled) {
+        largeCursorEnabled = appSettings.blueprintLargeCursorEnabled
+    }
+    LaunchedEffect(appSettings.blueprintJoystickSensitivity) {
+        joystickSensitivity = appSettings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f)
+    }
+    LaunchedEffect(appSettings.blueprintJoystickDeadzone) {
+        joystickDeadzone = appSettings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f)
+    }
     LaunchedEffect(selectedFloor) {
         drawingStart = null
         drawingPreview = null
@@ -471,8 +537,6 @@ fun BlueprintScreen(
         movingWallPreview = null
         restartLineFromNearestWallStart = false
         viewModel.selectWall(null)
-        viewModel.selectOpening(null)
-        viewModel.selectRoom(null)
     }
     if (uiState.isLoading || uiState.document == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -488,8 +552,8 @@ fun BlueprintScreen(
         tool == BlueprintDraftTool.PLACE_STAIR_UP ||
         tool == BlueprintDraftTool.PLACE_STAIR_DOWN
     LaunchedEffect(stairWorkflowActive) {
-        if (!stairWorkflowActive && selectedFloor != BlueprintFloorLevel.LOWER) {
-            selectedFloor = BlueprintFloorLevel.LOWER
+        if (!stairWorkflowActive && selectedFloor != FLOOR_GROUND_LEVEL) {
+            selectedFloor = FLOOR_GROUND_LEVEL
         }
         if (!stairWorkflowActive) {
             floorSwitcherBounds = null
@@ -525,6 +589,11 @@ fun BlueprintScreen(
             selectionPanelBounds = null
         }
     }
+    LaunchedEffect(movingWallPreview?.id) {
+        if (movingWallPreview == null) {
+            wallRotateButtonBounds = null
+        }
+    }
     val menuHitBounds = buildList {
         bottomRailBounds?.let(::add)
         gridScaleBadgeBounds?.let(::add)
@@ -535,6 +604,7 @@ fun BlueprintScreen(
         if (stairWorkflowActive) floorSwitcherBounds?.let(::add)
         if (showGridScaleEditor) gridScaleEditorBounds?.let(::add)
         if (showRailHelp) railHelpBounds?.let(::add)
+        wallRotateButtonBounds?.let(::add)
     }
     val dispatchMenuTapAtCursor: (Offset) -> Boolean = { cursorLocal ->
         val rootPoint = canvasRoot + cursorLocal
@@ -653,12 +723,17 @@ fun BlueprintScreen(
             Millimeters.fromFeet(0.55).value,
             Millimeters.fromFeet(1.8).value
         )
-    val rightTapWallSelectionThresholdMm = (30f / (BASE_PX_PER_MM * scale))
+    val rightSelectBoostActive = dualJoysticksEnabled && rightJoystickPressed
+    val rightSelectRadiusPx = 44f * if (rightSelectBoostActive) JOYSTICK_SELECT_BOOST_MULTIPLIER else 1f
+    val rightTapWallSelectionThresholdMm = (rightSelectRadiusPx / (BASE_PX_PER_MM * scale))
         .roundToLong()
         .coerceIn(
-            Millimeters.fromFeet(0.75).value,
-            Millimeters.fromFeet(2.2).value
+            Millimeters.fromFeet(if (rightSelectBoostActive) 1.65 else 1.2).value,
+            Millimeters.fromFeet(if (rightSelectBoostActive) 3.0 else 2.4).value
         )
+    val movingWallAutoSnapThresholdMm = Millimeters.fromFeet(
+        (snapSettings.thresholdFeet * MOVING_WALL_AUTO_SNAP_THRESHOLD_MULTIPLIER).coerceAtLeast(0.2)
+    ).value.coerceAtLeast(MOVING_WALL_AUTO_SNAP_MIN_THRESHOLD_MM)
     val openingSelectionThresholdMm = (58f / (BASE_PX_PER_MM * scale))
         .roundToLong()
         .coerceAtLeast(Millimeters.fromFeet(2.1).value)
@@ -680,6 +755,38 @@ fun BlueprintScreen(
             .minByOrNull { it.second }
             ?.takeIf { it.second <= openingSelectionThresholdMm }
             ?.first
+    }
+    val commitMovingWallPlacement: () -> Boolean = {
+        val previewWall = movingWallPreview
+        if (previewWall == null) {
+            false
+        } else {
+            val currentWall = doc.walls.find { it.id == previewWall.id }
+            if (currentWall != null && currentWall != previewWall) {
+                viewModel.updateWall(previewWall.id, previewWall)
+            }
+            movingWallPreview = null
+            drawingStart = null
+            drawingPreview = null
+            chainOrigin = null
+            restartLineFromNearestWallStart = false
+            viewModel.selectWall(null)
+            true
+        }
+    }
+    val cancelMovingWallPlacement: () -> Boolean = {
+        val previewWall = movingWallPreview
+        if (previewWall == null) {
+            false
+        } else {
+            movingWallPreview = null
+            drawingStart = null
+            drawingPreview = null
+            chainOrigin = null
+            restartLineFromNearestWallStart = false
+            viewModel.selectWall(null)
+            true
+        }
     }
     val handleLivePointerWorld: (PointMm) -> Unit = { pointer ->
         if (drawingStart != null && tool == BlueprintDraftTool.DRAW_WALL) {
@@ -718,11 +825,28 @@ fun BlueprintScreen(
             BlueprintDraftTool.DRAW_WALL -> {
                 val activeMovingWall = movingWallPreview
                 when {
-                    activeMovingWall != null -> Unit
+                    activeMovingWall != null -> {
+                        commitMovingWallPlacement()
+                    }
                     drawingStart == null && selectedWall != null -> {
                         movingWallPreview = selectedWall
+                        drawingStart = null
                         drawingPreview = null
                         chainOrigin = null
+                        restartLineFromNearestWallStart = false
+                        if (dualJoysticksEnabled) {
+                            worldPointToCanvasLocal(
+                                worldPoint = BlueprintSnapMath.pointOnWall(selectedWall, 0.5),
+                                canvasSize = canvasSize,
+                                scale = scale,
+                                pan = pan
+                            )?.let { wallCenter ->
+                                joystickCursorLocal = Offset(
+                                    x = wallCenter.x.coerceIn(0f, canvasSize.width),
+                                    y = wallCenter.y.coerceIn(0f, canvasSize.height)
+                                )
+                            }
+                        }
                     }
                     else -> {
                         val snappedTap = BlueprintSnapMath.applySnapping(
@@ -773,6 +897,7 @@ fun BlueprintScreen(
                                     end = end,
                                     scale = scale
                                 )
+                                val detachedThisPlacement = detachedWalls
                                 if (wallCanBeAdded) {
                                     viewModel.addWall(
                                         WallSegment(
@@ -784,7 +909,7 @@ fun BlueprintScreen(
                                             tags = setOf("drawn", currentScope.wallScopeTag(), selectedFloor.floorTag())
                                         )
                                     )
-                                    if (detachedWalls) {
+                                    if (detachedThisPlacement) {
                                         detachedWalls = false
                                     }
                                 }
@@ -792,7 +917,7 @@ fun BlueprintScreen(
                                 if (!wallCanBeAdded) {
                                     drawingStart = start
                                     drawingPreview = start
-                                } else if (!detachedWalls && !closed) {
+                                } else if (!detachedThisPlacement && !closed) {
                                     drawingStart = end
                                     drawingPreview = end
                                 } else {
@@ -825,11 +950,7 @@ fun BlueprintScreen(
                 when {
                     nearestOpening != null -> viewModel.selectOpening(nearestOpening.id)
                     nearestWall != null -> viewModel.selectWall(nearestWall.id)
-                    else -> {
-                        viewModel.selectWall(null)
-                        viewModel.selectOpening(null)
-                        viewModel.selectRoom(null)
-                    }
+                    else -> viewModel.selectWall(null)
                 }
             }
             else -> Unit
@@ -846,40 +967,106 @@ fun BlueprintScreen(
         }
         when {
             tool == BlueprintDraftTool.DRAW_WALL && movingWallPreview != null -> {
-                val previewWall = movingWallPreview
-                val currentWall = previewWall?.let { moved -> doc.walls.find { it.id == moved.id } }
-                if (previewWall != null && currentWall != null && currentWall != previewWall) {
-                    viewModel.updateWall(previewWall.id, previewWall)
-                }
-                movingWallPreview = null
-                restartLineFromNearestWallStart = false
+                cancelMovingWallPlacement()
             }
             tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> {
                 drawingStart = null
                 drawingPreview = null
                 chainOrigin = null
                 restartLineFromNearestWallStart = true
-                viewModel.selectWall(null)
-                viewModel.selectOpening(null)
-                viewModel.selectRoom(null)
             }
             else -> {
+                val currentSelectedWall = selectedWall
+                if (currentSelectedWall != null) {
+                    val selectedDistance = BlueprintSnapMath.pointToWallDistanceMm(tap, currentSelectedWall)
+                    if (selectedDistance <= rightTapWallSelectionThresholdMm) {
+                        viewModel.selectWall(null)
+                        restartLineFromNearestWallStart = false
+                        return@rightTap
+                    }
+                }
                 val nearestWall = nearestWallAt(tap, rightTapWallSelectionThresholdMm)
                 if (nearestWall != null) {
                     viewModel.selectWall(nearestWall.id)
-                    viewModel.selectOpening(null)
-                    viewModel.selectRoom(null)
+                    restartLineFromNearestWallStart = false
                 } else {
+                    // No geometry to target; clear selection.
                     viewModel.selectWall(null)
-                    viewModel.selectOpening(null)
-                    viewModel.selectRoom(null)
                 }
             }
         }
     }
+    val rotatePickedUpWallClockwise: () -> Unit = rotate@{
+        val movingWall = movingWallPreview ?: return@rotate
+        val referenceWalls = renderedDoc.walls.filter { wall -> wall.id != movingWall.id }
+        val rotatedWall = movingWall.rotateByDegreesIncrement(MOVING_WALL_ROTATE_INCREMENT_DEG)
+        val snappedWall = snapMovedWallToNearbyWalls(
+            wall = rotatedWall,
+            referenceWalls = referenceWalls,
+            thresholdMm = movingWallAutoSnapThresholdMm
+        )
+        movingWallPreview = snappedWall
+        if (dualJoysticksEnabled) {
+            worldPointToCanvasLocal(
+                worldPoint = snappedWall.midpoint(),
+                canvasSize = canvasSize,
+                scale = scale,
+                pan = pan
+            )?.let { center ->
+                joystickCursorLocal = Offset(
+                    x = center.x.coerceIn(0f, canvasSize.width),
+                    y = center.y.coerceIn(0f, canvasSize.height)
+                )
+            }
+        }
+    }
+    val joystickCursorWorldPoint = if (canvasSize.width > 0f && canvasSize.height > 0f) {
+        val cursorLocal = joystickCursorLocal ?: Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        screenPointToWorldPoint(
+            rootPoint = canvasRoot + cursorLocal,
+            canvasRoot = canvasRoot,
+            canvasSize = canvasSize,
+            scale = scale,
+            pan = pan
+        )
+    } else {
+        null
+    }
     val latestLivePointerHandler by androidx.compose.runtime.rememberUpdatedState(handleLivePointerWorld)
-    val latestTapHandler by androidx.compose.runtime.rememberUpdatedState(handleTapWorld)
-    val latestRightTapHandler by androidx.compose.runtime.rememberUpdatedState(handleRightTapWorld)
+    val latestRenderedDoc by androidx.compose.runtime.rememberUpdatedState(renderedDoc)
+    val dispatchLeftJoystickClick: () -> Unit = click@{
+        if (!dualJoysticksEnabled) return@click
+        val cursor = joystickCursorLocal ?: run {
+            if (canvasSize.width <= 0f || canvasSize.height <= 0f) return@click
+            Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        }
+        joystickCursorLocal = cursor
+        if (dispatchMenuTapAtCursor(cursor)) return@click
+        val worldTap = screenPointToWorldPoint(
+            rootPoint = canvasRoot + cursor,
+            canvasRoot = canvasRoot,
+            canvasSize = canvasSize,
+            scale = scale,
+            pan = pan
+        ) ?: return@click
+        handleTapWorld(worldTap)
+    }
+    val dispatchRightJoystickClick: () -> Unit = click@{
+        if (!dualJoysticksEnabled) return@click
+        val cursor = joystickCursorLocal ?: run {
+            if (canvasSize.width <= 0f || canvasSize.height <= 0f) return@click
+            Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        }
+        joystickCursorLocal = cursor
+        val worldTap = screenPointToWorldPoint(
+            rootPoint = canvasRoot + cursor,
+            canvasRoot = canvasRoot,
+            canvasSize = canvasSize,
+            scale = scale,
+            pan = pan
+        ) ?: return@click
+        handleRightTapWorld(worldTap)
+    }
     val gridScaleLabel = formatFeetInchesPrime(snapSettings.gridStepFeet)
     LaunchedEffect(showGridScaleEditor) {
         if (showGridScaleEditor) {
@@ -890,6 +1077,7 @@ fun BlueprintScreen(
         if (!dualJoysticksEnabled) {
             rightJoystickVector = Offset.Zero
             leftJoystickVector = Offset.Zero
+            rightJoystickPressed = false
             joystickCursorLocal = null
             return@LaunchedEffect
         }
@@ -921,6 +1109,7 @@ fun BlueprintScreen(
                 var updatedPan = pan
                 var updatedCursor = joystickCursorLocal ?: Offset(size.width / 2f, size.height / 2f)
                 var updatedMovingWall = movingWallPreview
+                val renderedDocSnapshot = latestRenderedDoc
                 val rightInput = applyJoystickDeadzone(
                     input = rightJoystickVector,
                     deadzone = joystickDeadzone,
@@ -936,8 +1125,9 @@ fun BlueprintScreen(
                         val pxPerMm = (BASE_PX_PER_MM * scale).coerceAtLeast(0.0001f)
                         val dxMm = (delta.x / pxPerMm).roundToLong()
                         val dyMm = (-(delta.y) / pxPerMm).roundToLong()
+                        val movingWall = updatedMovingWall
                         if (dxMm != 0L || dyMm != 0L) {
-                            updatedMovingWall = updatedMovingWall.translateBy(dxMm, dyMm)
+                            updatedMovingWall = movingWall?.translateBy(dxMm, dyMm)
                         }
                     } else {
                         // Raw/direct cursor movement: no edge autopan and no grid-pull assist.
@@ -970,6 +1160,27 @@ fun BlueprintScreen(
                         y = (updatedCursor.y + panDelta.y).coerceIn(0f, size.height)
                     )
                 }
+                if (tool == BlueprintDraftTool.DRAW_WALL && updatedMovingWall != null && rightInput == Offset.Zero) {
+                    val snappedMovingWall = snapMovedWallToNearbyWalls(
+                        wall = updatedMovingWall,
+                        referenceWalls = renderedDocSnapshot.walls.filter { wall -> wall.id != updatedMovingWall.id },
+                        thresholdMm = movingWallAutoSnapThresholdMm
+                    )
+                    updatedMovingWall = snappedMovingWall
+                }
+                if (tool == BlueprintDraftTool.DRAW_WALL && updatedMovingWall != null) {
+                    worldPointToCanvasLocal(
+                        worldPoint = BlueprintSnapMath.pointOnWall(updatedMovingWall, 0.5),
+                        canvasSize = size,
+                        scale = scale,
+                        pan = updatedPan
+                    )?.let { wallCenter ->
+                        updatedCursor = Offset(
+                            x = wallCenter.x.coerceIn(0f, size.width),
+                            y = wallCenter.y.coerceIn(0f, size.height)
+                        )
+                    }
+                }
                 pan = updatedPan
                 joystickCursorLocal = updatedCursor
                 movingWallPreview = updatedMovingWall
@@ -985,42 +1196,22 @@ fun BlueprintScreen(
                         rawPoint = worldPoint,
                         drawingStart = drawingStart,
                         settings = snapSettings,
-                        walls = renderedDoc.walls
+                        walls = renderedDocSnapshot.walls
                     )
                     latestLivePointerHandler(snappedWorld)
                 }
             }
         }
     }
-    LaunchedEffect(dualJoysticksEnabled, joystickTapToken) {
-        if (!dualJoysticksEnabled || joystickTapToken <= 0) return@LaunchedEffect
-        val cursor = joystickCursorLocal ?: return@LaunchedEffect
-        if (dispatchMenuTapAtCursor(cursor)) return@LaunchedEffect
-        val worldTap = screenPointToWorldPoint(
-            rootPoint = canvasRoot + cursor,
-            canvasRoot = canvasRoot,
-            canvasSize = canvasSize,
-            scale = scale,
-            pan = pan
-        ) ?: return@LaunchedEffect
-        latestTapHandler(worldTap)
-    }
-    LaunchedEffect(dualJoysticksEnabled, joystickRightTapToken) {
-        if (!dualJoysticksEnabled || joystickRightTapToken <= 0) return@LaunchedEffect
-        val cursor = joystickCursorLocal ?: return@LaunchedEffect
-        if (dispatchMenuTapAtCursor(cursor)) return@LaunchedEffect
-        val worldTap = screenPointToWorldPoint(
-            rootPoint = canvasRoot + cursor,
-            canvasRoot = canvasRoot,
-            canvasSize = canvasSize,
-            scale = scale,
-            pan = pan
-        ) ?: return@LaunchedEffect
-        latestRightTapHandler(worldTap)
-    }
     val joystickRailPadding = if (dualJoysticksEnabled) 56.dp else 0.dp
     val panelBottomPadding = DEFAULT_PANEL_BOTTOM_PADDING + joystickRailPadding
     val helpBottomPadding = panelBottomPadding + 14.dp
+    val controlStateLabel: String? = when {
+        movingWallPreview != null -> "Picked Up"
+        tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> "Draw"
+        selectedWall != null -> "Selected"
+        else -> null
+    }
 
     Box(
         modifier = modifier
@@ -1046,6 +1237,8 @@ fun BlueprintScreen(
             drawingPreview = drawingPreview,
             selectedWallId = uiState.selectedWallId,
             selectedOpeningId = uiState.selectedOpeningId,
+            movingWallActive = movingWallPreview != null,
+            cursorSizeScale = if (largeCursorEnabled) 1.45f else 1f,
             dragPreview = dragPreview,
             onPanScaleChange = { updatedPan, updatedScale ->
                 val panDelta = updatedPan - pan
@@ -1076,6 +1269,7 @@ fun BlueprintScreen(
                 }
             },
             virtualPointerScreenPoint = if (dualJoysticksEnabled) joystickCursorLocal else null,
+            rightSelectBoostActive = rightSelectBoostActive,
             onLivePointerWorld = handleLivePointerWorld,
             onTapWorld = handleTapWorld
         )
@@ -1119,7 +1313,6 @@ fun BlueprintScreen(
             scope = currentScope,
             params = doc.params,
             takeoffSession = takeoffSession,
-            snap = snapSettings,
             onParamsChange = viewModel::updateParams,
             onWallHeightChange = viewModel::updateWallHeight,
             onDrywallSheetAreaChange = { value -> viewModel.updateDrywallSessionParams(sheetAreaSqFt = value) },
@@ -1135,19 +1328,6 @@ fun BlueprintScreen(
             onPaintCoverageChange = { value -> viewModel.updatePaintSessionParams(coverageSqFtPerGallon = value) },
             onPaintCoatsChange = { value -> viewModel.updatePaintSessionParams(coats = value) },
             onPaintWasteChange = { value -> viewModel.updatePaintSessionParams(wastePercent = value) },
-            onSnapChange = { snapSettings = it },
-            dualJoysticksEnabled = dualJoysticksEnabled,
-            onDualJoysticksToggle = {
-                dualJoysticksEnabled = it
-                if (!it) {
-                    blockedTouchAttempts = 0
-                    showJoystickTouchDialog = false
-                }
-            },
-            joystickSensitivity = joystickSensitivity,
-            onJoystickSensitivityChange = { joystickSensitivity = it },
-            joystickDeadzone = joystickDeadzone,
-            onJoystickDeadzoneChange = { joystickDeadzone = it },
             onScopeExpand = viewModel::expandScopeWithPaint,
             onDetectRooms = viewModel::ensureRoomDetection,
             modifier = Modifier
@@ -1351,6 +1531,7 @@ fun BlueprintScreen(
                     TextButton(
                         onClick = {
                             dualJoysticksEnabled = false
+                            settingsViewModel.updateBlueprintControlDefaults(dualJoysticksEnabled = false)
                             blockedTouchAttempts = 0
                             showJoystickTouchDialog = false
                         }
@@ -1376,7 +1557,7 @@ fun BlueprintScreen(
             SelectionPanel(
                 selectedWall = selectedWall,
                 selectedOpening = selectedOpening,
-                onDeselect = { viewModel.selectWall(null); viewModel.selectOpening(null) },
+                onDeselect = { viewModel.selectWall(null) },
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 12.dp, top = 186.dp)
@@ -1474,8 +1655,9 @@ fun BlueprintScreen(
                 rightVector = rightJoystickVector,
                 onLeftVectorChange = { leftJoystickVector = it },
                 onRightVectorChange = { rightJoystickVector = it },
-                onLeftTap = { joystickTapToken++ },
-                onRightTap = { joystickRightTapToken++ },
+                onRightPressChange = { rightJoystickPressed = it },
+                onLeftTap = dispatchLeftJoystickClick,
+                onRightTap = dispatchRightJoystickClick,
                 canUndo = uiState.canUndo,
                 canRedo = uiState.canRedo,
                 canZoomIn = scale < MAX_BLUEPRINT_SCALE,
@@ -1484,6 +1666,7 @@ fun BlueprintScreen(
                 onRedo = viewModel::redo,
                 onZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) },
                 onZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) },
+                controlStateLabel = controlStateLabel,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -1491,6 +1674,18 @@ fun BlueprintScreen(
                     .navigationBarsPadding()
             )
         }
+        CursorCoordinateOverlay(
+            worldPoint = joystickCursorWorldPoint,
+            showRotate = movingWallPreview != null,
+            onRotate = rotatePickedUpWallClockwise,
+            rotateButtonModifier = Modifier.onGloballyPositioned {
+                wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 12.dp, bottom = helpBottomPadding + 4.dp)
+                .navigationBarsPadding()
+        )
 
         GridScaleBadge(
             label = gridScaleLabel,
@@ -1521,6 +1716,7 @@ fun BlueprintScreen(
                         gridEnabled = true,
                         gridStepFeet = parsedFeet.coerceIn(0.25, 20.0)
                     )
+                    settingsViewModel.updateBlueprintSnapDefaults(gridEnabled = true)
                     showGridScaleEditor = false
                 }
             },
@@ -1560,10 +1756,13 @@ private fun BlueprintCanvas(
     drawingPreview: PointMm?,
     selectedWallId: String?,
     selectedOpeningId: String?,
+    movingWallActive: Boolean,
+    cursorSizeScale: Float,
     dragPreview: OpeningDragPreview?,
     touchEnabled: Boolean,
     onTouchBlocked: () -> Unit,
     virtualPointerScreenPoint: Offset?,
+    rightSelectBoostActive: Boolean,
     onPanScaleChange: (Offset, Float) -> Unit,
     onCanvasLayout: (Offset, Size) -> Unit,
     onLivePointerWorld: (PointMm) -> Unit,
@@ -1572,6 +1771,25 @@ private fun BlueprintCanvas(
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var drawWallPointerScreenPoint by remember { mutableStateOf<Offset?>(null) }
     var drawWallPointerHideAtMs by remember { mutableStateOf<Long?>(null) }
+    val canvasPulseTransition = rememberInfiniteTransition(label = "blueprint-canvas-pulse")
+    val selectionPulse = canvasPulseTransition.animateFloat(
+        initialValue = 0.24f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1180, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "selection-pulse"
+    ).value
+    val snapPulse = canvasPulseTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 920, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "snap-pulse"
+    ).value
     LaunchedEffect(drawWallPointerHideAtMs) {
         val hideAt = drawWallPointerHideAtMs ?: return@LaunchedEffect
         val remaining = (hideAt - SystemClock.uptimeMillis()).coerceAtLeast(0L)
@@ -1703,6 +1921,7 @@ private fun BlueprintCanvas(
                 radius = (size.width + size.height) * 0.65f
             )
         )
+        drawBlueprintTexturePattern()
         val ppm = BASE_PX_PER_MM * scale
         if (snapSettings.gridEnabled && ppm > 0f) {
             val footStepMm = Millimeters.fromFeet(snapSettings.gridStepFeet.coerceAtLeast(0.1)).value
@@ -1818,14 +2037,14 @@ private fun BlueprintCanvas(
             val strokeWidth = if (isSelected) 5.8f else if (parallelMatch) 4.6f else 3.8f
             val wallStartScreen = worldToScreen(wall.start)
             val wallEndScreen = worldToScreen(wall.end)
-            drawLine(
-                color = GEOMETRY_HALO_COLOR,
+            drawStyledWallSegment(
                 start = wallStartScreen,
                 end = wallEndScreen,
-                strokeWidth = strokeWidth + if (isSelected) 4f else 3f,
-                cap = StrokeCap.Square
+                color = color,
+                strokeWidth = strokeWidth,
+                selected = isSelected,
+                pulse = selectionPulse
             )
-            drawLine(color, wallStartScreen, wallEndScreen, strokeWidth = strokeWidth, cap = StrokeCap.Square)
             wallLengthLabels += WallLengthLabelSpec(
                 start = wallStartScreen,
                 end = wallEndScreen,
@@ -1854,7 +2073,8 @@ private fun BlueprintCanvas(
                 type = opening.type,
                 swingTag = opening.doorSwingTag(),
                 color = color,
-                emphasized = isSelected
+                emphasized = isSelected,
+                emphasisPulse = if (isSelected) selectionPulse else 0f
             )
         }
         dragPreview?.let { preview ->
@@ -1874,7 +2094,8 @@ private fun BlueprintCanvas(
                     type = preview.preset.type,
                     swingTag = placement.swingTag,
                     color = snappedColor,
-                    emphasized = false
+                    emphasized = false,
+                    emphasisPulse = 0f
                 )
             } else {
                 val center = worldToScreen(preview.rawWorldPoint)
@@ -1891,19 +2112,13 @@ private fun BlueprintCanvas(
             val draftStart = worldToScreen(drawingStart)
             val draftEnd = worldToScreen(drawingPreview)
             val previewParallelMatch = previewWall?.let { wallHasParallelLengthMatch(it, document.walls) } == true
-            drawLine(
-                color = GEOMETRY_HALO_COLOR,
+            drawStyledWallSegment(
                 start = draftStart,
                 end = draftEnd,
-                strokeWidth = if (previewParallelMatch) 7.2f else 6.2f,
-                cap = StrokeCap.Square
-            )
-            drawLine(
                 color = DRAFT_WALL_COLOR,
-                start = draftStart,
-                end = draftEnd,
                 strokeWidth = if (previewParallelMatch) 4.9f else 4.1f,
-                cap = StrokeCap.Square
+                selected = true,
+                pulse = snapPulse
             )
             wallLengthLabels += WallLengthLabelSpec(
                 start = draftStart,
@@ -1941,7 +2156,51 @@ private fun BlueprintCanvas(
         } else {
             null
         }
-        pointer?.let { drawTouchPointer(it) }
+        if (pointer != null && virtualPointerScreenPoint != null) {
+            val pointerWorld = screenToWorld(pointer)
+            val nearestProjection = document.walls
+                .map { wall ->
+                    val t = BlueprintSnapMath.projectToWallT(pointerWorld, wall).coerceIn(0.0, 1.0)
+                    val projected = BlueprintSnapMath.pointOnWall(wall, t)
+                    Triple(wall, projected, BlueprintSnapMath.distanceMillimeters(pointerWorld, projected))
+                }
+                .minByOrNull { it.third }
+                ?.takeIf { it.third <= Millimeters.fromFeet(5.0).value }
+            drawSelectionMagnifier(
+                pointer = pointer,
+                nearestWall = nearestProjection?.first,
+                nearestPoint = nearestProjection?.second,
+                worldToScreen = ::worldToScreen,
+                boostActive = rightSelectBoostActive
+            )
+        }
+        if (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) {
+            drawPrecisionPulse(
+                center = worldToScreen(drawingPreview),
+                progress = snapPulse,
+                color = GEOMETRY_SNAP_PULSE,
+                baseRadius = 11f,
+                maxRadius = 28f
+            )
+        }
+        if (selectedWallId != null || movingWallActive) {
+            pointer?.let { currentPointer ->
+                drawPrecisionPulse(
+                    center = currentPointer,
+                    progress = selectionPulse,
+                    color = GEOMETRY_SELECTION_PULSE,
+                    baseRadius = 8f,
+                    maxRadius = 20f
+                )
+            }
+        }
+        val cursorGlyph = when {
+            movingWallActive -> CursorGlyph.GRAB
+            tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> CursorGlyph.PENCIL
+            selectedWallId != null -> CursorGlyph.HAND_POINTER
+            else -> CursorGlyph.ARROW
+        }
+        pointer?.let { drawCursorGlyph(it, cursorGlyph, cursorSizeScale) }
     }
 }
 
@@ -2214,21 +2473,50 @@ private fun FloorLevelSwitcher(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(
-                selected = level == BlueprintFloorLevel.LOWER,
-                onClick = { onSelect(BlueprintFloorLevel.LOWER) },
-                label = { Text("Lower") }
+            Text(
+                text = level.floorDisplayLabel(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            FilterChip(
-                selected = level == BlueprintFloorLevel.UPPER,
-                onClick = { onSelect(BlueprintFloorLevel.UPPER) },
-                label = { Text("Upper") }
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SlimIconAction(
+                    icon = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Lower floor",
+                    enabled = true,
+                    onClick = { onSelect(level - 1) },
+                    buttonSize = 30.dp,
+                    iconSize = 15.dp
+                )
+                SlimIconAction(
+                    icon = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Upper floor",
+                    enabled = true,
+                    onClick = { onSelect(level + 1) },
+                    buttonSize = 30.dp,
+                    iconSize = 15.dp
+                )
+            }
+            Surface(
+                onClick = { onSelect(FLOOR_GROUND_LEVEL) },
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f))
+            ) {
+                Text(
+                    text = "Go Ground",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
     }
 }
@@ -2239,6 +2527,7 @@ private fun DualJoystickOverlay(
     rightVector: Offset,
     onLeftVectorChange: (Offset) -> Unit,
     onRightVectorChange: (Offset) -> Unit,
+    onRightPressChange: (Boolean) -> Unit,
     onLeftTap: () -> Unit,
     onRightTap: () -> Unit,
     canUndo: Boolean,
@@ -2249,6 +2538,7 @@ private fun DualJoystickOverlay(
     onRedo: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
+    controlStateLabel: String?,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -2261,15 +2551,20 @@ private fun DualJoystickOverlay(
             vector = leftVector,
             onVectorChange = onLeftVectorChange,
             onTap = onLeftTap,
-            tapZoneScale = 0.68f,
-            tapMoveThresholdPx = 20f,
-            centerTapRequired = true
+            tapZoneScale = 0.90f,
+            tapMoveThresholdPx = 34f,
+            centerTapRequired = false
         )
         Column(
             modifier = Modifier.padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (controlStateLabel != null) {
+                ControlStateHud(
+                    stateLabel = controlStateLabel
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 SlimIconAction(
                     icon = Icons.Filled.Add,
@@ -2312,29 +2607,62 @@ private fun DualJoystickOverlay(
             vector = rightVector,
             onVectorChange = onRightVectorChange,
             onTap = onRightTap,
-            tapZoneScale = 0.78f,
-            tapMoveThresholdPx = 22f,
-            centerTapRequired = true
+            onPressChange = onRightPressChange,
+            tapZoneScale = 0.92f,
+            tapMoveThresholdPx = 38f,
+            centerTapRequired = false
         )
     }
 }
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 private fun JoystickPad(
     insideLabel: String,
     vector: Offset,
     onVectorChange: (Offset) -> Unit,
     onTap: (() -> Unit)?,
+    onPressChange: ((Boolean) -> Unit)? = null,
     tapZoneScale: Float = 0.44f,
     tapMoveThresholdPx: Float = 10f,
     centerTapRequired: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val maxRadiusPx = with(LocalDensity.current) { 40.dp.toPx() }
+    val padSizePx = with(LocalDensity.current) { 126.dp.toPx() }
     val selectTapRadiusPx = if (onTap != null) {
         maxRadiusPx * tapZoneScale.coerceIn(0.20f, 0.90f)
     } else {
         0f
+    }
+    val center = Offset(padSizePx / 2f, padSizePx / 2f)
+    var activePointerId by remember { mutableIntStateOf(MotionEvent.INVALID_POINTER_ID) }
+    var downTimeMs by remember { mutableStateOf(0L) }
+    var downPosition by remember { mutableStateOf(Offset.Zero) }
+    var downToCenter by remember { mutableFloatStateOf(0f) }
+    var maxDisplacementFromDown by remember { mutableFloatStateOf(0f) }
+    var tapCandidate by remember(onTap, centerTapRequired, selectTapRadiusPx) { mutableStateOf(false) }
+    fun toVector(position: Offset): Offset {
+        val delta = position - center
+        val distance = hypot(delta.x.toDouble(), delta.y.toDouble()).toFloat()
+        if (distance <= 0.0001f) return Offset.Zero
+        val clampedDistance = distance.coerceAtMost(maxRadiusPx)
+        val nx = delta.x / distance
+        val ny = delta.y / distance
+        return Offset(
+            x = (nx * (clampedDistance / maxRadiusPx)).coerceIn(-1f, 1f),
+            y = (ny * (clampedDistance / maxRadiusPx)).coerceIn(-1f, 1f)
+        )
+    }
+    fun resetPointerState() {
+        activePointerId = MotionEvent.INVALID_POINTER_ID
+        tapCandidate = false
+        maxDisplacementFromDown = 0f
+        onVectorChange(Offset.Zero)
+        onPressChange?.invoke(false)
+    }
+    DisposableEffect(onPressChange) {
+        onDispose { resetPointerState() }
     }
     Column(
         modifier = modifier,
@@ -2344,59 +2672,106 @@ private fun JoystickPad(
         Surface(
             modifier = Modifier
                 .size(126.dp)
-                .pointerInput(onTap, tapZoneScale, tapMoveThresholdPx, centerTapRequired) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        var movedDistance = 0f
-                        var lastPosition = down.position
-                        val center = Offset(size.width / 2f, size.height / 2f)
-                        val downToCenter = hypot(
-                            (down.position.x - center.x).toDouble(),
-                            (down.position.y - center.y).toDouble()
-                        ).toFloat()
-                        var tapCandidate = onTap != null &&
-                            (!centerTapRequired || downToCenter <= selectTapRadiusPx)
-                        fun toVector(position: Offset): Offset {
-                            val delta = position - center
-                            val distance = hypot(delta.x.toDouble(), delta.y.toDouble()).toFloat()
-                            if (distance <= 0.0001f) return Offset.Zero
-                            val clampedDistance = distance.coerceAtMost(maxRadiusPx)
-                            val nx = delta.x / distance
-                            val ny = delta.y / distance
-                            return Offset(
-                                x = (nx * (clampedDistance / maxRadiusPx)).coerceIn(-1f, 1f),
-                                y = (ny * (clampedDistance / maxRadiusPx)).coerceIn(-1f, 1f)
-                            )
-                        }
-                        if (tapCandidate) {
-                            onVectorChange(Offset.Zero)
-                        } else {
-                            onVectorChange(toVector(down.position))
-                        }
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: continue
-                            if (!change.pressed) {
-                                val isTap = tapCandidate &&
-                                    movedDistance < tapMoveThresholdPx &&
-                                    onTap != null
-                                onVectorChange(Offset.Zero)
-                                if (isTap) {
-                                    onTap.invoke()
-                                }
-                                break
+                .pointerInteropFilter { event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN,
+                        MotionEvent.ACTION_POINTER_DOWN -> {
+                            if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
+                                return@pointerInteropFilter true
                             }
-                            val delta = change.position - lastPosition
-                            movedDistance += hypot(delta.x.toDouble(), delta.y.toDouble()).toFloat()
-                            lastPosition = change.position
-                            if (tapCandidate && movedDistance < tapMoveThresholdPx) {
+                            val index = event.actionIndex
+                            if (index < 0 || index >= event.pointerCount) {
+                                resetPointerState()
+                                return@pointerInteropFilter true
+                            }
+                            activePointerId = event.getPointerId(index)
+                            downTimeMs = event.eventTime
+                            downPosition = Offset(event.getX(index), event.getY(index))
+                            maxDisplacementFromDown = 0f
+                            downToCenter = hypot(
+                                (downPosition.x - center.x).toDouble(),
+                                (downPosition.y - center.y).toDouble()
+                            ).toFloat()
+                            tapCandidate = onTap != null &&
+                                (!centerTapRequired || downToCenter <= selectTapRadiusPx)
+                            onPressChange?.invoke(true)
+                            if (tapCandidate) {
+                                onVectorChange(Offset.Zero)
+                            } else {
+                                onVectorChange(toVector(downPosition))
+                            }
+                            true
+                        }
+
+                        MotionEvent.ACTION_MOVE -> {
+                            if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                                return@pointerInteropFilter true
+                            }
+                            val index = event.findPointerIndex(activePointerId)
+                            if (index < 0 || index >= event.pointerCount) {
+                                resetPointerState()
+                                return@pointerInteropFilter true
+                            }
+                            val position = Offset(event.getX(index), event.getY(index))
+                            val displacementFromDown = position - downPosition
+                            val displacementMag = hypot(
+                                displacementFromDown.x.toDouble(),
+                                displacementFromDown.y.toDouble()
+                            ).toFloat()
+                            if (displacementMag > maxDisplacementFromDown) {
+                                maxDisplacementFromDown = displacementMag
+                            }
+                            if (tapCandidate && maxDisplacementFromDown < tapMoveThresholdPx) {
                                 onVectorChange(Offset.Zero)
                             } else {
                                 tapCandidate = false
-                                onVectorChange(toVector(change.position))
+                                onVectorChange(toVector(position))
                             }
-                            change.consume()
+                            true
                         }
+
+                        MotionEvent.ACTION_UP,
+                        MotionEvent.ACTION_POINTER_UP -> {
+                            if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                                resetPointerState()
+                                return@pointerInteropFilter true
+                            }
+                            val index = event.actionIndex
+                            if (index < 0 || index >= event.pointerCount) {
+                                resetPointerState()
+                                return@pointerInteropFilter true
+                            }
+                            val pointerId = event.getPointerId(index)
+                            if (pointerId != activePointerId) {
+                                return@pointerInteropFilter true
+                            }
+                            val upPosition = Offset(event.getX(index), event.getY(index))
+                            val upToCenter = hypot(
+                                (upPosition.x - center.x).toDouble(),
+                                (upPosition.y - center.y).toDouble()
+                            ).toFloat()
+                            val pressDurationMs = (event.eventTime - downTimeMs).coerceAtLeast(0L)
+                            val isTap = tapCandidate &&
+                                maxDisplacementFromDown < tapMoveThresholdPx &&
+                                onTap != null
+                            val lenientQuickTap = onTap != null &&
+                                pressDurationMs <= 420L &&
+                                maxDisplacementFromDown < (tapMoveThresholdPx * 2.8f) &&
+                                upToCenter <= (maxRadiusPx * 0.74f) &&
+                                (!centerTapRequired || downToCenter <= (selectTapRadiusPx * 1.35f))
+                            resetPointerState()
+                            if (isTap || lenientQuickTap) {
+                                onTap.invoke()
+                            }
+                            true
+                        }
+
+                        MotionEvent.ACTION_CANCEL -> {
+                            resetPointerState()
+                            true
+                        }
+
+                        else -> activePointerId != MotionEvent.INVALID_POINTER_ID
                     }
                 },
             shape = CircleShape,
@@ -2538,7 +2913,6 @@ private fun ParamsPanel(
     scope: TakeoffScope,
     params: BlueprintParams,
     takeoffSession: ProjectTakeoffSession,
-    snap: BlueprintSnapSettings,
     onParamsChange: (BlueprintParams) -> Unit,
     onWallHeightChange: (Long) -> Unit,
     onDrywallSheetAreaChange: (Double) -> Unit,
@@ -2554,13 +2928,6 @@ private fun ParamsPanel(
     onPaintCoverageChange: (Double) -> Unit,
     onPaintCoatsChange: (Int) -> Unit,
     onPaintWasteChange: (Double) -> Unit,
-    onSnapChange: (BlueprintSnapSettings) -> Unit,
-    dualJoysticksEnabled: Boolean,
-    onDualJoysticksToggle: (Boolean) -> Unit,
-    joystickSensitivity: Float,
-    onJoystickSensitivityChange: (Float) -> Unit,
-    joystickDeadzone: Float,
-    onJoystickDeadzoneChange: (Float) -> Unit,
     onScopeExpand: () -> Unit,
     onDetectRooms: () -> Unit,
     modifier: Modifier = Modifier
@@ -2582,40 +2949,6 @@ private fun ParamsPanel(
     var selectedGravelType by remember(takeoffSession.gravel.densityTonsPerYard) {
         mutableStateOf(closestGravelMaterialPreset(takeoffSession.gravel.densityTonsPerYard).label)
     }
-    val snapToggleSpecs = listOf(
-        BlueprintSnapToggleSpec(
-            label = "Grid",
-            selected = snap.gridEnabled,
-            onToggle = { onSnapChange(snap.copy(gridEnabled = !snap.gridEnabled)) }
-        ),
-        BlueprintSnapToggleSpec(
-            label = "Angle",
-            selected = snap.angleEnabled,
-            onToggle = { onSnapChange(snap.copy(angleEnabled = !snap.angleEnabled)) }
-        ),
-        BlueprintSnapToggleSpec(
-            label = "Endpoints",
-            selected = snap.endpointEnabled,
-            onToggle = { onSnapChange(snap.copy(endpointEnabled = !snap.endpointEnabled)) }
-        ),
-        BlueprintSnapToggleSpec(
-            label = "Midpoints",
-            selected = snap.midpointEnabled,
-            onToggle = { onSnapChange(snap.copy(midpointEnabled = !snap.midpointEnabled)) }
-        ),
-        BlueprintSnapToggleSpec(
-            label = "Room closure",
-            selected = snap.closureEnabled,
-            onToggle = { onSnapChange(snap.copy(closureEnabled = !snap.closureEnabled)) }
-        )
-    )
-    val controlToggleSpecs = listOf(
-        BlueprintSnapToggleSpec(
-            label = "Dual joysticks",
-            selected = dualJoysticksEnabled,
-            onToggle = { onDualJoysticksToggle(!dualJoysticksEnabled) }
-        )
-    )
     Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.93f)) {
         Card(
             modifier = Modifier
@@ -2841,48 +3174,6 @@ private fun ParamsPanel(
                     }
                 }
 
-                Text("Snap toggles", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    snapToggleSpecs.forEach { chip ->
-                        FilterChip(
-                            selected = chip.selected,
-                            onClick = chip.onToggle,
-                            label = { Text(chip.label) }
-                        )
-                    }
-                }
-                Text("Controls", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    controlToggleSpecs.forEach { chip ->
-                        FilterChip(
-                            selected = chip.selected,
-                            onClick = chip.onToggle,
-                            label = { Text(chip.label) }
-                        )
-                    }
-                }
-                Text(
-                    "Joystick sensitivity: ${"%.2f".format(joystickSensitivity)}x",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = joystickSensitivity,
-                    onValueChange = onJoystickSensitivityChange,
-                    valueRange = 0.55f..2.2f,
-                    steps = 16
-                )
-                Text(
-                    "Joystick deadzone: ${(joystickDeadzone * 100f).roundToInt()}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = joystickDeadzone,
-                    onValueChange = onJoystickDeadzoneChange,
-                    valueRange = 0.08f..0.30f,
-                    steps = 10
-                )
                 Text("Room tools", style = MaterialTheme.typography.labelLarge)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
@@ -3101,7 +3392,7 @@ private fun RailHelpPanel(
             RailHelpLine(title = "Chain", detail = "Continue from last clicked corner on each wall.")
             RailHelpLine(title = "Split", detail = "Detach next wall from the current chain.")
             RailHelpLine(title = "Doors/Windows/Stairs", detail = "Open panel, size it, and drag onto walls.")
-            RailHelpLine(title = "Floor", detail = "Toggle lower/upper floor while keeping totals additive.")
+            RailHelpLine(title = "Floor", detail = "Step floors up/down: Ground, 2, 3... and Basement levels.")
             RailHelpLine(title = "Params", detail = "Toggles snaps, joystick behavior, and scope settings.")
             RailHelpLine(title = "Undo/Redo + Zoom", detail = "Left side of the top rail.")
             Surface(
@@ -3263,47 +3554,199 @@ private fun LiveOverlay(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 232.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xD10A1C31))
+        modifier = modifier.widthIn(max = 178.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
+        border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
-        Column(Modifier.padding(horizontal = 9.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                "Live Quantities",
-                color = Color(0xFFC2E2FF),
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "Perimeter ${formatFeetInchesPrime(wallLengthFeet)}",
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "Wall net ${formatLiveValue(netArea, 1)} sq ft",
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "Floor ${selectedFloor.label()}",
-                color = Color(0xFFB8D9F9),
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "Rooms ${doc.rooms.size}  Openings ${doc.openings.size}",
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                "${currentScope.shortLabel()} ${liveScopeQuantity.label}",
-                color = Color(0xFFCDE8FF),
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                liveScopeQuantity.value,
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Live",
+                    color = Color(0xFFC2E2FF),
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0x553D6F98),
+                    border = BorderStroke(1.dp, Color(0x6B8FC2EB))
+                ) {
+                    Text(
+                        text = selectedFloor.label(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = Color(0xFFEAF6FF),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                    )
+                }
+            }
+            LiveMetricRow(label = "Scope", value = currentScope.shortLabel())
+            LiveMetricRow(label = "Perimeter", value = formatFeetInchesPrime(wallLengthFeet))
+            LiveMetricRow(label = "Net Wall Area", value = "${formatLiveValue(netArea, 1)} sq ft")
+            LiveMetricRow(label = "Rooms/Openings", value = "${doc.rooms.size} / ${doc.openings.size}")
+            LiveMetricRow(
+                label = "Qty (${liveScopeQuantity.label})",
+                value = liveScopeQuantity.value,
+                emphasize = true
             )
         }
+    }
+}
+
+@Composable
+private fun LiveMetricRow(
+    label: String,
+    value: String,
+    emphasize: Boolean = false
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = if (emphasize) Color(0xFFD1E9FF) else Color(0xFFAED4F3),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = value,
+            color = Color(0xFFF6FBFF),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun CursorCoordinateOverlay(
+    worldPoint: PointMm?,
+    showRotate: Boolean,
+    onRotate: () -> Unit,
+    rotateButtonModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
+) {
+    if (worldPoint == null) return
+    Column(
+        modifier = modifier.widthIn(min = 122.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        if (showRotate) {
+            SlimIconAction(
+                icon = Icons.AutoMirrored.Filled.RotateRight,
+                contentDescription = "Rotate picked wall +5 degrees",
+                enabled = true,
+                onClick = onRotate,
+                buttonSize = 30.dp,
+                iconSize = 14.dp,
+                modifier = rotateButtonModifier
+            )
+        }
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xC9091A2E))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = "Coords",
+                    color = Color(0xFFB8DBFF),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "X ${formatSignedFeetInchesPrime(worldPoint.x)}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = "Y ${formatSignedFeetInchesPrime(worldPoint.y)}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ControlStateHud(
+    stateLabel: String,
+    modifier: Modifier = Modifier
+) {
+    val pulse = rememberInfiniteTransition(label = "control-state-hud")
+        .animateFloat(
+            initialValue = 0.25f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 920, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "control-state-hud-pulse"
+        ).value
+    val (containerColor, borderColor, textColor) = when (stateLabel) {
+        "Draw" -> Triple(Color(0xD9F3D35E), Color(0xFFFFE088), Color(0xFF201605))
+        "Selected" -> Triple(Color(0xD93A6EA9), Color(0xFF7DC1FF), Color(0xFFF0F8FF))
+        "Picked Up" -> Triple(Color(0xD93B7A51), Color(0xFF86E7A8), Color(0xFFF3FFF7))
+        else -> Triple(Color(0xB9223347), Color(0x5A6F8EAC), Color(0xFF9FB5CB))
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor.copy(alpha = 0.83f + (pulse * 0.09f)),
+        border = BorderStroke((1f + (0.35f * pulse)).dp, borderColor.copy(alpha = 0.72f + (pulse * 0.28f)))
+    ) {
+        Text(
+            text = stateLabel,
+            color = textColor,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
+
+@Composable
+private fun ControlStateChip(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val container = if (active) {
+        Color(0xFF1F6FAE)
+    } else {
+        Color(0x52304D68)
+    }
+    val textColor = if (active) Color(0xFFEFFFFF) else Color(0xFFAECBE4)
+    Surface(
+        color = container,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (active) Color(0xFF74C0FF) else Color(0x663C5A79)
+        ),
+        modifier = modifier
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+        )
     }
 }
 
@@ -3375,6 +3818,123 @@ private fun computeLiveScopeQuantity(
     }
 }
 
+private fun DrawScope.drawBlueprintTexturePattern() {
+    val diagonalSpacing = 32f
+    var startX = -size.height
+    while (startX <= size.width + size.height) {
+        drawLine(
+            color = BLUEPRINT_TEXTURE_DIAGONAL_A,
+            start = Offset(startX, 0f),
+            end = Offset(startX + size.height, size.height),
+            strokeWidth = 1f
+        )
+        startX += diagonalSpacing
+    }
+    var reverseStartX = 0f
+    while (reverseStartX <= size.width + size.height) {
+        drawLine(
+            color = BLUEPRINT_TEXTURE_DIAGONAL_B,
+            start = Offset(reverseStartX, 0f),
+            end = Offset(reverseStartX - size.height, size.height),
+            strokeWidth = 0.8f
+        )
+        reverseStartX += diagonalSpacing * 1.45f
+    }
+    val dotSpacing = 70f
+    var x = 20f
+    while (x < size.width) {
+        var y = 16f
+        while (y < size.height) {
+            drawCircle(
+                color = BLUEPRINT_TEXTURE_NOISE_DOT,
+                radius = 1.05f,
+                center = Offset(x, y)
+            )
+            y += dotSpacing
+        }
+        x += dotSpacing
+    }
+}
+
+private fun DrawScope.drawStyledWallSegment(
+    start: Offset,
+    end: Offset,
+    color: Color,
+    strokeWidth: Float,
+    selected: Boolean,
+    pulse: Float
+) {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val magnitude = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val nx = -dy / magnitude
+    val ny = dx / magnitude
+    val shadowOffset = Offset(nx * 1.5f, ny * 1.5f)
+    val highlightOffset = Offset(-nx * 0.8f, -ny * 0.8f)
+    val pulseBoost = if (selected) (1.4f * pulse) else 0f
+
+    drawLine(
+        color = GEOMETRY_DEPTH_SHADOW,
+        start = start + shadowOffset,
+        end = end + shadowOffset,
+        strokeWidth = strokeWidth + 3.8f + pulseBoost,
+        cap = StrokeCap.Square
+    )
+    drawLine(
+        color = GEOMETRY_HALO_COLOR,
+        start = start,
+        end = end,
+        strokeWidth = strokeWidth + 2.4f + (pulseBoost * 0.45f),
+        cap = StrokeCap.Square
+    )
+    drawLine(
+        color = color,
+        start = start,
+        end = end,
+        strokeWidth = strokeWidth + (pulseBoost * 0.2f),
+        cap = StrokeCap.Square
+    )
+    drawLine(
+        color = GEOMETRY_DEPTH_HIGHLIGHT.copy(alpha = if (selected) 0.82f else 0.42f),
+        start = start + highlightOffset,
+        end = end + highlightOffset,
+        strokeWidth = (strokeWidth * 0.34f).coerceAtLeast(1.15f),
+        cap = StrokeCap.Square
+    )
+    if (selected) {
+        drawLine(
+            color = GEOMETRY_SELECTION_PULSE.copy(alpha = 0.24f + (0.3f * pulse)),
+            start = start,
+            end = end,
+            strokeWidth = strokeWidth + 5.2f + (pulseBoost * 0.6f),
+            cap = StrokeCap.Square
+        )
+    }
+}
+
+private fun DrawScope.drawPrecisionPulse(
+    center: Offset,
+    progress: Float,
+    color: Color,
+    baseRadius: Float,
+    maxRadius: Float
+) {
+    val clamped = progress.coerceIn(0f, 1f)
+    val radius = baseRadius + ((maxRadius - baseRadius) * clamped)
+    val alpha = (1f - clamped).coerceIn(0f, 1f)
+    drawCircle(
+        color = color.copy(alpha = 0.62f * alpha),
+        radius = radius,
+        center = center,
+        style = Stroke(width = 1.7f)
+    )
+    drawCircle(
+        color = color.copy(alpha = 0.2f * alpha),
+        radius = radius * 0.55f,
+        center = center
+    )
+}
+
 private fun DrawScope.drawOpeningOnWall(
     worldToScreen: (PointMm) -> Offset,
     wall: WallSegment,
@@ -3383,7 +3943,8 @@ private fun DrawScope.drawOpeningOnWall(
     type: OpeningType,
     swingTag: String?,
     color: Color,
-    emphasized: Boolean
+    emphasized: Boolean,
+    emphasisPulse: Float = 0f
 ) {
     val center = BlueprintSnapMath.pointOnWall(wall, t.coerceIn(0.0, 1.0))
     val wallDx = (wall.end.x - wall.start.x).toDouble()
@@ -3408,7 +3969,8 @@ private fun DrawScope.drawOpeningOnWall(
 
     val hingeScreen = worldToScreen(hinge)
     val latchScreen = worldToScreen(latch)
-    val baseStroke = if (emphasized) 4.6f else 3.6f
+    val emphasisBoost = if (emphasized) (0.6f * emphasisPulse.coerceIn(0f, 1f)) else 0f
+    val baseStroke = if (emphasized) 4.6f + emphasisBoost else 3.6f
     val haloColor = GEOMETRY_HALO_COLOR
 
     if (type == OpeningType.WINDOW) {
@@ -3685,25 +4247,225 @@ private fun DrawScope.drawFloatingOpeningPreview(
     drawPath(path = path, color = color, style = Stroke(width = 2.8f))
 }
 
-private fun DrawScope.drawTouchPointer(position: Offset) {
+private enum class CursorGlyph {
+    ARROW,
+    PENCIL,
+    HAND_POINTER,
+    GRAB
+}
+
+private fun DrawScope.drawCursorGlyph(position: Offset, glyph: CursorGlyph, sizeScale: Float) {
+    when (glyph) {
+        CursorGlyph.ARROW -> drawArrowCursor(position, sizeScale)
+        CursorGlyph.PENCIL -> drawPencilCursor(position, sizeScale)
+        CursorGlyph.HAND_POINTER -> drawHandPointerCursor(position, sizeScale)
+        CursorGlyph.GRAB -> drawGrabHandCursor(position, sizeScale)
+    }
+}
+
+private fun DrawScope.drawArrowCursor(position: Offset, sizeScale: Float) {
+    fun s(value: Float): Float = value * sizeScale
     val pointer = Path().apply {
         moveTo(position.x, position.y)
-        lineTo(position.x + 14f, position.y + 33f)
-        lineTo(position.x + 18f, position.y + 22f)
-        lineTo(position.x + 28f, position.y + 28f)
-        lineTo(position.x + 31f, position.y + 22f)
-        lineTo(position.x + 21f, position.y + 17f)
-        lineTo(position.x + 28f, position.y + 10f)
+        lineTo(position.x + s(14f), position.y + s(33f))
+        lineTo(position.x + s(18f), position.y + s(22f))
+        lineTo(position.x + s(28f), position.y + s(28f))
+        lineTo(position.x + s(31f), position.y + s(22f))
+        lineTo(position.x + s(21f), position.y + s(17f))
+        lineTo(position.x + s(28f), position.y + s(10f))
         close()
     }
     drawPath(
         path = pointer,
         color = Color(0xAA000000),
-        style = Stroke(width = 2.4f)
+        style = Stroke(width = s(2.4f).coerceAtLeast(1.2f))
     )
     drawPath(
         path = pointer,
         color = Color(0xFFF9FCFF)
+    )
+}
+
+private fun DrawScope.drawPencilCursor(position: Offset, sizeScale: Float) {
+    fun s(value: Float): Float = value * sizeScale
+    val tip = position
+    val tail = Offset(position.x + s(26f), position.y + s(28f))
+    drawLine(
+        color = Color(0xB7050A12),
+        start = tip,
+        end = tail,
+        strokeWidth = s(8.2f).coerceAtLeast(2f),
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = Color(0xFFFFDD74),
+        start = tip,
+        end = tail,
+        strokeWidth = s(5.3f).coerceAtLeast(1.5f),
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = Color(0xFF4D2B06),
+        start = tip,
+        end = Offset(position.x + s(6.8f), position.y + s(7.3f)),
+        strokeWidth = s(3.2f).coerceAtLeast(1.1f),
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = Color(0xFFFDF6E3),
+        radius = s(2.2f).coerceAtLeast(1f),
+        center = tip
+    )
+}
+
+private fun DrawScope.drawHandPointerCursor(position: Offset, sizeScale: Float) {
+    fun s(value: Float): Float = value * sizeScale
+    val palmCenter = Offset(position.x + s(14f), position.y + s(21f))
+    drawCircle(
+        color = Color(0xB708111C),
+        radius = s(11.3f).coerceAtLeast(3f),
+        center = palmCenter
+    )
+    drawCircle(
+        color = Color(0xFFDEE9F7),
+        radius = s(9.2f).coerceAtLeast(2.5f),
+        center = palmCenter
+    )
+    drawRect(
+        color = Color(0xB708111C),
+        topLeft = Offset(position.x + s(10f), position.y + s(2f)),
+        size = Size(s(8f), s(20.5f))
+    )
+    drawRect(
+        color = Color(0xFFDEE9F7),
+        topLeft = Offset(position.x + s(11f), position.y + s(3f)),
+        size = Size(s(6f), s(18.5f))
+    )
+    drawCircle(
+        color = Color(0xFFDEE9F7),
+        radius = s(4.4f).coerceAtLeast(1.2f),
+        center = Offset(position.x + s(7.4f), position.y + s(18.5f))
+    )
+}
+
+private fun DrawScope.drawGrabHandCursor(position: Offset, sizeScale: Float) {
+    fun s(value: Float): Float = value * sizeScale
+    val fistCenter = Offset(position.x + s(14f), position.y + s(16f))
+    drawCircle(
+        color = Color(0xB708111C),
+        radius = s(12f).coerceAtLeast(3f),
+        center = fistCenter
+    )
+    drawCircle(
+        color = Color(0xFFE4F4EA),
+        radius = s(9.6f).coerceAtLeast(2.5f),
+        center = fistCenter
+    )
+    val knuckleColor = Color(0xFFB7E3C4)
+    drawCircle(color = knuckleColor, radius = s(2.6f).coerceAtLeast(0.9f), center = Offset(position.x + s(7.2f), position.y + s(12.4f)))
+    drawCircle(color = knuckleColor, radius = s(2.6f).coerceAtLeast(0.9f), center = Offset(position.x + s(12.8f), position.y + s(10.7f)))
+    drawCircle(color = knuckleColor, radius = s(2.6f).coerceAtLeast(0.9f), center = Offset(position.x + s(18.3f), position.y + s(11.1f)))
+    drawCircle(color = knuckleColor, radius = s(2.6f).coerceAtLeast(0.9f), center = Offset(position.x + s(22.9f), position.y + s(13.2f)))
+}
+
+private fun DrawScope.drawSelectionMagnifier(
+    pointer: Offset,
+    nearestWall: WallSegment?,
+    nearestPoint: PointMm?,
+    worldToScreen: (PointMm) -> Offset,
+    boostActive: Boolean
+) {
+    val radius = POINTER_LENS_RADIUS_PX
+    val lensCenter = Offset(
+        x = (pointer.x + POINTER_LENS_OFFSET_PX.x).coerceIn(radius + 6f, size.width - radius - 6f),
+        y = (pointer.y + POINTER_LENS_OFFSET_PX.y).coerceIn(radius + 6f, size.height - radius - 6f)
+    )
+    drawLine(
+        color = Color(0x88ACD7FF),
+        start = pointer,
+        end = lensCenter,
+        strokeWidth = if (boostActive) 2.6f else 2f
+    )
+
+    val lensPath = Path().apply {
+        addOval(
+            Rect(
+                left = lensCenter.x - radius,
+                top = lensCenter.y - radius,
+                right = lensCenter.x + radius,
+                bottom = lensCenter.y + radius
+            )
+        )
+    }
+    clipPath(lensPath) {
+        drawCircle(
+            color = if (boostActive) Color(0xEF0D243B) else Color(0xDE0A1A2C),
+            radius = radius,
+            center = lensCenter
+        )
+        val gridColor = if (boostActive) Color(0x528FD2FF) else Color(0x3E7FAACD)
+        drawLine(
+            color = gridColor,
+            start = Offset(lensCenter.x - radius, lensCenter.y),
+            end = Offset(lensCenter.x + radius, lensCenter.y),
+            strokeWidth = 1.1f
+        )
+        drawLine(
+            color = gridColor,
+            start = Offset(lensCenter.x, lensCenter.y - radius),
+            end = Offset(lensCenter.x, lensCenter.y + radius),
+            strokeWidth = 1.1f
+        )
+        val zoom = if (boostActive) POINTER_LENS_ZOOM + 0.25f else POINTER_LENS_ZOOM
+        fun toLens(point: Offset): Offset {
+            return Offset(
+                x = lensCenter.x + ((point.x - pointer.x) * zoom),
+                y = lensCenter.y + ((point.y - pointer.y) * zoom)
+            )
+        }
+        nearestWall?.let { wall ->
+            val start = toLens(worldToScreen(wall.start))
+            val end = toLens(worldToScreen(wall.end))
+            drawLine(
+                color = Color(0xC804111E),
+                start = start,
+                end = end,
+                strokeWidth = if (boostActive) 8.6f else 7.4f,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = if (boostActive) Color(0xFFFFEA9C) else Color(0xFFFFE3AF),
+                start = start,
+                end = end,
+                strokeWidth = if (boostActive) 4.6f else 4f,
+                cap = StrokeCap.Round
+            )
+        }
+        nearestPoint?.let { projected ->
+            val point = toLens(worldToScreen(projected))
+            drawCircle(
+                color = Color(0xAB0A1A2C),
+                radius = 11f,
+                center = point
+            )
+            drawCircle(
+                color = if (boostActive) Color(0xFFFFE27A) else Color(0xFFFFF1CB),
+                radius = 5.3f,
+                center = point
+            )
+        }
+        drawCircle(
+            color = Color(0x4CC8E9FF),
+            radius = 7f,
+            center = lensCenter,
+            style = Stroke(width = 1.8f)
+        )
+    }
+    drawCircle(
+        color = if (boostActive) Color(0xFF8FD8FF) else Color(0xB38AB4D8),
+        radius = radius,
+        center = lensCenter,
+        style = Stroke(width = if (boostActive) 2.8f else 2.2f)
     )
 }
 
@@ -4124,6 +4886,15 @@ private fun formatFeetInchesPrime(feet: Double): String {
     }
 }
 
+private fun formatSignedFeetInchesPrime(mm: Long): String {
+    val sign = when {
+        mm > 0L -> "+"
+        mm < 0L -> "-"
+        else -> ""
+    }
+    return sign + formatFeetInchesPrime(Millimeters(abs(mm)).toFeet())
+}
+
 private fun applyCursorGridAssist(
     cursorLocal: Offset,
     canvasSize: Size,
@@ -4296,6 +5067,82 @@ private fun performSyntheticTap(rootView: android.view.View, pointInRoot: Offset
     return downHandled || upHandled
 }
 
+private fun snapMovedWallToNearbyWalls(
+    wall: WallSegment,
+    referenceWalls: List<WallSegment>,
+    thresholdMm: Long
+): WallSegment {
+    if (referenceWalls.isEmpty() || thresholdMm <= 0L) return wall
+    var bestDx = 0L
+    var bestDy = 0L
+    var bestDistance = Long.MAX_VALUE
+    var bestPriority = Int.MAX_VALUE
+
+    fun considerSnap(source: PointMm, target: PointMm, priority: Int) {
+        val distance = BlueprintSnapMath.distanceMillimeters(source, target)
+        if (distance > thresholdMm) return
+        val dx = target.x - source.x
+        val dy = target.y - source.y
+        val better = when {
+            priority < bestPriority -> true
+            priority > bestPriority -> false
+            distance < bestDistance -> true
+            distance > bestDistance -> false
+            else -> abs(dx) + abs(dy) < abs(bestDx) + abs(bestDy)
+        }
+        if (better) {
+            bestPriority = priority
+            bestDistance = distance
+            bestDx = dx
+            bestDy = dy
+        }
+    }
+
+    referenceWalls.forEach { reference ->
+        listOf(wall.start, wall.end).forEach { movingPoint ->
+            considerSnap(movingPoint, reference.start, priority = 0)
+            considerSnap(movingPoint, reference.end, priority = 0)
+            val projectionT = BlueprintSnapMath.projectToWallT(movingPoint, reference).coerceIn(0.0, 1.0)
+            val projection = BlueprintSnapMath.pointOnWall(reference, projectionT)
+            considerSnap(movingPoint, projection, priority = 1)
+        }
+        val center = wall.midpoint()
+        val centerProjectionT = BlueprintSnapMath.projectToWallT(center, reference).coerceIn(0.0, 1.0)
+        val centerProjection = BlueprintSnapMath.pointOnWall(reference, centerProjectionT)
+        considerSnap(center, centerProjection, priority = 2)
+    }
+
+    return if (bestPriority == Int.MAX_VALUE) {
+        wall
+    } else {
+        wall.translateBy(bestDx, bestDy)
+    }
+}
+
+private fun WallSegment.rotateByDegreesIncrement(stepDegrees: Double): WallSegment {
+    val currentAngle = angleDegrees()
+    val targetAngle = currentAngle + stepDegrees
+    val snappedAngle = round(targetAngle / MOVING_WALL_ROTATE_INCREMENT_DEG) * MOVING_WALL_ROTATE_INCREMENT_DEG
+    val deltaDegrees = snappedAngle - currentAngle
+    if (abs(deltaDegrees) <= 0.0001) return this
+    val pivot = midpoint()
+    val radians = Math.toRadians(deltaDegrees)
+    fun rotatePoint(point: PointMm): PointMm {
+        val translatedX = (point.x - pivot.x).toDouble()
+        val translatedY = (point.y - pivot.y).toDouble()
+        val rotatedX = (translatedX * cos(radians)) - (translatedY * sin(radians))
+        val rotatedY = (translatedX * sin(radians)) + (translatedY * cos(radians))
+        return PointMm(
+            x = (pivot.x + rotatedX).roundToLong(),
+            y = (pivot.y + rotatedY).roundToLong()
+        )
+    }
+    return copy(
+        start = rotatePoint(start),
+        end = rotatePoint(end)
+    )
+}
+
 private fun WallSegment.translateBy(dxMm: Long, dyMm: Long): WallSegment {
     return copy(
         start = PointMm(x = start.x + dxMm, y = start.y + dyMm),
@@ -4311,34 +5158,49 @@ private fun WallSegment.scopeFromTag(): TakeoffScope? = when {
     else -> null
 }
 
-private fun BlueprintFloorLevel.floorTag(): String = when (this) {
-    BlueprintFloorLevel.LOWER -> FLOOR_LOWER_TAG
-    BlueprintFloorLevel.UPPER -> FLOOR_UPPER_TAG
+private fun BlueprintFloorLevel.floorTag(): String = "$FLOOR_TAG_PREFIX$this"
+
+private fun BlueprintFloorLevel.label(): String = when {
+    this == FLOOR_GROUND_LEVEL -> "Ground"
+    this > FLOOR_GROUND_LEVEL -> (this + 1).toString()
+    this == -1 -> "Basement"
+    else -> "Basement ${abs(this)}"
 }
 
-private fun BlueprintFloorLevel.label(): String = when (this) {
-    BlueprintFloorLevel.LOWER -> "Lower"
-    BlueprintFloorLevel.UPPER -> "Upper"
+private fun BlueprintFloorLevel.floorDisplayLabel(): String = "Floor: ${label()}"
+
+private fun parseFloorLevelTag(tag: String?): BlueprintFloorLevel? {
+    val normalized = tag?.trim() ?: return null
+    if (!normalized.startsWith(FLOOR_TAG_PREFIX)) return null
+    if (normalized.equals(FLOOR_LEGACY_LOWER_TAG, ignoreCase = true)) return FLOOR_GROUND_LEVEL
+    if (normalized.equals(FLOOR_LEGACY_UPPER_TAG, ignoreCase = true)) return FLOOR_GROUND_LEVEL + 1
+    return normalized.removePrefix(FLOOR_TAG_PREFIX).toIntOrNull()
+}
+
+private fun Set<String>.resolveFloorLevelOrDefault(
+    defaultLevel: BlueprintFloorLevel = FLOOR_GROUND_LEVEL
+): BlueprintFloorLevel {
+    val rawFloorTag = firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
+    return parseFloorLevelTag(rawFloorTag) ?: defaultLevel
 }
 
 private fun WallSegment.isOnFloor(level: BlueprintFloorLevel): Boolean {
-    val wallFloor = tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) } ?: FLOOR_LOWER_TAG
-    return wallFloor == level.floorTag()
+    val wallFloor = tags.resolveFloorLevelOrDefault()
+    return wallFloor == level
 }
 
 private fun Room.isOnFloor(level: BlueprintFloorLevel): Boolean {
-    val roomFloor = tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) } ?: FLOOR_LOWER_TAG
-    return roomFloor == level.floorTag()
+    val roomFloor = tags.resolveFloorLevelOrDefault()
+    return roomFloor == level
 }
 
 private fun BlueprintOpening.isOnFloor(
     level: BlueprintFloorLevel,
     wallsById: Map<String, WallSegment>
 ): Boolean {
-    val openingFloor = tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
-        ?: wallsById[wallId]?.tags?.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
-        ?: FLOOR_LOWER_TAG
-    return openingFloor == level.floorTag()
+    val inheritedFloor = wallsById[wallId]?.tags?.resolveFloorLevelOrDefault()
+    val openingFloor = tags.resolveFloorLevelOrDefault(inheritedFloor ?: FLOOR_GROUND_LEVEL)
+    return openingFloor == level
 }
 
 private fun OpeningType.isStair(): Boolean {
