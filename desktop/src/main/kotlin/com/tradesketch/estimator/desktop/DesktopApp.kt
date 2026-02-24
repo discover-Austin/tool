@@ -253,7 +253,7 @@ private fun DesktopWelcomeScreen(
                                 Text("Back")
                             }
                             Button(onClick = { onBegin(projectName, selectedType) }) {
-                                Text("Open Workspace")
+                                Text("Open Project")
                             }
                         }
                     }
@@ -443,7 +443,7 @@ private fun WorkspaceHeader(state: DesktopAppState) {
             style = MaterialTheme.typography.titleLarge
         )
         Text(
-            text = "Desktop estimator workspace",
+            text = "Desktop estimator",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

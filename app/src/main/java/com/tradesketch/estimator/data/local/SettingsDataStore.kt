@@ -48,6 +48,15 @@ class SettingsDataStore @Inject constructor(
         private val BUSINESS_EMAIL = stringPreferencesKey("business_email")
         private val BUSINESS_ADDRESS = stringPreferencesKey("business_address")
         private val BUSINESS_LICENSE = stringPreferencesKey("business_license")
+        private val BLUEPRINT_SNAP_GRID_ENABLED = booleanPreferencesKey("blueprint_snap_grid_enabled")
+        private val BLUEPRINT_SNAP_ENDPOINT_ENABLED = booleanPreferencesKey("blueprint_snap_endpoint_enabled")
+        private val BLUEPRINT_SNAP_MIDPOINT_ENABLED = booleanPreferencesKey("blueprint_snap_midpoint_enabled")
+        private val BLUEPRINT_SNAP_ANGLE_ENABLED = booleanPreferencesKey("blueprint_snap_angle_enabled")
+        private val BLUEPRINT_SNAP_CLOSURE_ENABLED = booleanPreferencesKey("blueprint_snap_closure_enabled")
+        private val BLUEPRINT_DUAL_JOYSTICKS_ENABLED = booleanPreferencesKey("blueprint_dual_joysticks_enabled")
+        private val BLUEPRINT_JOYSTICK_SENSITIVITY = floatPreferencesKey("blueprint_joystick_sensitivity")
+        private val BLUEPRINT_JOYSTICK_DEADZONE = floatPreferencesKey("blueprint_joystick_deadzone")
+        private val BLUEPRINT_LARGE_CURSOR_ENABLED = booleanPreferencesKey("blueprint_large_cursor_enabled")
     }
 
     val settings: Flow<Settings> = context.settingsDataStore.data
@@ -91,7 +100,25 @@ class SettingsDataStore @Inject constructor(
                 businessPhone = preferences[BUSINESS_PHONE] ?: defaults.businessPhone,
                 businessEmail = preferences[BUSINESS_EMAIL] ?: defaults.businessEmail,
                 businessAddress = preferences[BUSINESS_ADDRESS] ?: defaults.businessAddress,
-                businessLicense = preferences[BUSINESS_LICENSE] ?: defaults.businessLicense
+                businessLicense = preferences[BUSINESS_LICENSE] ?: defaults.businessLicense,
+                blueprintSnapGridEnabled = preferences[BLUEPRINT_SNAP_GRID_ENABLED]
+                    ?: defaults.blueprintSnapGridEnabled,
+                blueprintSnapEndpointEnabled = preferences[BLUEPRINT_SNAP_ENDPOINT_ENABLED]
+                    ?: defaults.blueprintSnapEndpointEnabled,
+                blueprintSnapMidpointEnabled = preferences[BLUEPRINT_SNAP_MIDPOINT_ENABLED]
+                    ?: defaults.blueprintSnapMidpointEnabled,
+                blueprintSnapAngleEnabled = preferences[BLUEPRINT_SNAP_ANGLE_ENABLED]
+                    ?: defaults.blueprintSnapAngleEnabled,
+                blueprintSnapClosureEnabled = preferences[BLUEPRINT_SNAP_CLOSURE_ENABLED]
+                    ?: defaults.blueprintSnapClosureEnabled,
+                blueprintDualJoysticksEnabled = preferences[BLUEPRINT_DUAL_JOYSTICKS_ENABLED]
+                    ?: defaults.blueprintDualJoysticksEnabled,
+                blueprintJoystickSensitivity = preferences[BLUEPRINT_JOYSTICK_SENSITIVITY]
+                    ?: defaults.blueprintJoystickSensitivity,
+                blueprintJoystickDeadzone = preferences[BLUEPRINT_JOYSTICK_DEADZONE]
+                    ?: defaults.blueprintJoystickDeadzone,
+                blueprintLargeCursorEnabled = preferences[BLUEPRINT_LARGE_CURSOR_ENABLED]
+                    ?: defaults.blueprintLargeCursorEnabled
             )
         }
 
@@ -126,6 +153,15 @@ class SettingsDataStore @Inject constructor(
             preferences[BUSINESS_EMAIL] = settings.businessEmail
             preferences[BUSINESS_ADDRESS] = settings.businessAddress
             preferences[BUSINESS_LICENSE] = settings.businessLicense
+            preferences[BLUEPRINT_SNAP_GRID_ENABLED] = settings.blueprintSnapGridEnabled
+            preferences[BLUEPRINT_SNAP_ENDPOINT_ENABLED] = settings.blueprintSnapEndpointEnabled
+            preferences[BLUEPRINT_SNAP_MIDPOINT_ENABLED] = settings.blueprintSnapMidpointEnabled
+            preferences[BLUEPRINT_SNAP_ANGLE_ENABLED] = settings.blueprintSnapAngleEnabled
+            preferences[BLUEPRINT_SNAP_CLOSURE_ENABLED] = settings.blueprintSnapClosureEnabled
+            preferences[BLUEPRINT_DUAL_JOYSTICKS_ENABLED] = settings.blueprintDualJoysticksEnabled
+            preferences[BLUEPRINT_JOYSTICK_SENSITIVITY] = settings.blueprintJoystickSensitivity
+            preferences[BLUEPRINT_JOYSTICK_DEADZONE] = settings.blueprintJoystickDeadzone
+            preferences[BLUEPRINT_LARGE_CURSOR_ENABLED] = settings.blueprintLargeCursorEnabled
         }
     }
 

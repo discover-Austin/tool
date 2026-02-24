@@ -74,12 +74,13 @@ keytool -printcert -jarfile app/build/outputs/bundle/release/app-release.aab
 Run this on the exact commit used for release:
 
 - [ ] App opens to Welcome on first run.
-- [ ] Project Ritual step 1 accepts a project name.
-- [ ] Project Ritual step 2 selects a primary trade and continues.
+- [ ] Project setup step 1 accepts a project name.
+- [ ] Project setup step 2 selects a primary trade and continues.
 - [ ] Workspace opens and rail tabs navigate: Blueprint, Materials, Quantities, Export, Settings/About.
 - [ ] Blueprint: add/edit walls and openings without crashes.
+- [ ] Blueprint: floor switching (Ground/upper/basement) works when stairs are present.
 - [ ] Materials/Quantities: switching estimate type updates results.
-- [ ] Export: share report and save CSV/PDF/JSON via SAF.
+- [ ] Export: share report and save CSV/PDF/JSON.
 - [ ] Settings: adjust values and verify they persist after app restart.
 - [ ] App remains functional in airplane mode.
 

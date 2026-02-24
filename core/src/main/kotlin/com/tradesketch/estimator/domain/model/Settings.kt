@@ -41,7 +41,16 @@ data class Settings(
     val businessPhone: String = "",
     val businessEmail: String = "",
     val businessAddress: String = "",
-    val businessLicense: String = ""
+    val businessLicense: String = "",
+    val blueprintSnapGridEnabled: Boolean = true,
+    val blueprintSnapEndpointEnabled: Boolean = true,
+    val blueprintSnapMidpointEnabled: Boolean = true,
+    val blueprintSnapAngleEnabled: Boolean = true,
+    val blueprintSnapClosureEnabled: Boolean = true,
+    val blueprintDualJoysticksEnabled: Boolean = true,
+    val blueprintJoystickSensitivity: Float = 1.0f,
+    val blueprintJoystickDeadzone: Float = 0.08f,
+    val blueprintLargeCursorEnabled: Boolean = false
 ) {
     companion object {
         val DEFAULT = Settings()

@@ -33,7 +33,7 @@ Automated checks completed successfully:
 ## Product Workflow (Current)
 
 - Welcome screen
-- Project Ritual (project name + primary trade)
+- Project setup (project name + primary trade)
 - Blueprint-first workspace with tabs:
   - Blueprint
   - Materials

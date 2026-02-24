@@ -163,7 +163,7 @@ fun ExportScreen(
                     onClick = { showScopeSelector = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Change Type")
+                    Text("Change Estimate Type")
                 }
             } else {
                 Row(
@@ -210,7 +210,7 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Need to retune quantities or pricing?",
+                    text = "Need to adjust quantities or pricing?",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SecondaryActionButton(
@@ -270,7 +270,7 @@ fun ExportScreen(
                     )
                     if (uiState.settings.businessName.isBlank()) {
                         Text(
-                            text = "Tip: add your business identity in Settings -> Business Defaults for branded exports.",
+                            text = "Tip: add your business details in Settings > Business Identity for branded exports.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -355,7 +355,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save CSV (SAF)")
+                        Text("Save CSV")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -363,7 +363,7 @@ fun ExportScreen(
                             jsonSafLauncher.launch(
                                 ExportStorage.buildFileName(
                                     projectName = name,
-                                    suffix = "traceability",
+                                    suffix = "backup",
                                     extension = "json"
                                 )
                             )
@@ -372,7 +372,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save JSON (SAF)")
+                        Text("Save JSON Backup")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -389,7 +389,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save PDF (SAF)")
+                        Text("Save PDF")
                     }
                 }
             }
@@ -399,7 +399,7 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "No estimate data for this estimate type yet. Run Takeoff first.",
+                    text = "No estimate data for this type yet. Open Takeoff to generate quantities.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SecondaryActionButton(

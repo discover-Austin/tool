@@ -180,6 +180,46 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun updateBlueprintSnapDefaults(
+        gridEnabled: Boolean? = null,
+        endpointEnabled: Boolean? = null,
+        midpointEnabled: Boolean? = null,
+        angleEnabled: Boolean? = null,
+        closureEnabled: Boolean? = null
+    ) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    blueprintSnapGridEnabled = gridEnabled ?: current.blueprintSnapGridEnabled,
+                    blueprintSnapEndpointEnabled = endpointEnabled ?: current.blueprintSnapEndpointEnabled,
+                    blueprintSnapMidpointEnabled = midpointEnabled ?: current.blueprintSnapMidpointEnabled,
+                    blueprintSnapAngleEnabled = angleEnabled ?: current.blueprintSnapAngleEnabled,
+                    blueprintSnapClosureEnabled = closureEnabled ?: current.blueprintSnapClosureEnabled
+                )
+            )
+        }
+    }
+
+    fun updateBlueprintControlDefaults(
+        dualJoysticksEnabled: Boolean? = null,
+        joystickSensitivity: Float? = null,
+        joystickDeadzone: Float? = null,
+        largeCursorEnabled: Boolean? = null
+    ) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            saveSettingsUseCase(
+                current.copy(
+                    blueprintDualJoysticksEnabled = dualJoysticksEnabled ?: current.blueprintDualJoysticksEnabled,
+                    blueprintJoystickSensitivity = joystickSensitivity ?: current.blueprintJoystickSensitivity,
+                    blueprintJoystickDeadzone = joystickDeadzone ?: current.blueprintJoystickDeadzone,
+                    blueprintLargeCursorEnabled = largeCursorEnabled ?: current.blueprintLargeCursorEnabled
+                )
+            )
+        }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             saveSettingsUseCase(Settings.DEFAULT)

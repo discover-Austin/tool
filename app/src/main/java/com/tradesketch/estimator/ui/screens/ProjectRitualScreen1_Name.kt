@@ -38,7 +38,7 @@ fun ProjectRitualScreen1_Name(
             tint = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = "Project Ritual 1/2",
+            text = "Project Setup 1 of 2",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -48,7 +48,7 @@ fun ProjectRitualScreen1_Name(
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "Project name is required before entering the workspace.",
+            text = "Enter a project name to continue.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
