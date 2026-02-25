@@ -61,14 +61,14 @@ class TakeoffViewModel @Inject constructor(
                     val hasPersistedSession = session != ProjectTakeoffSession()
                     val alreadyInitializedForProject =
                         !_uiState.value.isLoading && _uiState.value.project?.id == project.id
+                    val sessionSelectedType = session.selectedScope.toTakeoffType()
                     _uiState.update {
                         it.copy(
                             project = project,
                             settings = settings,
-                            selectedType = if (alreadyInitializedForProject) {
-                                it.selectedType
-                            } else if (hasPersistedSession) {
-                                session.selectedScope.toTakeoffType()
+                            // Blueprint scope is authoritative across tabs.
+                            selectedType = if (hasPersistedSession) {
+                                sessionSelectedType
                             } else {
                                 defaultTakeoffTypeForTrade(settings.primaryTrade) ?: TakeoffType.DRYWALL
                             },

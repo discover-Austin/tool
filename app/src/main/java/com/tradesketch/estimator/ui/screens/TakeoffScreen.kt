@@ -1,9 +1,7 @@
 package com.tradesketch.estimator.ui.screens
 
-import com.tradesketch.estimator.ui.components.PrimaryActionButton
 import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
-import com.tradesketch.estimator.ui.components.DangerActionButton
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,8 +47,6 @@ import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
-import com.tradesketch.estimator.ui.components.rememberAppHaptics
-import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
@@ -73,32 +69,12 @@ fun TakeoffScreen(
     viewModel: TakeoffViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val haptics = rememberAppHaptics()
-    val focusedType = defaultTakeoffTypeForTrade(uiState.settings.primaryTrade)
-    var showAllTradeScopes by rememberSaveable(
-        projectId,
-        uiState.settings.primaryTrade.name,
-        uiState.settings.simplifiedHome,
-        uiState.settings.calmModeEnabled
-    ) { mutableStateOf(!uiState.settings.calmModeEnabled) }
     var showPricingInputs by rememberSaveable(projectId) { mutableStateOf(true) }
-    var showScopeSelector by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
-        mutableStateOf(uiState.selectedType == null)
-    }
     var showDetailedResults by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(false)
     }
     val staggeredDelay: (Int) -> Int = { base ->
         if (uiState.settings.reducedMotionEnabled) 0 else base
-    }
-    val availableTypes = if (
-        uiState.settings.simplifiedHome &&
-        focusedType != null &&
-        !showAllTradeScopes
-    ) {
-        listOf(focusedType)
-    } else {
-        TakeoffType.entries.toList()
     }
     val isMaterialsMode = screenMode == TakeoffScreenMode.MATERIALS
     LaunchedEffect(projectId) {
@@ -125,71 +101,44 @@ fun TakeoffScreen(
             AnimatedEntry(delayMs = staggeredDelay(70)) {
                 TitledSectionCard(
                     title = if (isMaterialsMode) "Estimate Type" else "Quantity Scope",
-                    subtitle = if (uiState.settings.simplifiedHome && focusedType != null && !showAllTradeScopes) {
-                        "Focused on ${uiState.settings.primaryTrade.displayLabel()}."
-                    } else if (isMaterialsMode) {
-                        "Set the trade for this estimate."
+                    subtitle = if (isMaterialsMode) {
+                        "Set in Blueprint so this tab always stays in sync."
                     } else {
-                        "Set the trade for quantity review."
+                        "Set in Blueprint so quantity review matches your drawing."
                     },
                     modifier = Modifier.animateContentSize()
                 ) {
                     val selectedType = uiState.selectedType
-                    if (selectedType != null && !showScopeSelector) {
+                    if (selectedType != null) {
                         Text(
-                            text = "Selected type: ${selectedType.displayLabel}",
+                            text = "Current type: ${selectedType.displayLabel}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Change this from the Scope button in Blueprint.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         SecondaryActionButton(
-                            onClick = { showScopeSelector = true },
+                            onClick = onOpenBlueprint,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Change Type")
+                            Text("Open Blueprint")
                         }
                     } else {
-                        if (uiState.settings.simplifiedHome && focusedType != null) {
-                            SecondaryActionButton(
-                                onClick = {
-                                    viewModel.recordTap("takeoff_toggle_scope_list")
-                                    showAllTradeScopes = !showAllTradeScopes
-                                }
-                            ) {
-                                Text(
-                                    if (showAllTradeScopes) {
-                                        "Show Focused Trade Only"
-                                    } else {
-                                        "Show All Trades"
-                                    }
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                        TradeScopeGrid(
-                            availableTypes = availableTypes,
-                            selectedType = uiState.selectedType,
-                            onSelect = { type ->
-                                haptics.tap()
-                                viewModel.recordTap("takeoff_select_scope")
-                                viewModel.selectTakeoffType(type)
-                                showScopeSelector = false
-                            }
+                        Text(
+                            text = "No type selected yet. Open Blueprint and set Scope.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (selectedType != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            QuietActionButton(
-                                onClick = { showScopeSelector = false },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Done")
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Tap an estimate type to continue.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SecondaryActionButton(
+                            onClick = onOpenBlueprint,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open Blueprint")
                         }
                     }
                 }
@@ -918,82 +867,6 @@ private data class NumberFieldSpec(
     val value: String,
     val hint: String,
     val onChange: (String) -> Unit
-)
-
-@Composable
-private fun TradeScopeGrid(
-    availableTypes: List<TakeoffType>,
-    selectedType: TakeoffType?,
-    onSelect: (TakeoffType) -> Unit
-) {
-    val options = availableTypes.map { type ->
-        when (type) {
-            TakeoffType.DRYWALL -> TradeScopeInfo(
-                type = type,
-                title = "Drywall",
-                subtitle = "Sheets, screws, mud"
-            )
-            TakeoffType.CONCRETE -> TradeScopeInfo(
-                type = type,
-                title = "Concrete",
-                subtitle = "Slab yards + cost stack"
-            )
-            TakeoffType.GRAVEL_MULCH -> TradeScopeInfo(
-                type = type,
-                title = "Gravel / Mulch",
-                subtitle = "Yards + tons"
-            )
-            TakeoffType.PAINT -> TradeScopeInfo(
-                type = type,
-                title = "Paint",
-                subtitle = "Coverage + coats"
-            )
-        }
-    }
-
-    options.chunked(2).forEach { rowOptions ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            rowOptions.forEach { option ->
-                val selected = option.type == selectedType
-                Card(
-                    onClick = { onSelect(option.type) },
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(
-                            text = option.title,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = option.subtitle,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-            if (rowOptions.size == 1) {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-    }
-}
-
-private data class TradeScopeInfo(
-    val type: TakeoffType,
-    val title: String,
-    val subtitle: String
 )
 
 private data class ScopeSummary(

@@ -44,8 +44,8 @@ import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -991,6 +991,6 @@ private enum class DetailTab(
     QUANTITIES("tab_quantities", "Quantities", Icons.Filled.Straighten),
     ADDONS("tab_addons", "Add-ons", Icons.Filled.Add),
     REVIEW("tab_review", "Review", Icons.Filled.Description),
-    EXPORT("tab_export", "Export", Icons.Filled.Share),
+    EXPORT("tab_export", "Export", Icons.Filled.Flag),
     SETTINGS_ABOUT("tab_settings_about", "Settings/About", Icons.Filled.Settings)
 }
