@@ -1274,15 +1274,20 @@ fun BlueprintScreen(
             onTapWorld = handleTapWorld
         )
 
-        LiveOverlay(
-            doc = renderedDoc,
-            wallLengthFeet = wallLengthFeet,
-            netArea = netArea,
-            currentScope = currentScope,
-            liveScopeQuantity = liveScopeQuantity,
-            selectedFloor = selectedFloor,
-            modifier = Modifier.align(Alignment.TopStart).padding(12.dp)
-        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, top = 72.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LiveOverlay(
+                doc = renderedDoc,
+                wallLengthFeet = wallLengthFeet,
+                netArea = netArea,
+                liveScopeQuantity = liveScopeQuantity,
+                selectedFloor = selectedFloor
+            )
+        }
         if (stairWorkflowActive) {
             FloorLevelSwitcher(
                 level = selectedFloor,
@@ -3548,13 +3553,12 @@ private fun LiveOverlay(
     doc: BlueprintDocument,
     wallLengthFeet: Double,
     netArea: Double,
-    currentScope: TakeoffScope,
     liveScopeQuantity: LiveScopeQuantity,
     selectedFloor: BlueprintFloorLevel,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 178.dp),
+        modifier = modifier.widthIn(max = 170.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
@@ -3564,15 +3568,9 @@ private fun LiveOverlay(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Live",
-                    color = Color(0xFFC2E2FF),
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.labelSmall
-                )
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = Color(0x553D6F98),
@@ -3586,7 +3584,7 @@ private fun LiveOverlay(
                     )
                 }
             }
-            LiveMetricRow(label = "Scope", value = currentScope.shortLabel())
+            LiveMetricRow(label = "Scope", value = liveScopeQuantity.label)
             LiveMetricRow(label = "Perimeter", value = formatFeetInchesPrime(wallLengthFeet))
             LiveMetricRow(label = "Net Wall Area", value = "${formatLiveValue(netArea, 1)} sq ft")
             LiveMetricRow(label = "Rooms/Openings", value = "${doc.rooms.size} / ${doc.openings.size}")
