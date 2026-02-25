@@ -1,19 +1,28 @@
 package com.tradesketch.estimator.ui.viewmodel
 
 import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
+import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.CeilingSpec
 import com.tradesketch.estimator.domain.model.ConcreteSessionParams
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.DrywallSessionParams
 import com.tradesketch.estimator.domain.model.GravelSessionParams
+import com.tradesketch.estimator.domain.model.ManualTakeoffSessionParams
+import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.PaintSessionParams
+import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.PricingSessionParams
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
+import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffScope
+import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import kotlin.math.sqrt
 
 internal object TakeoffLineItemNames {
     const val DRYWALL_SHEETS = "Drywall sheets"
@@ -150,12 +159,35 @@ internal fun buildTakeoffInputs(
     )
 }
 
+internal fun projectBlueprintForType(
+    project: Project,
+    type: TakeoffType,
+    session: ProjectTakeoffSession = project.takeoffSession
+): BlueprintDocument {
+    return if (session.inputMode == TakeoffInputMode.MANUAL) {
+        manualBlueprintForType(
+            projectId = project.id,
+            type = type,
+            manualParams = session.manual,
+            includeDrywallCeilings = session.drywall.includeCeilings
+        )
+    } else {
+        project.authoritativeBlueprint()
+    }
+}
+
 internal fun CalculateTakeoffUseCase.calculateForType(
     project: Project,
     type: TakeoffType,
-    inputs: TakeoffCalculationInputs
+    inputs: TakeoffCalculationInputs,
+    sessionOverride: ProjectTakeoffSession? = null
 ): TakeoffResult {
-    val blueprint = project.authoritativeBlueprint()
+    val activeSession = sessionOverride ?: project.takeoffSession
+    val blueprint = projectBlueprintForType(
+        project = project,
+        type = type,
+        session = activeSession
+    )
     return when (type) {
         TakeoffType.DRYWALL -> BlueprintTakeoffCalculator.drywallTakeoff(
             document = blueprint,
@@ -206,4 +238,106 @@ internal fun CalculateTakeoffUseCase.calculateForType(
             )
         )
     }
+}
+
+private fun manualBlueprintForType(
+    projectId: String,
+    type: TakeoffType,
+    manualParams: ManualTakeoffSessionParams,
+    includeDrywallCeilings: Boolean
+): BlueprintDocument {
+    val walls = mutableListOf<WallSegment>()
+    val rooms = mutableListOf<Room>()
+
+    when (type) {
+        TakeoffType.DRYWALL -> {
+            manualWallFromArea(
+                id = "manual-drywall-wall",
+                areaSqFt = manualParams.drywallWallAreaSqFt
+            )?.let(walls::add)
+
+            if (includeDrywallCeilings) {
+                manualSquareRoomFromArea(
+                    id = "manual-drywall-ceiling",
+                    areaSqFt = manualParams.drywallCeilingAreaSqFt,
+                    ceilingEnabled = true
+                )?.let(rooms::add)
+            }
+        }
+
+        TakeoffType.CONCRETE -> {
+            manualSquareRoomFromArea(
+                id = "manual-concrete-area",
+                areaSqFt = manualParams.concreteAreaSqFt,
+                ceilingEnabled = false
+            )?.let(rooms::add)
+        }
+
+        TakeoffType.GRAVEL_MULCH -> {
+            manualSquareRoomFromArea(
+                id = "manual-gravel-area",
+                areaSqFt = manualParams.gravelAreaSqFt,
+                ceilingEnabled = false
+            )?.let(rooms::add)
+        }
+
+        TakeoffType.PAINT -> {
+            manualWallFromArea(
+                id = "manual-paint-wall",
+                areaSqFt = manualParams.paintAreaSqFt
+            )?.let(walls::add)
+        }
+    }
+
+    return BlueprintDocument(
+        projectId = projectId,
+        walls = walls,
+        rooms = rooms
+    )
+}
+
+private fun manualWallFromArea(
+    id: String,
+    areaSqFt: Double
+): WallSegment? {
+    val normalizedArea = areaSqFt.coerceAtLeast(0.0)
+    if (normalizedArea <= 0.0) return null
+
+    val wallLengthMm = Millimeters.fromFeet(normalizedArea).value.coerceAtLeast(1L)
+    return WallSegment(
+        id = id,
+        start = PointMm(x = 0L, y = 0L),
+        end = PointMm(x = wallLengthMm, y = 0L),
+        height = Millimeters.fromFeet(1.0),
+        tags = setOf("manual")
+    )
+}
+
+private fun manualSquareRoomFromArea(
+    id: String,
+    areaSqFt: Double,
+    ceilingEnabled: Boolean
+): Room? {
+    val normalizedArea = areaSqFt.coerceAtLeast(0.0)
+    if (normalizedArea <= 0.0) return null
+
+    val sideLengthFeet = sqrt(normalizedArea)
+    val sideLengthMm = Millimeters.fromFeet(sideLengthFeet).value.coerceAtLeast(1L)
+    val polygon = listOf(
+        PointMm(0L, 0L),
+        PointMm(sideLengthMm, 0L),
+        PointMm(sideLengthMm, sideLengthMm),
+        PointMm(0L, sideLengthMm)
+    )
+
+    return Room(
+        id = id,
+        name = "Manual Area",
+        polygon = polygon,
+        tags = setOf("manual"),
+        ceiling = CeilingSpec(
+            enabled = ceilingEnabled,
+            height = Millimeters.fromFeet(1.0)
+        )
+    )
 }

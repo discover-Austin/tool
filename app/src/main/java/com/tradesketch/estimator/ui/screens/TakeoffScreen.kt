@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.Project
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
@@ -77,6 +78,7 @@ fun TakeoffScreen(
         if (uiState.settings.reducedMotionEnabled) 0 else base
     }
     val isMaterialsMode = screenMode == TakeoffScreenMode.MATERIALS
+    val isManualMode = uiState.inputMode == TakeoffInputMode.MANUAL
     LaunchedEffect(projectId) {
         viewModel.setProjectId(projectId)
         viewModel.recordTap("takeoff_screen_opened")
@@ -98,10 +100,50 @@ fun TakeoffScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            AnimatedEntry(delayMs = staggeredDelay(40)) {
+                TitledSectionCard(
+                    title = "Input Method",
+                    subtitle = "Choose Blueprint drawing or Manual entry for measurements.",
+                    modifier = Modifier.animateContentSize()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = uiState.inputMode == TakeoffInputMode.BLUEPRINT,
+                            onClick = { viewModel.setInputMode(TakeoffInputMode.BLUEPRINT) },
+                            label = { Text("Blueprint") }
+                        )
+                        FilterChip(
+                            selected = uiState.inputMode == TakeoffInputMode.MANUAL,
+                            onClick = { viewModel.setInputMode(TakeoffInputMode.MANUAL) },
+                            label = { Text("Manual") }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (isManualMode) {
+                            "Manual mode is active. Enter measurements directly for each estimate type."
+                        } else {
+                            "Blueprint mode is active. Measurements are derived from your drawing."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
             AnimatedEntry(delayMs = staggeredDelay(70)) {
                 TitledSectionCard(
                     title = if (isMaterialsMode) "Estimate Type" else "Quantity Scope",
-                    subtitle = if (isMaterialsMode) {
+                    subtitle = if (isManualMode) {
+                        "Pick the estimate type directly when entering measurements manually."
+                    } else if (isMaterialsMode) {
                         "Set in Blueprint so this tab always stays in sync."
                     } else {
                         "Set in Blueprint so quantity review matches your drawing."
@@ -109,7 +151,30 @@ fun TakeoffScreen(
                     modifier = Modifier.animateContentSize()
                 ) {
                     val selectedType = uiState.selectedType
-                    if (selectedType != null) {
+                    if (isManualMode) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TakeoffType.entries.forEach { type ->
+                                FilterChip(
+                                    selected = selectedType == type,
+                                    onClick = { viewModel.selectTakeoffType(type) },
+                                    label = { Text(type.displayLabel) }
+                                )
+                            }
+                        }
+                        if (selectedType == null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Select an estimate type to continue with manual entry.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else if (selectedType != null) {
                         Text(
                             text = "Current type: ${selectedType.displayLabel}",
                             style = MaterialTheme.typography.bodyMedium,
@@ -149,7 +214,9 @@ fun TakeoffScreen(
             val scopeSummary = scopeSummaryForType(
                 project = uiState.project,
                 type = type,
-                includeDrywallCeilings = uiState.drywallParams.includeCeilings
+                includeDrywallCeilings = uiState.drywallParams.includeCeilings,
+                inputMode = uiState.inputMode,
+                manualParams = uiState.manualParams
             )
             val warnings = takeoffWarnings(uiState, type, scopeSummary)
             item {
@@ -166,7 +233,7 @@ fun TakeoffScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${scopeSummary.spaceCount} matching blueprint surfaces in this project.",
+                            text = "${scopeSummary.sourceCount} ${scopeSummary.sourceLabel} included in this estimate.",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
@@ -185,23 +252,35 @@ fun TakeoffScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                SecondaryActionButton(
-                                    onClick = {
-                                        viewModel.recordTap("takeoff_open_export")
-                                        onOpenModel()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Open Export")
-                                }
-                                SecondaryActionButton(
-                                    onClick = {
-                                        viewModel.recordTap("takeoff_open_blueprint")
-                                        onOpenBlueprint()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Open Blueprint")
+                                if (isManualMode) {
+                                    SecondaryActionButton(
+                                        onClick = {
+                                            viewModel.recordTap("takeoff_open_export")
+                                            onOpenModel()
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Open Export")
+                                    }
+                                } else {
+                                    SecondaryActionButton(
+                                        onClick = {
+                                            viewModel.recordTap("takeoff_open_export")
+                                            onOpenModel()
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Open Export")
+                                    }
+                                    SecondaryActionButton(
+                                        onClick = {
+                                            viewModel.recordTap("takeoff_open_blueprint")
+                                            onOpenBlueprint()
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Open Blueprint")
+                                    }
                                 }
                             }
                         }
@@ -238,6 +317,80 @@ fun TakeoffScreen(
                             }
                         }
                     }
+                }
+            }
+
+            if (isManualMode) {
+                item {
+                    val manualFields = when (type) {
+                        TakeoffType.DRYWALL -> listOf(
+                            NumberFieldSpec(
+                                label = "Net Wall Area (sq ft)",
+                                value = uiState.manualParams.drywallWallAreaSqFt.toString(),
+                                hint = "Measured wall surface area",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updateManualParams(drywallWallAreaSqFt = value)
+                                    }
+                                }
+                            ),
+                            NumberFieldSpec(
+                                label = "Ceiling Area (sq ft)",
+                                value = uiState.manualParams.drywallCeilingAreaSqFt.toString(),
+                                hint = "Used only when Include Ceilings is enabled",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updateManualParams(drywallCeilingAreaSqFt = value)
+                                    }
+                                }
+                            )
+                        )
+
+                        TakeoffType.CONCRETE -> listOf(
+                            NumberFieldSpec(
+                                label = "Slab Footprint (sq ft)",
+                                value = uiState.manualParams.concreteAreaSqFt.toString(),
+                                hint = "Total concrete coverage area",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updateManualParams(concreteAreaSqFt = value)
+                                    }
+                                }
+                            )
+                        )
+
+                        TakeoffType.GRAVEL_MULCH -> listOf(
+                            NumberFieldSpec(
+                                label = "Coverage Area (sq ft)",
+                                value = uiState.manualParams.gravelAreaSqFt.toString(),
+                                hint = "Total gravel/mulch area",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updateManualParams(gravelAreaSqFt = value)
+                                    }
+                                }
+                            )
+                        )
+
+                        TakeoffType.PAINT -> listOf(
+                            NumberFieldSpec(
+                                label = "Paintable Area (sq ft)",
+                                value = uiState.manualParams.paintAreaSqFt.toString(),
+                                hint = "Total wall area to paint",
+                                onChange = {
+                                    it.toDoubleOrNull()?.let { value ->
+                                        viewModel.updateManualParams(paintAreaSqFt = value)
+                                    }
+                                }
+                            )
+                        )
+                    }
+
+                    ParameterCard(
+                        title = "Manual Measurements",
+                        description = "Enter measured values directly if you are not using the blueprint editor.",
+                        fields = manualFields
+                    )
                 }
             }
 
@@ -733,7 +886,11 @@ fun TakeoffScreen(
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
-                                    text = "${result.items.size} line item(s) derived from the blueprint.",
+                                    text = if (isManualMode) {
+                                        "${result.items.size} line item(s) derived from manual entries."
+                                    } else {
+                                        "${result.items.size} line item(s) derived from the blueprint."
+                                    },
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 result.items.forEach { line ->
@@ -871,6 +1028,8 @@ private data class NumberFieldSpec(
 
 private data class ScopeSummary(
     val spaceCount: Int,
+    val sourceCount: Int,
+    val sourceLabel: String,
     val measuredQuantity: Double,
     val unit: String,
     val quantityLabel: String,
@@ -880,11 +1039,84 @@ private data class ScopeSummary(
 private fun scopeSummaryForType(
     project: Project?,
     type: TakeoffType,
-    includeDrywallCeilings: Boolean
+    includeDrywallCeilings: Boolean,
+    inputMode: TakeoffInputMode,
+    manualParams: com.tradesketch.estimator.ui.viewmodel.ManualTakeoffParams
 ): ScopeSummary {
+    if (inputMode == TakeoffInputMode.MANUAL) {
+        return when (type) {
+            TakeoffType.DRYWALL -> {
+                val wallArea = manualParams.drywallWallAreaSqFt.coerceAtLeast(0.0)
+                val ceilingArea = if (includeDrywallCeilings) {
+                    manualParams.drywallCeilingAreaSqFt.coerceAtLeast(0.0)
+                } else {
+                    0.0
+                }
+                val manualCount = listOf(wallArea, ceilingArea).count { it > 0.0 }
+                ScopeSummary(
+                    spaceCount = manualCount,
+                    sourceCount = manualCount,
+                    sourceLabel = if (manualCount == 1) "manual entry" else "manual entries",
+                    measuredQuantity = wallArea + ceilingArea,
+                    unit = "sq ft",
+                    quantityLabel = if (includeDrywallCeilings) "Net drywall area" else "Net wall area",
+                    guidance = if (includeDrywallCeilings) {
+                        "Manual wall area plus manual ceiling area are used for drywall quantity."
+                    } else {
+                        "Manual wall area is used for drywall quantity."
+                    }
+                )
+            }
+
+            TakeoffType.CONCRETE -> {
+                val area = manualParams.concreteAreaSqFt.coerceAtLeast(0.0)
+                val manualCount = if (area > 0.0) 1 else 0
+                ScopeSummary(
+                    spaceCount = manualCount,
+                    sourceCount = manualCount,
+                    sourceLabel = if (manualCount == 1) "manual entry" else "manual entries",
+                    measuredQuantity = area,
+                    unit = "sq ft",
+                    quantityLabel = "Slab footprint",
+                    guidance = "Manual slab footprint drives concrete volume."
+                )
+            }
+
+            TakeoffType.GRAVEL_MULCH -> {
+                val area = manualParams.gravelAreaSqFt.coerceAtLeast(0.0)
+                val manualCount = if (area > 0.0) 1 else 0
+                ScopeSummary(
+                    spaceCount = manualCount,
+                    sourceCount = manualCount,
+                    sourceLabel = if (manualCount == 1) "manual entry" else "manual entries",
+                    measuredQuantity = area,
+                    unit = "sq ft",
+                    quantityLabel = "Ground coverage",
+                    guidance = "Manual coverage area drives gravel/mulch quantity."
+                )
+            }
+
+            TakeoffType.PAINT -> {
+                val area = manualParams.paintAreaSqFt.coerceAtLeast(0.0)
+                val manualCount = if (area > 0.0) 1 else 0
+                ScopeSummary(
+                    spaceCount = manualCount,
+                    sourceCount = manualCount,
+                    sourceLabel = if (manualCount == 1) "manual entry" else "manual entries",
+                    measuredQuantity = area,
+                    unit = "sq ft",
+                    quantityLabel = "Paintable wall area",
+                    guidance = "Manual paintable area drives gallons and price."
+                )
+            }
+        }
+    }
+
     if (project == null) {
         return ScopeSummary(
             spaceCount = 0,
+            sourceCount = 0,
+            sourceLabel = "blueprint surfaces",
             measuredQuantity = 0.0,
             unit = "",
             quantityLabel = "Measured quantity",
@@ -917,6 +1149,8 @@ private fun scopeSummaryForType(
 
             ScopeSummary(
                 spaceCount = totalCount,
+                sourceCount = totalCount,
+                sourceLabel = if (totalCount == 1) "blueprint surface" else "blueprint surfaces",
                 measuredQuantity = netArea,
                 unit = "sq ft",
                 quantityLabel = if (includeDrywallCeilings) "Net drywall area" else "Net wall area",
@@ -933,6 +1167,8 @@ private fun scopeSummaryForType(
             val area = blueprint.rooms.sumOf { it.areaSqFt() }
             ScopeSummary(
                 spaceCount = roomCount,
+                sourceCount = roomCount,
+                sourceLabel = if (roomCount == 1) "blueprint surface" else "blueprint surfaces",
                 measuredQuantity = area,
                 unit = "sq ft",
                 quantityLabel = "Slab footprint",
@@ -945,6 +1181,8 @@ private fun scopeSummaryForType(
             val area = blueprint.rooms.sumOf { it.areaSqFt() }
             ScopeSummary(
                 spaceCount = roomCount,
+                sourceCount = roomCount,
+                sourceLabel = if (roomCount == 1) "blueprint surface" else "blueprint surfaces",
                 measuredQuantity = area,
                 unit = "sq ft",
                 quantityLabel = "Ground coverage",
@@ -967,6 +1205,8 @@ private fun scopeSummaryForType(
 
             ScopeSummary(
                 spaceCount = wallCount,
+                sourceCount = wallCount,
+                sourceLabel = if (wallCount == 1) "blueprint surface" else "blueprint surfaces",
                 measuredQuantity = netArea,
                 unit = "sq ft",
                 quantityLabel = "Paintable wall area",
@@ -983,15 +1223,25 @@ private fun takeoffWarnings(
 ): List<String> {
     val warnings = mutableListOf<String>()
     if (scopeSummary.spaceCount == 0) {
-        warnings += "No matching blueprint surfaces were found for ${selectedType.displayLabel}. Draw geometry in Blueprint."
+        if (uiState.inputMode == TakeoffInputMode.MANUAL) {
+            warnings += "Manual quantity is empty for ${selectedType.displayLabel}. Enter at least one measurement."
+        } else {
+            warnings += "No matching blueprint surfaces were found for ${selectedType.displayLabel}. Draw geometry in Blueprint."
+        }
     }
     if (scopeSummary.measuredQuantity <= 0.0) {
         warnings += "Measured quantity is zero. Verify dimensions and openings."
     }
     if (selectedType == TakeoffType.DRYWALL) {
-        val hasCeilings = uiState.project?.authoritativeBlueprint()?.rooms?.any { it.ceiling.enabled } == true
-        if (hasCeilings && !uiState.drywallParams.includeCeilings) {
-            warnings += "Room ceilings exist but are excluded from drywall totals."
+        if (uiState.inputMode == TakeoffInputMode.MANUAL) {
+            if (uiState.drywallParams.includeCeilings && uiState.manualParams.drywallCeilingAreaSqFt <= 0.0) {
+                warnings += "Include Ceilings is enabled, but manual ceiling area is zero."
+            }
+        } else {
+            val hasCeilings = uiState.project?.authoritativeBlueprint()?.rooms?.any { it.ceiling.enabled } == true
+            if (hasCeilings && !uiState.drywallParams.includeCeilings) {
+                warnings += "Room ceilings exist but are excluded from drywall totals."
+            }
         }
     }
 

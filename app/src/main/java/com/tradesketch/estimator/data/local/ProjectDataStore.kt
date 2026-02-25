@@ -112,7 +112,9 @@ private data class ProjectJson(
 private data class ProjectTakeoffSessionJson(
     val selectedScope: String,
     val selectedPlaybook: String,
+    val inputMode: String? = null,
     val snapSettings: BlueprintSnapSettingsJson? = null,
+    val manual: ManualTakeoffSessionParamsJson? = null,
     val drywall: DrywallSessionParamsJson,
     val concrete: ConcreteSessionParamsJson,
     val gravel: GravelSessionParamsJson,
@@ -123,7 +125,10 @@ private data class ProjectTakeoffSessionJson(
         selectedScope = runCatching { TakeoffScope.valueOf(selectedScope) }
             .getOrDefault(TakeoffScope.DRYWALL),
         selectedPlaybook = selectedPlaybook,
+        inputMode = runCatching { TakeoffInputMode.valueOf(inputMode ?: TakeoffInputMode.BLUEPRINT.name) }
+            .getOrDefault(TakeoffInputMode.BLUEPRINT),
         snapSettings = snapSettings?.toDomain() ?: BlueprintSnapSettings(),
+        manual = manual?.toDomain() ?: ManualTakeoffSessionParams(),
         drywall = drywall.toDomain(),
         concrete = concrete.toDomain(),
         gravel = gravel.toDomain(),
@@ -135,7 +140,9 @@ private data class ProjectTakeoffSessionJson(
         fun fromTakeoffSession(session: ProjectTakeoffSession) = ProjectTakeoffSessionJson(
             selectedScope = session.selectedScope.name,
             selectedPlaybook = session.selectedPlaybook,
+            inputMode = session.inputMode.name,
             snapSettings = BlueprintSnapSettingsJson.fromDomain(session.snapSettings),
+            manual = ManualTakeoffSessionParamsJson.fromDomain(session.manual),
             drywall = DrywallSessionParamsJson.fromDomain(session.drywall),
             concrete = ConcreteSessionParamsJson.fromDomain(session.concrete),
             gravel = GravelSessionParamsJson.fromDomain(session.gravel),
@@ -476,6 +483,32 @@ private fun SpaceJson.toLegacyRoomPolygonOrNull(): List<PointMm>? {
             }
         }
         else -> null
+    }
+}
+
+private data class ManualTakeoffSessionParamsJson(
+    val drywallWallAreaSqFt: Double = 0.0,
+    val drywallCeilingAreaSqFt: Double = 0.0,
+    val concreteAreaSqFt: Double = 0.0,
+    val gravelAreaSqFt: Double = 0.0,
+    val paintAreaSqFt: Double = 0.0
+) {
+    fun toDomain() = ManualTakeoffSessionParams(
+        drywallWallAreaSqFt = drywallWallAreaSqFt,
+        drywallCeilingAreaSqFt = drywallCeilingAreaSqFt,
+        concreteAreaSqFt = concreteAreaSqFt,
+        gravelAreaSqFt = gravelAreaSqFt,
+        paintAreaSqFt = paintAreaSqFt
+    )
+
+    companion object {
+        fun fromDomain(params: ManualTakeoffSessionParams) = ManualTakeoffSessionParamsJson(
+            drywallWallAreaSqFt = params.drywallWallAreaSqFt,
+            drywallCeilingAreaSqFt = params.drywallCeilingAreaSqFt,
+            concreteAreaSqFt = params.concreteAreaSqFt,
+            gravelAreaSqFt = params.gravelAreaSqFt,
+            paintAreaSqFt = params.paintAreaSqFt
+        )
     }
 }
 

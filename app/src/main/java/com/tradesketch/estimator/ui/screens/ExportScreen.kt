@@ -51,7 +51,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
-import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
@@ -272,7 +271,7 @@ fun ExportScreen(
                     uiState.selectedType?.displayLabel ?: "Estimate"
                 },
                 result = result,
-                blueprint = uiState.project?.authoritativeBlueprint(),
+                blueprint = uiState.previewBlueprint,
                 selectedPage = selectedPreviewPage,
                 onSelectPage = { selectedPreviewPage = it },
                 modifier = Modifier.animateContentSize()
