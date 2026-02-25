@@ -614,10 +614,6 @@ fun BlueprintScreen(
             performSyntheticTap(rootView, rootPoint)
         }
     }
-    val wallArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(renderedDoc).values.sum()
-    val openingArea = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(renderedDoc).values.sum()
-    val netArea = (wallArea - openingArea).coerceAtLeast(0.0)
-    val wallLengthFeet = renderedDoc.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
     val takeoffSession = uiState.project?.takeoffSession ?: ProjectTakeoffSession()
     val currentScope = takeoffSession.selectedScope
     val liveScopeQuantity = computeLiveScopeQuantity(
@@ -1274,20 +1270,13 @@ fun BlueprintScreen(
             onTapWorld = handleTapWorld
         )
 
-        Column(
+        LiveOverlay(
+            liveScopeQuantity = liveScopeQuantity,
+            selectedFloor = selectedFloor,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 72.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LiveOverlay(
-                doc = renderedDoc,
-                wallLengthFeet = wallLengthFeet,
-                netArea = netArea,
-                liveScopeQuantity = liveScopeQuantity,
-                selectedFloor = selectedFloor
-            )
-        }
+                .padding(start = 12.dp, top = 116.dp)
+        )
         if (stairWorkflowActive) {
             FloorLevelSwitcher(
                 level = selectedFloor,
@@ -3550,25 +3539,22 @@ private fun SelectionPanel(
 
 @Composable
 private fun LiveOverlay(
-    doc: BlueprintDocument,
-    wallLengthFeet: Double,
-    netArea: Double,
     liveScopeQuantity: LiveScopeQuantity,
     selectedFloor: BlueprintFloorLevel,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 170.dp),
+        modifier = modifier.widthIn(max = 146.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -3583,48 +3569,21 @@ private fun LiveOverlay(
                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                     )
                 }
+                Text(
+                    text = "Live Qty",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = Color(0xFFB8DBFF)
+                )
             }
-            LiveMetricRow(label = "Scope", value = liveScopeQuantity.label)
-            LiveMetricRow(label = "Perimeter", value = formatFeetInchesPrime(wallLengthFeet))
-            LiveMetricRow(label = "Net Wall Area", value = "${formatLiveValue(netArea, 1)} sq ft")
-            LiveMetricRow(label = "Rooms/Openings", value = "${doc.rooms.size} / ${doc.openings.size}")
-            LiveMetricRow(
-                label = "Qty (${liveScopeQuantity.label})",
-                value = liveScopeQuantity.value,
-                emphasize = true
+            Text(
+                text = liveScopeQuantity.value,
+                color = Color(0xFFF6FBFF),
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-@Composable
-private fun LiveMetricRow(
-    label: String,
-    value: String,
-    emphasize: Boolean = false
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            color = if (emphasize) Color(0xFFD1E9FF) else Color(0xFFAED4F3),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = value,
-            color = Color(0xFFF6FBFF),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            fontWeight = if (emphasize) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 6.dp)
-        )
     }
 }
 

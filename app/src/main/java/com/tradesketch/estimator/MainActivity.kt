@@ -457,26 +457,26 @@ private fun WorkspaceShell(
     }
 
     Row(modifier = modifier.fillMaxSize()) {
+        WorkspaceLeftRail(
+            currentTab = selectedTab,
+            collapsed = leftRailCollapsed,
+            onSelectTab = navigateToTab,
+            showSavedProjects = showSavedProjects,
+            onCreateNewProject = {
+                if (activeProject != null) {
+                    showNewProjectConfirm = true
+                    showSavedProjects = false
+                } else {
+                    launchNewProject(true)
+                }
+            },
+            onToggleSavedProjects = {
+                showSavedProjects = !showSavedProjects
+            },
+            onToggleCollapsed = toggleLeftRail,
+            modifier = Modifier.fillMaxHeight()
+        )
         if (!leftRailCollapsed) {
-            WorkspaceLeftRail(
-                currentTab = selectedTab,
-                collapsed = false,
-                onSelectTab = navigateToTab,
-                showSavedProjects = showSavedProjects,
-                onCreateNewProject = {
-                    if (activeProject != null) {
-                        showNewProjectConfirm = true
-                        showSavedProjects = false
-                    } else {
-                        launchNewProject(true)
-                    }
-                },
-                onToggleSavedProjects = {
-                    showSavedProjects = !showSavedProjects
-                },
-                onToggleCollapsed = toggleLeftRail,
-                modifier = Modifier.fillMaxHeight()
-            )
             VerticalDivider(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
             )
@@ -486,22 +486,6 @@ private fun WorkspaceShell(
                 .weight(1f)
                 .fillMaxHeight()
         ) {
-            if (leftRailCollapsed) {
-                Surface(
-                    onClick = toggleLeftRail,
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 6.dp, top = 8.dp)
-                ) {
-                    Text(
-                        text = ">>",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 6.dp)
-                    )
-                }
-            }
             val projectTabContent: (@Composable (String) -> Unit)? = when (selectedTab) {
                 DetailTab.BLUEPRINT -> { projectId ->
                     BlueprintScreen(
