@@ -80,6 +80,20 @@ class TakeoffViewModel @Inject constructor(
                             } else {
                                 TakeoffPlaybook.BALANCED
                             },
+                            inputMode = if (alreadyInitializedForProject) {
+                                it.inputMode
+                            } else if (hasPersistedSession) {
+                                session.inputMode
+                            } else {
+                                TakeoffInputMode.BLUEPRINT
+                            },
+                            manualParams = if (alreadyInitializedForProject) {
+                                it.manualParams
+                            } else if (hasPersistedSession) {
+                                session.manual.toUiParams()
+                            } else {
+                                ManualTakeoffParams()
+                            },
                             drywallParams = if (alreadyInitializedForProject) {
                                 it.drywallParams
                             } else if (hasPersistedSession) {
@@ -138,6 +152,33 @@ class TakeoffViewModel @Inject constructor(
     
     fun selectTakeoffType(type: TakeoffType) {
         _uiState.update { it.copy(selectedType = type) }
+        calculate()
+    }
+
+    fun setInputMode(mode: TakeoffInputMode) {
+        _uiState.update { it.copy(inputMode = mode) }
+        calculate()
+    }
+
+    fun updateManualParams(
+        drywallWallAreaSqFt: Double? = null,
+        drywallCeilingAreaSqFt: Double? = null,
+        concreteAreaSqFt: Double? = null,
+        gravelAreaSqFt: Double? = null,
+        paintAreaSqFt: Double? = null
+    ) {
+        val current = _uiState.value.manualParams
+        _uiState.update {
+            it.copy(
+                manualParams = current.copy(
+                    drywallWallAreaSqFt = drywallWallAreaSqFt?.coerceAtLeast(0.0) ?: current.drywallWallAreaSqFt,
+                    drywallCeilingAreaSqFt = drywallCeilingAreaSqFt?.coerceAtLeast(0.0) ?: current.drywallCeilingAreaSqFt,
+                    concreteAreaSqFt = concreteAreaSqFt?.coerceAtLeast(0.0) ?: current.concreteAreaSqFt,
+                    gravelAreaSqFt = gravelAreaSqFt?.coerceAtLeast(0.0) ?: current.gravelAreaSqFt,
+                    paintAreaSqFt = paintAreaSqFt?.coerceAtLeast(0.0) ?: current.paintAreaSqFt
+                )
+            )
+        }
         calculate()
     }
 
@@ -368,7 +409,7 @@ class TakeoffViewModel @Inject constructor(
         val type = state.selectedType ?: return
         val pricing = state.pricingParams
         val sessionSnapshot = state.toTakeoffSession(type)
-        
+
         try {
             val result = calculateTakeoffUseCase.calculateForType(
                 project = project,
@@ -379,7 +420,8 @@ class TakeoffViewModel @Inject constructor(
                     gravel = state.gravelParams,
                     paint = state.paintParams,
                     pricing = pricing
-                )
+                ),
+                sessionOverride = sessionSnapshot
             )
             _uiState.update { it.copy(result = result, error = null) }
             val generatedEstimateKey = "${project.id}:${type.name}"
@@ -425,6 +467,8 @@ data class TakeoffUiState(
     val settings: Settings = Settings.DEFAULT,
     val selectedType: TakeoffType? = null,
     val selectedPlaybook: TakeoffPlaybook = TakeoffPlaybook.BALANCED,
+    val inputMode: TakeoffInputMode = TakeoffInputMode.BLUEPRINT,
+    val manualParams: ManualTakeoffParams = ManualTakeoffParams(),
     val drywallParams: DrywallParams = DrywallParams(),
     val concreteParams: ConcreteParams = ConcreteParams(),
     val gravelParams: GravelParams = GravelParams(),
@@ -450,6 +494,7 @@ private val DEFAULT_CONCRETE_SESSION = ConcreteSessionParams()
 private val DEFAULT_GRAVEL_SESSION = GravelSessionParams()
 private val DEFAULT_PAINT_SESSION = PaintSessionParams()
 private val DEFAULT_PRICING_SESSION = PricingSessionParams()
+private val DEFAULT_MANUAL_SESSION = ManualTakeoffSessionParams()
 
 data class DrywallParams(
     val sheetAreaSqFt: Double = DEFAULT_DRYWALL_SESSION.sheetAreaSqFt,
@@ -474,6 +519,14 @@ data class PaintParams(
     val coverageSqFtPerGallon: Double = DEFAULT_PAINT_SESSION.coverageSqFtPerGallon,
     val coats: Int = DEFAULT_PAINT_SESSION.coats,
     val wastePercent: Double = DEFAULT_PAINT_SESSION.wastePercent
+)
+
+data class ManualTakeoffParams(
+    val drywallWallAreaSqFt: Double = DEFAULT_MANUAL_SESSION.drywallWallAreaSqFt,
+    val drywallCeilingAreaSqFt: Double = DEFAULT_MANUAL_SESSION.drywallCeilingAreaSqFt,
+    val concreteAreaSqFt: Double = DEFAULT_MANUAL_SESSION.concreteAreaSqFt,
+    val gravelAreaSqFt: Double = DEFAULT_MANUAL_SESSION.gravelAreaSqFt,
+    val paintAreaSqFt: Double = DEFAULT_MANUAL_SESSION.paintAreaSqFt
 )
 
 data class PricingParams(
@@ -510,6 +563,8 @@ private fun TakeoffUiState.toTakeoffSession(selectedType: TakeoffType): ProjectT
     return ProjectTakeoffSession(
         selectedScope = selectedType.toTakeoffScope(),
         selectedPlaybook = selectedPlaybook.name,
+        inputMode = inputMode,
+        manual = manualParams.toSessionParams(),
         drywall = DrywallSessionParams(
             sheetAreaSqFt = drywallParams.sheetAreaSqFt,
             wastePercent = drywallParams.wastePercent,
@@ -545,3 +600,19 @@ private fun TakeoffUiState.toTakeoffSession(selectedType: TakeoffType): ProjectT
         )
     )
 }
+
+private fun ManualTakeoffSessionParams.toUiParams(): ManualTakeoffParams = ManualTakeoffParams(
+    drywallWallAreaSqFt = drywallWallAreaSqFt,
+    drywallCeilingAreaSqFt = drywallCeilingAreaSqFt,
+    concreteAreaSqFt = concreteAreaSqFt,
+    gravelAreaSqFt = gravelAreaSqFt,
+    paintAreaSqFt = paintAreaSqFt
+)
+
+private fun ManualTakeoffParams.toSessionParams(): ManualTakeoffSessionParams = ManualTakeoffSessionParams(
+    drywallWallAreaSqFt = drywallWallAreaSqFt,
+    drywallCeilingAreaSqFt = drywallCeilingAreaSqFt,
+    concreteAreaSqFt = concreteAreaSqFt,
+    gravelAreaSqFt = gravelAreaSqFt,
+    paintAreaSqFt = paintAreaSqFt
+)
