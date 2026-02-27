@@ -3544,19 +3544,30 @@ private fun LiveOverlay(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 116.dp),
+        modifier = modifier.widthIn(max = 132.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
-        Text(
-            text = "${selectedFloor.compactLabel()} | ${liveScopeQuantity.compactValue}",
-            color = Color(0xFFF6FBFF),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp)
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = "${selectedFloor.compactLabel()} | Live Qty",
+                color = Color(0xFFB8DBFF),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
+            )
+            Text(
+                text = liveScopeQuantity.value,
+                color = Color(0xFFF6FBFF),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                fontWeight = FontWeight.SemiBold,
+                overflow = TextOverflow.Clip
+            )
+        }
     }
 }
 
@@ -3681,7 +3692,7 @@ private fun ControlStateChip(
 }
 
 private data class LiveScopeQuantity(
-    val compactValue: String
+    val value: String
 )
 
 private fun computeLiveScopeQuantity(
@@ -3700,7 +3711,7 @@ private fun computeLiveScopeQuantity(
                 includeCeilings = takeoffSession.drywall.includeCeilings
             ).items.firstOrNull { it.name == "Drywall sheets" }?.quantity ?: 0.0
             LiveScopeQuantity(
-                compactValue = "${formatLiveValue(sheets, 0)} sh"
+                value = "${formatLiveValue(sheets, 0)} sh"
             )
         }
 
@@ -3711,7 +3722,7 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.concrete.wastePercent
             ).items.firstOrNull()?.quantity ?: 0.0
             LiveScopeQuantity(
-                compactValue = "${formatLiveValue(yards, 2)} yd3"
+                value = "${formatLiveValue(yards, 2)} yd3"
             )
         }
 
@@ -3723,8 +3734,9 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.gravel.wastePercent
             )
             val tons = takeoff.items.firstOrNull { it.unit.contains("tons", ignoreCase = true) }?.quantity ?: 0.0
+            val yards = takeoff.items.firstOrNull { it.unit.contains("yards", ignoreCase = true) }?.quantity ?: 0.0
             LiveScopeQuantity(
-                compactValue = "${formatLiveValue(tons, 2)} t"
+                value = "${formatLiveValue(tons, 2)} t / ${formatLiveValue(yards, 2)} yd3"
             )
         }
 
@@ -3736,7 +3748,7 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.paint.wastePercent
             ).items.firstOrNull()?.quantity ?: 0.0
             LiveScopeQuantity(
-                compactValue = "${formatLiveValue(gallons, 2)} gal"
+                value = "${formatLiveValue(gallons, 2)} gal"
             )
         }
     }
