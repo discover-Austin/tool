@@ -541,7 +541,7 @@ private fun WorkspaceShell(
                 OutlinedTextField(
                     value = projectNameDraft,
                     onValueChange = { projectNameDraft = it },
-                    label = { Text("Name", style = MaterialTheme.typography.labelSmall) },
+                    label = { Text("Project Name", style = MaterialTheme.typography.labelSmall) },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodySmall,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

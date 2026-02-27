@@ -616,8 +616,9 @@ fun BlueprintScreen(
     }
     val takeoffSession = uiState.project?.takeoffSession ?: ProjectTakeoffSession()
     val currentScope = takeoffSession.selectedScope
-    val liveQuantities = computeLiveQuantities(
+    val liveScopeQuantity = computeLiveScopeQuantity(
         document = renderedDoc,
+        scope = currentScope,
         takeoffSession = takeoffSession
     )
     val resolvedPreset: (OpeningPreset) -> OpeningPreset = { base ->
@@ -1270,11 +1271,11 @@ fun BlueprintScreen(
         )
 
         LiveOverlay(
-            liveQuantities = liveQuantities,
+            liveScopeQuantity = liveScopeQuantity,
             selectedFloor = selectedFloor,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 116.dp)
+                .padding(start = 12.dp, top = 72.dp)
         )
         if (stairWorkflowActive) {
             FloorLevelSwitcher(
@@ -3538,12 +3539,12 @@ private fun SelectionPanel(
 
 @Composable
 private fun LiveOverlay(
-    liveQuantities: LiveQuantities,
+    liveScopeQuantity: LiveScopeQuantity,
     selectedFloor: BlueprintFloorLevel,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 136.dp),
+        modifier = modifier.widthIn(max = 138.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
@@ -3560,35 +3561,19 @@ private fun LiveOverlay(
                 overflow = TextOverflow.Clip
             )
             Text(
-                text = "D ${liveQuantities.drywall}",
+                text = liveScopeQuantity.tradeLabel,
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
             Text(
-                text = "C ${liveQuantities.concrete}",
+                text = liveScopeQuantity.value,
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
-            Text(
-                text = "G ${liveQuantities.gravel}",
-                color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
-            Text(
-                text = "P ${liveQuantities.paint}",
-                color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Clip
             )
         }
@@ -3715,54 +3700,72 @@ private fun ControlStateChip(
     }
 }
 
-private data class LiveQuantities(
-    val drywall: String,
-    val concrete: String,
-    val gravel: String,
-    val paint: String
+private data class LiveScopeQuantity(
+    val tradeLabel: String,
+    val value: String
 )
 
-private fun computeLiveQuantities(
+private fun computeLiveScopeQuantity(
     document: BlueprintDocument,
+    scope: TakeoffScope,
     takeoffSession: ProjectTakeoffSession
-): LiveQuantities {
-    val drywallSheets = BlueprintTakeoffCalculator.drywallTakeoff(
-        document = document,
-        sheetAreaSqFt = takeoffSession.drywall.sheetAreaSqFt,
-        wastePercent = takeoffSession.drywall.wastePercent,
-        screwsPerSheet = takeoffSession.drywall.screwsPerSheet,
-        mudGallonsPer100SqFt = takeoffSession.drywall.mudGallonsPer100SqFt,
-        includeCeilings = takeoffSession.drywall.includeCeilings
-    ).items.firstOrNull { it.name == "Drywall sheets" }?.quantity ?: 0.0
+): LiveScopeQuantity {
+    return when (scope) {
+        TakeoffScope.DRYWALL -> {
+            val sheets = BlueprintTakeoffCalculator.drywallTakeoff(
+                document = document,
+                sheetAreaSqFt = takeoffSession.drywall.sheetAreaSqFt,
+                wastePercent = takeoffSession.drywall.wastePercent,
+                screwsPerSheet = takeoffSession.drywall.screwsPerSheet,
+                mudGallonsPer100SqFt = takeoffSession.drywall.mudGallonsPer100SqFt,
+                includeCeilings = takeoffSession.drywall.includeCeilings
+            ).items.firstOrNull { it.name == "Drywall sheets" }?.quantity ?: 0.0
+            LiveScopeQuantity(
+                tradeLabel = "Drywall Sheets",
+                value = "${formatLiveValue(sheets, 0)} sheets"
+            )
+        }
 
-    val concreteYards = BlueprintTakeoffCalculator.concreteTakeoff(
-        document = document,
-        thicknessFeet = takeoffSession.concrete.thicknessFeet,
-        wastePercent = takeoffSession.concrete.wastePercent
-    ).items.firstOrNull()?.quantity ?: 0.0
+        TakeoffScope.CONCRETE -> {
+            val yards = BlueprintTakeoffCalculator.concreteTakeoff(
+                document = document,
+                thicknessFeet = takeoffSession.concrete.thicknessFeet,
+                wastePercent = takeoffSession.concrete.wastePercent
+            ).items.firstOrNull()?.quantity ?: 0.0
+            LiveScopeQuantity(
+                tradeLabel = "Concrete Volume",
+                value = "${formatLiveValue(yards, 2)} cubic yards"
+            )
+        }
 
-    val gravelTakeoff = BlueprintTakeoffCalculator.gravelMulchTakeoff(
-        document = document,
-        depthFeet = takeoffSession.gravel.depthFeet,
-        densityTonsPerYard = takeoffSession.gravel.densityTonsPerYard,
-        wastePercent = takeoffSession.gravel.wastePercent
-    )
-    val gravelTons = gravelTakeoff.items.firstOrNull { it.unit.contains("tons", ignoreCase = true) }?.quantity ?: 0.0
-    val gravelYards = gravelTakeoff.items.firstOrNull { it.unit.contains("yards", ignoreCase = true) }?.quantity ?: 0.0
+        TakeoffScope.GRAVEL_MULCH -> {
+            val takeoff = BlueprintTakeoffCalculator.gravelMulchTakeoff(
+                document = document,
+                depthFeet = takeoffSession.gravel.depthFeet,
+                densityTonsPerYard = takeoffSession.gravel.densityTonsPerYard,
+                wastePercent = takeoffSession.gravel.wastePercent
+            )
+            val tons = takeoff.items.firstOrNull { it.unit.contains("tons", ignoreCase = true) }?.quantity ?: 0.0
+            val yards = takeoff.items.firstOrNull { it.unit.contains("yards", ignoreCase = true) }?.quantity ?: 0.0
+            LiveScopeQuantity(
+                tradeLabel = "Material Quantity",
+                value = "${formatLiveValue(tons, 2)} tons / ${formatLiveValue(yards, 2)} cubic yards"
+            )
+        }
 
-    val paintGallons = BlueprintTakeoffCalculator.paintTakeoff(
-        document = document,
-        coverageSqFtPerGallon = takeoffSession.paint.coverageSqFtPerGallon,
-        coats = takeoffSession.paint.coats,
-        wastePercent = takeoffSession.paint.wastePercent
-    ).items.firstOrNull()?.quantity ?: 0.0
-
-    return LiveQuantities(
-        drywall = "${formatLiveValue(drywallSheets, 0)} sh",
-        concrete = "${formatLiveValue(concreteYards, 2)} yd3",
-        gravel = "${formatLiveValue(gravelTons, 2)} t / ${formatLiveValue(gravelYards, 2)} yd3",
-        paint = "${formatLiveValue(paintGallons, 2)} gal"
-    )
+        TakeoffScope.PAINT -> {
+            val gallons = BlueprintTakeoffCalculator.paintTakeoff(
+                document = document,
+                coverageSqFtPerGallon = takeoffSession.paint.coverageSqFtPerGallon,
+                coats = takeoffSession.paint.coats,
+                wastePercent = takeoffSession.paint.wastePercent
+            ).items.firstOrNull()?.quantity ?: 0.0
+            LiveScopeQuantity(
+                tradeLabel = "Paint Quantity",
+                value = "${formatLiveValue(gallons, 2)} gallons"
+            )
+        }
+    }
 }
 
 private fun DrawScope.drawBlueprintTexturePattern() {
