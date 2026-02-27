@@ -3544,46 +3544,19 @@ private fun LiveOverlay(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 146.dp),
+        modifier = modifier.widthIn(max = 116.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(0x553D6F98),
-                    border = BorderStroke(1.dp, Color(0x6B8FC2EB))
-                ) {
-                    Text(
-                        text = selectedFloor.label(),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = Color(0xFFEAF6FF),
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                    )
-                }
-                Text(
-                    text = "Live Qty",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = Color(0xFFB8DBFF)
-                )
-            }
-            Text(
-                text = liveScopeQuantity.value,
-                color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = "${selectedFloor.compactLabel()} | ${liveScopeQuantity.compactValue}",
+            color = Color(0xFFF6FBFF),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp)
+        )
     }
 }
 
@@ -3708,8 +3681,7 @@ private fun ControlStateChip(
 }
 
 private data class LiveScopeQuantity(
-    val label: String,
-    val value: String
+    val compactValue: String
 )
 
 private fun computeLiveScopeQuantity(
@@ -3728,8 +3700,7 @@ private fun computeLiveScopeQuantity(
                 includeCeilings = takeoffSession.drywall.includeCeilings
             ).items.firstOrNull { it.name == "Drywall sheets" }?.quantity ?: 0.0
             LiveScopeQuantity(
-                label = "sheets",
-                value = "${formatLiveValue(sheets, 0)} sheets"
+                compactValue = "${formatLiveValue(sheets, 0)} sh"
             )
         }
 
@@ -3740,8 +3711,7 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.concrete.wastePercent
             ).items.firstOrNull()?.quantity ?: 0.0
             LiveScopeQuantity(
-                label = "volume",
-                value = "${formatLiveValue(yards, 2)} yd^3"
+                compactValue = "${formatLiveValue(yards, 2)} yd3"
             )
         }
 
@@ -3753,10 +3723,8 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.gravel.wastePercent
             )
             val tons = takeoff.items.firstOrNull { it.unit.contains("tons", ignoreCase = true) }?.quantity ?: 0.0
-            val yards = takeoff.items.firstOrNull { it.unit.contains("yards", ignoreCase = true) }?.quantity ?: 0.0
             LiveScopeQuantity(
-                label = "material",
-                value = "${formatLiveValue(tons, 2)} tons (${formatLiveValue(yards, 2)} yd^3)"
+                compactValue = "${formatLiveValue(tons, 2)} t"
             )
         }
 
@@ -3768,8 +3736,7 @@ private fun computeLiveScopeQuantity(
                 wastePercent = takeoffSession.paint.wastePercent
             ).items.firstOrNull()?.quantity ?: 0.0
             LiveScopeQuantity(
-                label = "coverage",
-                value = "${formatLiveValue(gallons, 2)} gallons"
+                compactValue = "${formatLiveValue(gallons, 2)} gal"
             )
         }
     }
@@ -5122,6 +5089,13 @@ private fun BlueprintFloorLevel.label(): String = when {
     this > FLOOR_GROUND_LEVEL -> (this + 1).toString()
     this == -1 -> "Basement"
     else -> "Basement ${abs(this)}"
+}
+
+private fun BlueprintFloorLevel.compactLabel(): String = when {
+    this == FLOOR_GROUND_LEVEL -> "G"
+    this > FLOOR_GROUND_LEVEL -> (this + 1).toString()
+    this == -1 -> "B1"
+    else -> "B${abs(this)}"
 }
 
 private fun BlueprintFloorLevel.floorDisplayLabel(): String = "Floor: ${label()}"
