@@ -4264,17 +4264,19 @@ private fun DrawScope.drawPencilCursor(position: Offset, sizeScale: Float) {
     fun s(value: Float): Float = value * sizeScale
     val tip = position
     val tail = Offset(position.x + s(26f), position.y + s(28f))
+    val bodyStart = Offset(position.x + s(2.4f), position.y + s(2.6f))
+    val bodyEnd = Offset(tail.x - s(3.8f), tail.y - s(4.1f))
     drawLine(
         color = Color(0xB7050A12),
-        start = tip,
+        start = bodyStart,
         end = tail,
         strokeWidth = s(8.2f).coerceAtLeast(2f),
         cap = StrokeCap.Round
     )
     drawLine(
         color = Color(0xFFFFDD74),
-        start = tip,
-        end = tail,
+        start = bodyStart,
+        end = bodyEnd,
         strokeWidth = s(5.3f).coerceAtLeast(1.5f),
         cap = StrokeCap.Round
     )
@@ -4286,9 +4288,19 @@ private fun DrawScope.drawPencilCursor(position: Offset, sizeScale: Float) {
         cap = StrokeCap.Round
     )
     drawCircle(
-        color = Color(0xFFFDF6E3),
-        radius = s(2.2f).coerceAtLeast(1f),
+        color = Color(0xFF1F1408),
+        radius = s(1.7f).coerceAtLeast(0.85f),
         center = tip
+    )
+    drawCircle(
+        color = Color(0xFFD56E8D),
+        radius = s(2.6f).coerceAtLeast(1.2f),
+        center = tail
+    )
+    drawCircle(
+        color = Color(0xFFE9A7BC),
+        radius = s(1.7f).coerceAtLeast(0.8f),
+        center = tail
     )
 }
 
