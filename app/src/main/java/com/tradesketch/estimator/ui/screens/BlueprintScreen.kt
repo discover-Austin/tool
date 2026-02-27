@@ -1281,7 +1281,7 @@ fun BlueprintScreen(
             selectedFloor = selectedFloor,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 6.dp, top = 58.dp)
+                .padding(start = 4.dp, top = 6.dp)
         )
         if (stairWorkflowActive) {
             FloorLevelSwitcher(
