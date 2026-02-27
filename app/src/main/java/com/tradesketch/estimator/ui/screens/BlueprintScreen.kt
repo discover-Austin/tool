@@ -616,6 +616,10 @@ fun BlueprintScreen(
     }
     val takeoffSession = uiState.project?.takeoffSession ?: ProjectTakeoffSession()
     val currentScope = takeoffSession.selectedScope
+    val wallAreaSqFt = BlueprintTakeoffCalculator.wallAreaByIdSqFt(renderedDoc).values.sum()
+    val openingAreaSqFt = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(renderedDoc).values.sum()
+    val squareFeet = (wallAreaSqFt - openingAreaSqFt).coerceAtLeast(0.0)
+    val linearFeet = renderedDoc.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
     val liveScopeQuantity = computeLiveScopeQuantity(
         document = renderedDoc,
         scope = currentScope,
@@ -1272,10 +1276,12 @@ fun BlueprintScreen(
 
         LiveOverlay(
             liveScopeQuantity = liveScopeQuantity,
+            squareFeet = squareFeet,
+            linearFeet = linearFeet,
             selectedFloor = selectedFloor,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 72.dp)
+                .padding(start = 6.dp, top = 58.dp)
         )
         if (stairWorkflowActive) {
             FloorLevelSwitcher(
@@ -3540,11 +3546,13 @@ private fun SelectionPanel(
 @Composable
 private fun LiveOverlay(
     liveScopeQuantity: LiveScopeQuantity,
+    squareFeet: Double,
+    linearFeet: Double,
     selectedFloor: BlueprintFloorLevel,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 138.dp),
+        modifier = modifier.widthIn(max = 146.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
@@ -3574,6 +3582,22 @@ private fun LiveOverlay(
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
+                overflow = TextOverflow.Clip
+            )
+            Text(
+                text = "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft",
+                color = Color(0xFFF6FBFF),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
+            )
+            Text(
+                text = "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft",
+                color = Color(0xFFF6FBFF),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
                 overflow = TextOverflow.Clip
             )
         }
