@@ -40,10 +40,15 @@ object BlueprintExportManager {
     suspend fun saveBlueprintToDownloads(
         context: Context,
         projectName: String,
-        document: BlueprintDocument
+        document: BlueprintDocument,
+        includeGrid: Boolean = true
     ): Uri? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
-        val bitmap = renderBlueprintBitmap(projectName = projectName, document = document)
+        val bitmap = renderBlueprintBitmap(
+            projectName = projectName,
+            document = document,
+            includeGrid = includeGrid
+        )
         val fileName = ExportStorage.buildFileName(
             projectName = projectName,
             suffix = "blueprint",
@@ -67,10 +72,15 @@ object BlueprintExportManager {
     suspend fun createBlueprintShareIntent(
         context: Context,
         projectName: String,
-        document: BlueprintDocument
+        document: BlueprintDocument,
+        includeGrid: Boolean = true
     ): Intent? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
-        val bitmap = renderBlueprintBitmap(projectName = projectName, document = document)
+        val bitmap = renderBlueprintBitmap(
+            projectName = projectName,
+            document = document,
+            includeGrid = includeGrid
+        )
         val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
         val shareFile = File(
             cacheDir,
@@ -96,7 +106,8 @@ object BlueprintExportManager {
     suspend fun saveBlueprintPdfToDownloads(
         context: Context,
         projectName: String,
-        document: BlueprintDocument
+        document: BlueprintDocument,
+        includeGrid: Boolean = true
     ): Uri? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
         val fileName = ExportStorage.buildFileName(
@@ -104,7 +115,11 @@ object BlueprintExportManager {
             suffix = "blueprint",
             extension = "pdf"
         )
-        val pdfBytes = renderBlueprintPdfBytes(projectName = projectName, document = document)
+        val pdfBytes = renderBlueprintPdfBytes(
+            projectName = projectName,
+            document = document,
+            includeGrid = includeGrid
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ExportStorage.saveBytesToPublicDownloads(
                 context = context,
@@ -124,7 +139,8 @@ object BlueprintExportManager {
     suspend fun createBlueprintPdfShareIntent(
         context: Context,
         projectName: String,
-        document: BlueprintDocument
+        document: BlueprintDocument,
+        includeGrid: Boolean = true
     ): Intent? = withContext(Dispatchers.IO) {
         if (!document.hasGeometry()) return@withContext null
         val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
@@ -136,7 +152,11 @@ object BlueprintExportManager {
                 extension = "pdf"
             )
         )
-        val pdfBytes = renderBlueprintPdfBytes(projectName = projectName, document = document)
+        val pdfBytes = renderBlueprintPdfBytes(
+            projectName = projectName,
+            document = document,
+            includeGrid = includeGrid
+        )
         FileOutputStream(shareFile).use { output ->
             output.write(pdfBytes)
         }
@@ -154,7 +174,8 @@ object BlueprintExportManager {
         projectName: String,
         document: BlueprintDocument,
         widthPx: Int = 2200,
-        heightPx: Int = 2200
+        heightPx: Int = 2200,
+        includeGrid: Boolean = true
     ): Bitmap {
         val safeWidth = widthPx.coerceAtLeast(1200)
         val safeHeight = heightPx.coerceAtLeast(1200)
@@ -214,15 +235,17 @@ object BlueprintExportManager {
             )
         }
 
-        drawGrid(
-            canvas = canvas,
-            contentRect = contentRect,
-            minX = minX,
-            maxX = maxX,
-            minY = minY,
-            maxY = maxY,
-            scale = scale
-        )
+        if (includeGrid) {
+            drawGrid(
+                canvas = canvas,
+                contentRect = contentRect,
+                minX = minX,
+                maxX = maxX,
+                minY = minY,
+                maxY = maxY,
+                scale = scale
+            )
+        }
         drawRooms(canvas, document.rooms, toScreen)
         drawWalls(canvas, document.walls, toScreen, scale)
         drawOpenings(canvas, document, toScreen, scale)
@@ -601,7 +624,8 @@ private fun drawEnvelopeDimensions(
 
 private fun renderBlueprintPdfBytes(
     projectName: String,
-    document: BlueprintDocument
+    document: BlueprintDocument,
+    includeGrid: Boolean
 ): ByteArray {
     val pdfDocument = PdfDocument()
     val pageWidth = 1654
@@ -628,7 +652,8 @@ private fun renderBlueprintPdfBytes(
         projectName = projectName,
         document = document,
         widthPx = 1800,
-        heightPx = 1800
+        heightPx = 1800,
+        includeGrid = includeGrid
     )
     val margin = 56
     val blueprintTop = 150

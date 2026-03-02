@@ -4,6 +4,9 @@ import com.tradesketch.estimator.ui.components.PrimaryActionButton
 import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -58,7 +62,9 @@ import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.utils.ExportStorage
 import com.tradesketch.estimator.utils.Formatters
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class EstimatePreviewPage(
     val label: String,
@@ -96,7 +102,7 @@ fun ExportScreen(
     var showScopeSelector by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(uiState.selectedType == null)
     }
-    var isPreparingEstimatePdf by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
+    var isPreparingEstimatePdf by remember(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(false)
     }
     var selectedPreviewPage by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
@@ -106,32 +112,42 @@ fun ExportScreen(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            val output = context.contentResolver.openOutputStream(uri)
-                ?: error("Unable to open CSV output stream")
-            output.use { stream ->
-                stream.write(viewModel.csvContent().toByteArray())
+        coroutineScope.launch {
+            runCatching {
+                val bytes = viewModel.buildCsvBytes()
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open CSV output stream")
+                    output.use { stream ->
+                        stream.write(bytes)
+                    }
+                }
+            }.onSuccess {
+                Toast.makeText(context, "CSV exported.", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Could not export CSV.", Toast.LENGTH_SHORT).show()
             }
-        }.onSuccess {
-            Toast.makeText(context, "CSV exported.", Toast.LENGTH_SHORT).show()
-        }.onFailure {
-            Toast.makeText(context, "Could not export CSV.", Toast.LENGTH_SHORT).show()
         }
     }
     val jsonSafLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            val output = context.contentResolver.openOutputStream(uri)
-                ?: error("Unable to open JSON output stream")
-            output.use { stream ->
-                stream.write(viewModel.jsonContent().toByteArray())
+        coroutineScope.launch {
+            runCatching {
+                val bytes = viewModel.buildJsonBytes()
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open JSON output stream")
+                    output.use { stream ->
+                        stream.write(bytes)
+                    }
+                }
+            }.onSuccess {
+                Toast.makeText(context, "JSON exported.", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Could not export JSON.", Toast.LENGTH_SHORT).show()
             }
-        }.onSuccess {
-            Toast.makeText(context, "JSON exported.", Toast.LENGTH_SHORT).show()
-        }.onFailure {
-            Toast.makeText(context, "Could not export JSON.", Toast.LENGTH_SHORT).show()
         }
     }
     val pdfSafLauncher = rememberLauncherForActivityResult(
@@ -139,17 +155,48 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            val bytes = viewModel.buildEstimatePdfBytes() ?: return@launch
+            val bytes = viewModel.buildEstimatePdfBytes()
+            if (bytes == null) {
+                Toast.makeText(context, "Could not prepare estimate PDF.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
             runCatching {
-                val output = context.contentResolver.openOutputStream(uri)
-                    ?: error("Unable to open PDF output stream")
-                output.use { stream ->
-                    stream.write(bytes)
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open PDF output stream")
+                    output.use { stream ->
+                        stream.write(bytes)
+                    }
                 }
             }.onSuccess {
                 Toast.makeText(context, "PDF exported.", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(context, "Could not export PDF.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val blueprintPngSafLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("image/png")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val bytes = viewModel.buildBlueprintPngBytes()
+            if (bytes == null) {
+                Toast.makeText(context, "Could not prepare blueprint PNG.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open PNG output stream")
+                    output.use { stream ->
+                        stream.write(bytes)
+                    }
+                }
+            }.onSuccess {
+                Toast.makeText(context, "Blueprint PNG exported.", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Could not export blueprint PNG.", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -303,7 +350,11 @@ fun ExportScreen(
                             haptics.confirm()
                             viewModel.recordTap("export_share_full_report")
                             val intent = viewModel.createShareIntent(shareCsv = false)
-                            context.startActivity(intent)
+                            launchExportIntent(
+                                context = context,
+                                intent = intent,
+                                noTargetMessage = "No app available to share this report."
+                            )
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -321,7 +372,11 @@ fun ExportScreen(
                                     if (intent == null) {
                                         Toast.makeText(context, "Could not prepare estimate PDF.", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        context.startActivity(intent)
+                                        launchExportIntent(
+                                            context = context,
+                                            intent = intent,
+                                            noTargetMessage = "No app available to share this PDF."
+                                        )
                                     }
                                 } finally {
                                     isPreparingEstimatePdf = false
@@ -338,7 +393,7 @@ fun ExportScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                     Text(
-                        text = "Download",
+                        text = "Save to device",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -373,19 +428,92 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            pdfSafLauncher.launch(
-                                ExportStorage.buildFileName(
-                                    projectName = name,
-                                    suffix = "estimate",
-                                    extension = "pdf"
+                            runCatching {
+                                pdfSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = "estimate",
+                                        extension = "pdf"
+                                    )
                                 )
-                            )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Save PDF As...")
+                    }
+                    Text(
+                        text = "Blueprint PNG Grid",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = uiState.blueprintExportShowGrid,
+                            onClick = {
+                                haptics.tap()
+                                viewModel.setBlueprintGridExport(true)
+                            },
+                            label = { Text("Grid On") }
+                        )
+                        FilterChip(
+                            selected = !uiState.blueprintExportShowGrid,
+                            onClick = {
+                                haptics.tap()
+                                viewModel.setBlueprintGridExport(false)
+                            },
+                            label = { Text("Grid Off") }
+                        )
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            runCatching {
+                                blueprintPngSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = if (uiState.blueprintExportShowGrid) {
+                                            "blueprint-grid"
+                                        } else {
+                                            "blueprint-no-grid"
+                                        },
+                                        extension = "png"
+                                    )
+                                )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (uiState.blueprintExportShowGrid) {
+                                "Save Blueprint PNG As... (Grid)"
+                            } else {
+                                "Save Blueprint PNG As... (No Grid)"
+                            }
+                        )
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
@@ -397,13 +525,22 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            csvSafLauncher.launch(
-                                ExportStorage.buildFileName(
-                                    projectName = name,
-                                    suffix = "quantities",
-                                    extension = "csv"
+                            runCatching {
+                                csvSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = "quantities",
+                                        extension = "csv"
+                                    )
                                 )
-                            )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -414,13 +551,22 @@ fun ExportScreen(
                     SecondaryActionButton(
                         onClick = {
                             val name = uiState.project?.name ?: "project"
-                            jsonSafLauncher.launch(
-                                ExportStorage.buildFileName(
-                                    projectName = name,
-                                    suffix = "backup",
-                                    extension = "json"
+                            runCatching {
+                                jsonSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = "backup",
+                                        extension = "json"
+                                    )
                                 )
-                            )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -485,6 +631,23 @@ fun ExportScreen(
                 )
             }
         }
+    }
+}
+
+private fun launchExportIntent(
+    context: Context,
+    intent: Intent,
+    noTargetMessage: String
+) {
+    runCatching {
+        context.startActivity(intent)
+    }.onFailure { error ->
+        val message = if (error is ActivityNotFoundException) {
+            noTargetMessage
+        } else {
+            "Could not open share sheet."
+        }
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 }
 
