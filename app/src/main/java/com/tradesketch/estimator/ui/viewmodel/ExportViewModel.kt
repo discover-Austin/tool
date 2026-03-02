@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -20,14 +21,18 @@ import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.utils.EstimateExportManager
 import com.tradesketch.estimator.utils.ExportFormatter
+import com.tradesketch.estimator.utils.BlueprintExportManager
+import java.io.ByteArrayOutputStream
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -106,6 +111,10 @@ class ExportViewModel @Inject constructor(
         }
         _uiState.update { it.copy(selectedType = type) }
         recalculate()
+    }
+
+    fun setBlueprintGridExport(enabled: Boolean) {
+        _uiState.update { it.copy(blueprintExportShowGrid = enabled) }
     }
 
     fun recordTap(task: String) {
@@ -268,16 +277,49 @@ class ExportViewModel @Inject constructor(
         val blueprint = state.previewBlueprint
             ?: projectBlueprintForType(project = project, type = selectedType)
         return runCatching {
-            EstimateExportManager.buildEstimatePdfBytes(
-                projectName = project.name,
-                takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
-                settings = state.settings,
-                result = result,
-                blueprintDocument = blueprint
-            )
+            withContext(Dispatchers.Default) {
+                EstimateExportManager.buildEstimatePdfBytes(
+                    projectName = project.name,
+                    takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
+                    settings = state.settings,
+                    result = result,
+                    blueprintDocument = blueprint
+                )
+            }
         }.onFailure { error ->
             _uiState.update { it.copy(error = "Could not build PDF bytes: ${error.message}") }
         }.getOrNull()
+    }
+
+    suspend fun buildBlueprintPngBytes(): ByteArray? {
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val blueprint = state.previewBlueprint
+            ?: projectBlueprintForType(project = project, type = selectedType)
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                val bitmap = BlueprintExportManager.renderBlueprintBitmap(
+                    projectName = project.name,
+                    document = blueprint,
+                    includeGrid = state.blueprintExportShowGrid
+                )
+                ByteArrayOutputStream().use { output ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                    output.toByteArray()
+                }
+            }
+        }.onFailure { error ->
+            _uiState.update { it.copy(error = "Could not build blueprint PNG: ${error.message}") }
+        }.getOrNull()
+    }
+
+    suspend fun buildCsvBytes(): ByteArray = withContext(Dispatchers.Default) {
+        _uiState.value.csvContent.toByteArray(Charsets.UTF_8)
+    }
+
+    suspend fun buildJsonBytes(): ByteArray = withContext(Dispatchers.Default) {
+        _uiState.value.jsonContent.toByteArray(Charsets.UTF_8)
     }
 
     fun clearLastAction() {
@@ -318,6 +360,7 @@ data class ExportUiState(
     val summaryContent: String = "",
     val csvContent: String = "",
     val jsonContent: String = "",
+    val blueprintExportShowGrid: Boolean = true,
     val lastAction: String? = null,
     val error: String? = null,
     val isLoading: Boolean = true
