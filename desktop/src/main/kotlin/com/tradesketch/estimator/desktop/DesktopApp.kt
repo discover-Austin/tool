@@ -79,9 +79,16 @@ import com.tradesketch.estimator.domain.model.elementCount
 import com.tradesketch.estimator.domain.model.totalAreaSqFt
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Formatters
+import java.awt.BasicStroke
+import java.awt.Color as AwtColor
+import java.awt.RenderingHints
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.awt.geom.Arc2D
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.imageio.ImageIO
 import javax.swing.JFileChooser
 
 private enum class ExportViewMode(val label: String) {
@@ -96,6 +103,7 @@ private enum class ExportViewMode(val label: String) {
 fun TradeSketchDesktopApp() {
     val state = remember { DesktopAppState() }
     var exportViewMode by remember { mutableStateOf(ExportViewMode.SUMMARY) }
+    var exportGridEnabled by remember { mutableStateOf(true) }
     var showWelcomeDetail by remember { mutableStateOf(false) }
     var ritualProjectName by remember { mutableStateOf("My First Project") }
     var ritualType by remember { mutableStateOf(DesktopTakeoffType.DRYWALL) }
@@ -122,6 +130,15 @@ fun TradeSketchDesktopApp() {
                     .fillMaxSize()
                     .padding(12.dp)
             ) {
+                ProjectsSidebar(
+                    state = state,
+                    modifier = Modifier
+                        .width(300.dp)
+                        .fillMaxHeight()
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                VerticalDivider()
+                Spacer(modifier = Modifier.width(10.dp))
                 DesktopWorkspaceRail(
                     activeTab = state.activeTab,
                     onSelectTab = { state.activeTab = it },
@@ -149,7 +166,9 @@ fun TradeSketchDesktopApp() {
                             WorkspaceTab.EXPORT -> ExportTab(
                                 state = state,
                                 exportViewMode = exportViewMode,
-                                onExportViewModeChange = { exportViewMode = it }
+                                onExportViewModeChange = { exportViewMode = it },
+                                exportGridEnabled = exportGridEnabled,
+                                onExportGridEnabledChange = { exportGridEnabled = it }
                             )
                             WorkspaceTab.SETTINGS_ABOUT -> SettingsTab(state = state)
                         }
@@ -835,7 +854,9 @@ private fun ResultsCard(result: com.tradesketch.estimator.domain.model.TakeoffRe
 private fun ExportTab(
     state: DesktopAppState,
     exportViewMode: ExportViewMode,
-    onExportViewModeChange: (ExportViewMode) -> Unit
+    onExportViewModeChange: (ExportViewMode) -> Unit,
+    exportGridEnabled: Boolean,
+    onExportGridEnabledChange: (Boolean) -> Unit
 ) {
     val project = state.selectedProject
     if (project == null) {
@@ -874,6 +895,20 @@ private fun ExportTab(
                     label = { Text(mode.label) }
                 )
             }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Blueprint Grid")
+            FilterChip(
+                selected = exportGridEnabled,
+                onClick = { onExportGridEnabledChange(true) },
+                label = { Text("On") }
+            )
+            FilterChip(
+                selected = !exportGridEnabled,
+                onClick = { onExportGridEnabledChange(false) },
+                label = { Text("Off") }
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -916,6 +951,26 @@ private fun ExportTab(
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Save PDF")
+            }
+            OutlinedButton(
+                onClick = {
+                    val pngBytes = buildBlueprintPngBytes(
+                        project = project,
+                        includeGrid = exportGridEnabled
+                    )
+                    saveWithDesktopChooser(
+                        suggestedName = if (exportGridEnabled) {
+                            "tradesketch_blueprint_grid.png"
+                        } else {
+                            "tradesketch_blueprint_nogrid.png"
+                        },
+                        bytes = pngBytes
+                    )
+                }
+            ) {
+                Icon(Icons.Default.FileDownload, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Save Blueprint PNG")
             }
         }
 
@@ -1067,6 +1122,150 @@ private fun saveWithDesktopChooser(
         runCatching {
             chooser.selectedFile.writeBytes(bytes)
         }
+    }
+}
+
+private fun buildBlueprintPngBytes(
+    project: Project,
+    includeGrid: Boolean
+): ByteArray {
+    val blueprint = project.authoritativeBlueprint()
+    val widthPx = 1600
+    val heightPx = 1000
+    val paddingPx = 70.0
+    val image = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB)
+    val graphics = image.createGraphics()
+
+    val allPoints = blueprint.walls.flatMap { wall -> listOf(wall.start, wall.end) }
+    val minX = allPoints.minOfOrNull { it.x.toDouble() } ?: -10_000.0
+    val maxX = allPoints.maxOfOrNull { it.x.toDouble() } ?: 10_000.0
+    val minY = allPoints.minOfOrNull { it.y.toDouble() } ?: -10_000.0
+    val maxY = allPoints.maxOfOrNull { it.y.toDouble() } ?: 10_000.0
+    val spanX = (maxX - minX).coerceAtLeast(1.0)
+    val spanY = (maxY - minY).coerceAtLeast(1.0)
+    val scale = minOf(
+        (widthPx - (paddingPx * 2.0)) / spanX,
+        (heightPx - (paddingPx * 2.0)) / spanY
+    )
+    fun mapX(worldX: Double): Double = paddingPx + ((worldX - minX) * scale)
+    fun mapY(worldY: Double): Double = heightPx - paddingPx - ((worldY - minY) * scale)
+
+    try {
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        graphics.color = AwtColor(14, 25, 42)
+        graphics.fillRect(0, 0, widthPx, heightPx)
+
+        if (includeGrid) {
+            val gridStepMm = Millimeters.fromFeet(1.0).value.toDouble()
+            val gridStepPx = gridStepMm * scale
+            if (gridStepPx in 12.0..220.0) {
+                graphics.color = AwtColor(155, 195, 232, 60)
+                graphics.stroke = BasicStroke(1f)
+                var gridX = kotlin.math.floor(minX / gridStepMm) * gridStepMm
+                while (gridX <= maxX) {
+                    val x = mapX(gridX)
+                    graphics.drawLine(x.toInt(), 0, x.toInt(), heightPx)
+                    gridX += gridStepMm
+                }
+                var gridY = kotlin.math.floor(minY / gridStepMm) * gridStepMm
+                while (gridY <= maxY) {
+                    val y = mapY(gridY)
+                    graphics.drawLine(0, y.toInt(), widthPx, y.toInt())
+                    gridY += gridStepMm
+                }
+            }
+        }
+
+        graphics.color = AwtColor(46, 84, 121, 220)
+        graphics.stroke = BasicStroke(2f)
+        val axisX = mapX(0.0).toInt()
+        val axisY = mapY(0.0).toInt()
+        graphics.drawLine(axisX, 0, axisX, heightPx)
+        graphics.drawLine(0, axisY, widthPx, axisY)
+
+        graphics.stroke = BasicStroke(4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+        graphics.color = AwtColor(170, 218, 255)
+        blueprint.walls.forEach { wall ->
+            graphics.drawLine(
+                mapX(wall.start.x.toDouble()).toInt(),
+                mapY(wall.start.y.toDouble()).toInt(),
+                mapX(wall.end.x.toDouble()).toInt(),
+                mapY(wall.end.y.toDouble()).toInt()
+            )
+        }
+
+        blueprint.openings.forEach { opening ->
+            val wall = blueprint.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
+            val center = com.tradesketch.estimator.domain.calc.BlueprintSnapMath.pointOnWall(wall, opening.t)
+            val centerX = mapX(center.x.toDouble())
+            val centerY = mapY(center.y.toDouble())
+            val width = maxOf(opening.widthMm.toDouble() * scale, 12.0)
+            when (opening.type) {
+                OpeningType.DOOR -> {
+                    graphics.color = AwtColor(233, 192, 111)
+                    graphics.stroke = BasicStroke(2.4f)
+                    graphics.draw(
+                        Arc2D.Double(
+                            centerX - (width / 2.0),
+                            centerY - (width / 2.0),
+                            width,
+                            width,
+                            -90.0,
+                            90.0,
+                            Arc2D.OPEN
+                        )
+                    )
+                }
+                OpeningType.WINDOW -> {
+                    graphics.color = AwtColor(194, 247, 255)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                }
+                OpeningType.STAIR_UP -> {
+                    graphics.color = AwtColor(141, 224, 161)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                    graphics.drawLine(centerX.toInt(), (centerY + 9).toInt(), centerX.toInt(), (centerY - 9).toInt())
+                }
+                OpeningType.STAIR_DOWN -> {
+                    graphics.color = AwtColor(255, 182, 119)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                    graphics.drawLine((centerX - 9).toInt(), centerY.toInt(), (centerX + 9).toInt(), centerY.toInt())
+                }
+            }
+        }
+
+        graphics.color = AwtColor(236, 245, 255)
+        graphics.drawString("${project.name} Blueprint", 22, 28)
+        graphics.drawString(
+            "Grid: ${if (includeGrid) "On" else "Off"}  Walls: ${blueprint.walls.size}  Openings: ${blueprint.openings.size}",
+            22,
+            48
+        )
+    } finally {
+        graphics.dispose()
+    }
+
+    return ByteArrayOutputStream().use { output ->
+        ImageIO.write(image, "png", output)
+        output.toByteArray()
     }
 }
 
