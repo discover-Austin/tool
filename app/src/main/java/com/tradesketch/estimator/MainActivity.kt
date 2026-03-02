@@ -1,11 +1,9 @@
 package com.tradesketch.estimator
 
-import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
@@ -47,6 +45,8 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -54,6 +54,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
@@ -109,10 +110,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(scrim = AndroidColor.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(scrim = AndroidColor.TRANSPARENT)
-        )
+        enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
@@ -146,6 +144,7 @@ class MainActivity : ComponentActivity() {
 private enum class RootStage {
     WELCOME,
     RITUAL,
+    TUTORIAL,
     WORKSPACE
 }
 
@@ -168,23 +167,47 @@ private fun TradeSketchRoot() {
         return
     }
 
-    var stage by rememberSaveable(settingsUiState.settings.firstRun) {
+    var forceTutorial by rememberSaveable { mutableStateOf(false) }
+    var stage by rememberSaveable(
+        settingsUiState.settings.firstRun,
+        settingsUiState.settings.hasCompletedAppTutorial,
+        forceTutorial
+    ) {
         mutableStateOf(
-            if (settingsUiState.settings.firstRun) RootStage.WELCOME else RootStage.WORKSPACE
+            when {
+                settingsUiState.settings.firstRun -> RootStage.WELCOME
+                forceTutorial -> RootStage.TUTORIAL
+                settingsUiState.settings.hasCompletedAppTutorial -> RootStage.WORKSPACE
+                else -> RootStage.TUTORIAL
+            }
         )
     }
     var startupProjectId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(settingsUiState.settings.firstRun) {
-        if (!settingsUiState.settings.firstRun) {
-            stage = RootStage.WORKSPACE
+    LaunchedEffect(
+        settingsUiState.settings.firstRun,
+        settingsUiState.settings.hasCompletedAppTutorial,
+        forceTutorial
+    ) {
+        stage = when {
+            settingsUiState.settings.firstRun -> {
+                if (stage == RootStage.RITUAL) RootStage.RITUAL else RootStage.WELCOME
+            }
+            forceTutorial -> RootStage.TUTORIAL
+            settingsUiState.settings.hasCompletedAppTutorial -> RootStage.WORKSPACE
+            else -> RootStage.TUTORIAL
         }
     }
 
     LaunchedEffect(onboardingUiState.completedProjectId) {
         val completedProjectId = onboardingUiState.completedProjectId ?: return@LaunchedEffect
         startupProjectId = completedProjectId
-        stage = RootStage.WORKSPACE
+        stage = if (settingsUiState.settings.hasCompletedAppTutorial) {
+            RootStage.WORKSPACE
+        } else {
+            RootStage.TUTORIAL
+        }
+        forceTutorial = false
         onboardingViewModel.clearCompletion()
     }
 
@@ -238,9 +261,33 @@ private fun TradeSketchRoot() {
                 )
             }
 
+            RootStage.TUTORIAL -> {
+                WorkspaceShell(
+                    tutorialMode = true,
+                    onExitTutorialMode = {
+                        settingsViewModel.setAppTutorialCompleted(true)
+                        forceTutorial = false
+                        stage = RootStage.WORKSPACE
+                    },
+                    onRecordTap = settingsViewModel::recordTap,
+                    onOpenTutorial = {
+                        forceTutorial = true
+                        stage = RootStage.TUTORIAL
+                    },
+                    initialProjectId = startupProjectId,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                )
+            }
+
             RootStage.WORKSPACE -> {
                 WorkspaceShell(
                     onRecordTap = settingsViewModel::recordTap,
+                    onOpenTutorial = {
+                        forceTutorial = true
+                        stage = RootStage.TUTORIAL
+                    },
                     initialProjectId = startupProjectId,
                     modifier = Modifier
                         .fillMaxSize()
@@ -363,7 +410,10 @@ private fun ProjectRitualFlow(
 
 @Composable
 private fun WorkspaceShell(
+    tutorialMode: Boolean = false,
+    onExitTutorialMode: (Boolean) -> Unit = {},
     onRecordTap: (String) -> Unit,
+    onOpenTutorial: () -> Unit,
     initialProjectId: String?,
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = hiltViewModel()
@@ -375,6 +425,104 @@ private fun WorkspaceShell(
     var showNewProjectConfirm by rememberSaveable { mutableStateOf(false) }
     var leftRailCollapsed by rememberSaveable { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val tutorialSteps = remember {
+        listOf(
+            WorkspaceTourStep(
+                title = "Workspace Rail",
+                message = "Use the left rail to control projects and move through the full estimating flow.",
+                controls = listOf(
+                    "New+ starts a fresh project.",
+                    "Saved opens your project list so you can switch or delete jobs.",
+                    "Blueprint, Materials, Export, and Settings/About are your main workflow tabs.",
+                    "Use the top arrow to collapse or expand the rail."
+                ),
+                tip = "If you are learning, stay in Blueprint first, then move right through Materials and Export.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Blueprint Canvas",
+                message = "This is where geometry is created. Every quantity downstream depends on this drawing.",
+                controls = listOf(
+                    "Tap walls/openings in Select mode to inspect or edit them.",
+                    "In Draw mode, tap a start point, then tap an end point to place a wall.",
+                    "Pinch to zoom, and pan with two fingers to move around the canvas.",
+                    "Use the Project Name field at the top to rename the active job."
+                ),
+                tip = "When in doubt, zoom in before placing openings for cleaner alignment.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Bottom Rail Tools",
+                message = "The bottom blueprint rail is your fast tool belt for drawing and editing.",
+                controls = listOf(
+                    "Trash deletes the currently selected wall or opening.",
+                    "Select chooses existing geometry; Draw creates new wall segments.",
+                    "Box creates room rectangles: tap once to start, move, then tap again to finish.",
+                    "Chain continues from the last corner; Split detaches the next wall segment."
+                ),
+                tip = "Use Select before deleting so you always know exactly what will be removed.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Openings, Floors, Params",
+                message = "Specialized controls let you place openings, switch floors, and tune takeoff behavior.",
+                controls = listOf(
+                    "Door, Window, Stair Up, and Stair Down buttons open preset placement panels.",
+                    "Drag an opening preview onto an existing wall segment to place it.",
+                    "Floor controls move between Ground, upper levels, and basements.",
+                    "Params opens snapping and trade parameter controls; ? opens the rail help guide."
+                ),
+                tip = "If placement feels sticky or too loose, adjust snap settings in Params.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Precision Controls",
+                message = "Use advanced controls when you need exact alignment, rotation, and sizing.",
+                controls = listOf(
+                    "Side angle dial rotates the active line, box, or picked-up wall.",
+                    "Side length dial changes line length or expands/shrinks active box geometry.",
+                    "Undo/Redo and Zoom controls are always available on the upper control rail.",
+                    "Cancel in touch quick tools exits the active action and clears transient states."
+                ),
+                tip = "For box workflows, use the dials before final tap to lock exact orientation and size.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Materials",
+                message = "Review computed quantities and tune assumptions before pricing or export.",
+                controls = listOf(
+                    "Validate generated line items against field reality.",
+                    "Adjust waste factors, coverage rates, and unit assumptions as needed.",
+                    "Use manual overrides only when site conditions differ from the drawing."
+                ),
+                tip = "Keep overrides minimal so revisions remain traceable to blueprint geometry.",
+                targetTab = DetailTab.MATERIALS
+            ),
+            WorkspaceTourStep(
+                title = "Export",
+                message = "Create files and shareable outputs for clients, purchasing, or internal review.",
+                controls = listOf(
+                    "Choose the output type (PDF, CSV, JSON, text, or blueprint PNG).",
+                    "For blueprint PNG, use Grid On or Grid Off before saving.",
+                    "Use consistent naming so field teams can match files to project versions."
+                ),
+                tip = "Export after major geometry edits so the client packet always matches the latest drawing.",
+                targetTab = DetailTab.EXPORT
+            ),
+            WorkspaceTourStep(
+                title = "Settings/About",
+                message = "Configure defaults once to make every new project faster and more consistent.",
+                controls = listOf(
+                    "Set snap defaults, joystick behavior, and touch preferences.",
+                    "Review business profile and estimating defaults.",
+                    "Use Replay Tutorial any time you want a guided refresher."
+                ),
+                tip = "Team-wide default values reduce estimate drift across different operators.",
+                targetTab = DetailTab.SETTINGS_ABOUT
+            )
+        )
+    }
+    var tutorialStepIndex by rememberSaveable(tutorialMode) { mutableStateOf(0) }
     val activeProject = remember(selectedProjectId, projectsUiState.projects) {
         projectsUiState.projects.firstOrNull { it.id == selectedProjectId }
     }
@@ -427,6 +575,24 @@ private fun WorkspaceShell(
     val normalizedSelectedTab = normalizeTab(selectedTab)
     if (selectedTab != normalizedSelectedTab) {
         selectedTab = normalizedSelectedTab
+    }
+
+    LaunchedEffect(tutorialMode) {
+        if (tutorialMode) {
+            tutorialStepIndex = 0
+        }
+    }
+
+    LaunchedEffect(tutorialMode, projectsUiState.projects.size) {
+        if (tutorialMode && projectsUiState.projects.isEmpty()) {
+            projectsViewModel.createEasyStartProject()
+        }
+    }
+
+    LaunchedEffect(tutorialMode, tutorialStepIndex) {
+        if (!tutorialMode) return@LaunchedEffect
+        val target = tutorialSteps.getOrNull(tutorialStepIndex)?.targetTab ?: return@LaunchedEffect
+        selectedTab = normalizeTab(target)
     }
 
     val navigateToTab: (DetailTab) -> Unit = { rawTab ->
@@ -525,6 +691,10 @@ private fun WorkspaceShell(
 
             if (projectTabContent == null) {
                 SettingsScreen(
+                    onReplayTutorial = {
+                        onRecordTap("settings_replay_tutorial")
+                        onOpenTutorial()
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -617,6 +787,117 @@ private fun WorkspaceShell(
                     }
                 )
             }
+            if (tutorialMode) {
+                WorkspaceTourOverlay(
+                    step = tutorialSteps[tutorialStepIndex],
+                    stepIndex = tutorialStepIndex,
+                    totalSteps = tutorialSteps.size,
+                    onSkip = { onExitTutorialMode(false) },
+                    onBack = {
+                        tutorialStepIndex = (tutorialStepIndex - 1).coerceAtLeast(0)
+                    },
+                    onNext = {
+                        if (tutorialStepIndex >= tutorialSteps.lastIndex) {
+                            onExitTutorialMode(true)
+                        } else {
+                            tutorialStepIndex += 1
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                )
+            }
+        }
+    }
+}
+
+private data class WorkspaceTourStep(
+    val title: String,
+    val message: String,
+    val controls: List<String>,
+    val tip: String,
+    val targetTab: DetailTab
+)
+
+@Composable
+private fun WorkspaceTourOverlay(
+    step: WorkspaceTourStep,
+    stepIndex: Int,
+    totalSteps: Int,
+    onSkip: () -> Unit,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth().widthIn(max = 560.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Interactive Tour",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = onSkip) {
+                    Text("Skip")
+                }
+            }
+            LinearProgressIndicator(
+                progress = { (stepIndex + 1f) / totalSteps.toFloat() },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = "Step ${stepIndex + 1} of $totalSteps · ${step.title}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = step.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                step.controls.forEach { control ->
+                    Text(
+                        text = "• $control",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            Text(
+                text = "Tip: ${step.tip}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onBack,
+                    enabled = stepIndex > 0
+                ) {
+                    Text("Back")
+                }
+                Button(onClick = onNext) {
+                    Text(if (stepIndex == totalSteps - 1) "Finish Tour" else "Next")
+                }
+            }
         }
     }
 }
@@ -644,7 +925,7 @@ private fun WorkspaceLeftRail(
     if (collapsed) {
         Column(
             modifier = modifier
-                .width(24.dp)
+                .width(40.dp)
                 .padding(top = 8.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.Start
         ) {
@@ -653,10 +934,10 @@ private fun WorkspaceLeftRail(
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
             ) {
-                Text(
-                    text = ">>",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 6.dp)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Expand navigation rail",
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
                 )
             }
         }
@@ -676,9 +957,9 @@ private fun WorkspaceLeftRail(
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
                 ) {
-                    Text(
-                        text = "<<",
-                        style = MaterialTheme.typography.labelSmall,
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Collapse navigation rail",
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                     )
                 }
@@ -883,7 +1164,7 @@ private fun SavedProjectsPanel(
                                 )
                                 IconButton(
                                     onClick = { pendingDeleteProjectId = project.id },
-                                    modifier = Modifier.height(30.dp).width(30.dp)
+                                    modifier = Modifier.height(40.dp).width(40.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Delete,
