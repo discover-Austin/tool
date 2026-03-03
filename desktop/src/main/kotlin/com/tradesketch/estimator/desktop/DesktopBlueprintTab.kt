@@ -75,6 +75,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.roundToLong
 import kotlin.math.roundToInt
@@ -95,6 +96,48 @@ private const val DIAL_ANGLE_STEP_DEGREES = 1.0
 private val DIAL_LENGTH_STEP_MM = Millimeters.fromInches(1.0).value
 private const val MIN_DRAFT_GEOMETRY_MM = 1L
 private const val MAX_DRAFT_GEOMETRY_MM = 1_000_000L
+private const val MIN_GRID_STEP_FEET = 0.0328084 // 1 cm
+private const val MAX_GRID_STEP_FEET = 20.0
+private const val MIN_SNAP_THRESHOLD_FEET = 0.2
+private const val MAX_SNAP_THRESHOLD_FEET = 2.0
+
+private data class DesktopOpeningPreset(
+    val name: String,
+    val type: OpeningType,
+    val widthFeet: Double,
+    val heightFeet: Double,
+    val sillFeet: Double
+)
+
+private val desktopDoorPresets = listOf(
+    DesktopOpeningPreset("2'8\" x 6'8\"", OpeningType.DOOR, 2.67, 6.67, 0.0),
+    DesktopOpeningPreset("3'0\" x 7'0\"", OpeningType.DOOR, 3.0, 7.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 7'0\"", OpeningType.DOOR, 3.5, 7.0, 0.0),
+    DesktopOpeningPreset("5'0\" x 7'0\" dbl", OpeningType.DOOR, 5.0, 7.0, 0.0),
+    DesktopOpeningPreset("8'0\" x 7'0\" slider", OpeningType.DOOR, 8.0, 7.0, 0.0),
+    DesktopOpeningPreset("16'0\" x 7'0\" garage", OpeningType.DOOR, 16.0, 7.0, 0.0)
+)
+
+private val desktopWindowPresets = listOf(
+    DesktopOpeningPreset("2'0\" x 3'0\"", OpeningType.WINDOW, 2.0, 3.0, 3.0),
+    DesktopOpeningPreset("3'0\" x 3'0\"", OpeningType.WINDOW, 3.0, 3.0, 3.0),
+    DesktopOpeningPreset("3'0\" x 4'0\"", OpeningType.WINDOW, 3.0, 4.0, 3.0),
+    DesktopOpeningPreset("4'0\" x 4'0\"", OpeningType.WINDOW, 4.0, 4.0, 3.0),
+    DesktopOpeningPreset("5'0\" x 4'0\"", OpeningType.WINDOW, 5.0, 4.0, 3.0),
+    DesktopOpeningPreset("6'0\" x 4'0\"", OpeningType.WINDOW, 6.0, 4.0, 3.0)
+)
+
+private val desktopStairUpPresets = listOf(
+    DesktopOpeningPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_UP, 3.0, 9.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_UP, 3.5, 10.0, 0.0),
+    DesktopOpeningPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_UP, 4.0, 11.0, 0.0)
+)
+
+private val desktopStairDownPresets = listOf(
+    DesktopOpeningPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_DOWN, 3.0, 9.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_DOWN, 3.5, 10.0, 0.0),
+    DesktopOpeningPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_DOWN, 4.0, 11.0, 0.0)
+)
 
 private data class DesktopToolChipSpec(
     val key: String,
@@ -137,6 +180,13 @@ private fun OpeningType.label(): String = when (this) {
     OpeningType.WINDOW -> "Window"
     OpeningType.STAIR_UP -> "Stair Up"
     OpeningType.STAIR_DOWN -> "Stair Down"
+}
+
+private fun openingPresetsForType(type: OpeningType): List<DesktopOpeningPreset> = when (type) {
+    OpeningType.DOOR -> desktopDoorPresets
+    OpeningType.WINDOW -> desktopWindowPresets
+    OpeningType.STAIR_UP -> desktopStairUpPresets
+    OpeningType.STAIR_DOWN -> desktopStairDownPresets
 }
 
 private fun floorTag(level: Int): String = "$FLOOR_TAG_PREFIX$level"
@@ -237,6 +287,11 @@ fun DesktopBlueprintTab(
     var wastePercent by remember(project.id, document.params.wasteFactorPercent) {
         mutableStateOf(document.params.wasteFactorPercent.toString())
     }
+    var gridStepInput by remember(project.id) { mutableStateOf("%.2f".format(snap.gridStepFeet)) }
+    var snapThresholdInput by remember(project.id) { mutableStateOf("%.2f".format(snap.thresholdFeet)) }
+    var selectedOpeningPresetName by remember(project.id, openingType) {
+        mutableStateOf(openingPresetsForType(openingType).firstOrNull()?.name ?: "Custom")
+    }
 
     LaunchedEffect(project.id) {
         selectedFloor = FLOOR_GROUND_LEVEL
@@ -249,6 +304,12 @@ fun DesktopBlueprintTab(
         selectedWallId = null
         selectedOpeningId = null
         workspaceFocusRequester.requestFocus()
+    }
+    LaunchedEffect(snap.gridStepFeet) {
+        gridStepInput = "%.2f".format(snap.gridStepFeet)
+    }
+    LaunchedEffect(snap.thresholdFeet) {
+        snapThresholdInput = "%.2f".format(snap.thresholdFeet)
     }
     LaunchedEffect(project.id, openAddonsByDefault) {
         showAddons = openAddonsByDefault
@@ -293,6 +354,29 @@ fun DesktopBlueprintTab(
         BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(floorDocument).values.sum()
     val selectedWall = selectedWallId?.let { id -> floorWalls.firstOrNull { it.id == id } }
     val selectedOpening = selectedOpeningId?.let { id -> floorOpenings.firstOrNull { it.id == id } }
+    var selectedOpeningWidthInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningHeightInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningSillInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningPositionInput by remember(project.id) { mutableStateOf("") }
+    LaunchedEffect(
+        selectedOpening?.id,
+        selectedOpening?.widthMm,
+        selectedOpening?.heightMm,
+        selectedOpening?.sillMm,
+        selectedOpening?.t
+    ) {
+        if (selectedOpening != null) {
+            selectedOpeningWidthInput = "%.2f".format(Millimeters(selectedOpening.widthMm).toFeet())
+            selectedOpeningHeightInput = "%.2f".format(Millimeters(selectedOpening.heightMm).toFeet())
+            selectedOpeningSillInput = "%.2f".format(Millimeters(selectedOpening.sillMm).toFeet())
+            selectedOpeningPositionInput = "%.0f".format(selectedOpening.t * 100.0)
+        } else {
+            selectedOpeningWidthInput = ""
+            selectedOpeningHeightInput = ""
+            selectedOpeningSillInput = ""
+            selectedOpeningPositionInput = ""
+        }
+    }
     val openingDimensions: (OpeningType) -> Triple<Long, Long, Long> = { type ->
         val defaults = when (type) {
             OpeningType.DOOR -> Triple(
@@ -377,7 +461,38 @@ fun DesktopBlueprintTab(
     }
     val selectOpeningTool: (OpeningType) -> Unit = { type ->
         openingType = type
+        selectedOpeningPresetName = openingPresetsForType(type).firstOrNull()?.name ?: "Custom"
         setTool(type.toolKey())
+    }
+    val applyOpeningPreset: (DesktopOpeningPreset) -> Unit = { preset ->
+        selectOpeningTool(preset.type)
+        customWidthFeet = "%.2f".format(preset.widthFeet)
+        customHeightFeet = "%.2f".format(preset.heightFeet)
+        customSillFeet = "%.2f".format(preset.sillFeet)
+        selectedOpeningPresetName = preset.name
+    }
+    val applyGridStepFeet: (Double) -> Unit = { value ->
+        val clamped = value.coerceIn(MIN_GRID_STEP_FEET, MAX_GRID_STEP_FEET)
+        snap = snap.copy(
+            gridEnabled = true,
+            gridStepFeet = clamped
+        )
+        gridStepInput = "%.2f".format(clamped)
+    }
+    val nudgeGridStepInches: (Int) -> Unit = { deltaInches ->
+        val currentInches = (snap.gridStepFeet * 12.0).roundToInt()
+        val minInches = (MIN_GRID_STEP_FEET * 12.0).roundToInt()
+        val maxInches = (MAX_GRID_STEP_FEET * 12.0).roundToInt()
+        val nextInches = (currentInches + deltaInches).coerceIn(minInches, maxInches)
+        applyGridStepFeet(nextInches / 12.0)
+    }
+    val applySnapThresholdFeet: (Double) -> Unit = { value ->
+        val clamped = value.coerceIn(MIN_SNAP_THRESHOLD_FEET, MAX_SNAP_THRESHOLD_FEET)
+        snap = snap.copy(thresholdFeet = clamped)
+        snapThresholdInput = "%.2f".format(clamped)
+    }
+    val nudgeSnapThreshold: (Double) -> Unit = { delta ->
+        applySnapThresholdFeet(snap.thresholdFeet + delta)
     }
     val cancelCurrentAction: () -> Unit = {
         drawingStart = null
@@ -445,6 +560,22 @@ fun DesktopBlueprintTab(
                     floorLevel = selectedFloor
                 )
             ),
+            label = label
+        )
+    }
+    fun applyToSelectedOpening(
+        label: String,
+        transform: (BlueprintOpening) -> BlueprintOpening
+    ) {
+        val openingId = selectedOpeningId ?: return
+        val current = document.openings.firstOrNull { opening -> opening.id == openingId } ?: return
+        val updatedOpening = transform(current)
+        if (updatedOpening == current) return
+        val updatedOpenings = document.openings.map { opening ->
+            if (opening.id == openingId) updatedOpening else opening
+        }
+        state.updateBlueprintDocument(
+            updated = document.copy(openings = updatedOpenings),
             label = label
         )
     }
@@ -965,6 +1096,40 @@ fun DesktopBlueprintTab(
                         label = { Text("Waste (%)") },
                         singleLine = true
                     )
+                    OutlinedTextField(
+                        value = gridStepInput,
+                        onValueChange = { gridStepInput = it },
+                        label = { Text("Grid step (ft)") },
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { nudgeGridStepInches(-1) }) { Text("-1\"") }
+                        Button(onClick = { nudgeGridStepInches(1) }) { Text("+1\"") }
+                        Button(onClick = { nudgeGridStepInches(6) }) { Text("+6\"") }
+                        Button(onClick = {
+                            val parsedFeet = gridStepInput.toDoubleOrNull()
+                                ?: DimensionParser.parseLengthToMillimeters(gridStepInput)
+                                    ?.let { mm -> Millimeters(mm).toFeet() }
+                            if (parsedFeet != null) {
+                                applyGridStepFeet(parsedFeet)
+                            }
+                        }) { Text("Apply Grid") }
+                    }
+                    OutlinedTextField(
+                        value = snapThresholdInput,
+                        onValueChange = { snapThresholdInput = it },
+                        label = { Text("Snap threshold (ft)") },
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { nudgeSnapThreshold(-0.1) }) { Text("-0.1") }
+                        Button(onClick = { nudgeSnapThreshold(0.1) }) { Text("+0.1") }
+                        Button(onClick = {
+                            snapThresholdInput.toDoubleOrNull()?.let { value ->
+                                applySnapThresholdFeet(value)
+                            }
+                        }) { Text("Apply Snap") }
+                    }
                     snapChipSpecs.chunked(2).forEach { chipRow ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             chipRow.forEach { chip ->
@@ -1074,21 +1239,43 @@ fun DesktopBlueprintTab(
                         onDrag = { rootPoint -> draggingScreenPoint = rootPoint },
                         onDragEnd = finishAddonDrag
                     )
+                    Text("${openingType.label()} presets")
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        openingPresetsForType(openingType).forEach { preset ->
+                            FilterChip(
+                                selected = selectedOpeningPresetName == preset.name,
+                                onClick = { applyOpeningPreset(preset) },
+                                label = { Text(preset.name) }
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = customWidthFeet,
-                        onValueChange = { customWidthFeet = it },
+                        onValueChange = {
+                            customWidthFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Width") },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = customHeightFeet,
-                        onValueChange = { customHeightFeet = it },
+                        onValueChange = {
+                            customHeightFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Height") },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = customSillFeet,
-                        onValueChange = { customSillFeet = it },
+                        onValueChange = {
+                            customSillFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Sill") },
                         singleLine = true
                     )
@@ -1125,10 +1312,111 @@ fun DesktopBlueprintTab(
                     Text("• Draw: click start then end. Chain continues from last corner.", color = Color(0xFFD4E8FF))
                     Text("• Box: click once to start rectangle, click again to finish.", color = Color(0xFFD4E8FF))
                     Text("• Door/Window/Stairs: click canvas or drag from Add-ons onto a wall.", color = Color(0xFFD4E8FF))
+                    Text("• Add-ons now include presets plus custom sizing for each opening type.", color = Color(0xFFD4E8FF))
                     Text("• Mouse wheel zooms. Pan tool lets you drag the view.", color = Color(0xFFD4E8FF))
                     Text("• Floor controls scope all drawing/editing to one floor.", color = Color(0xFFD4E8FF))
                     Text("• Side rails adjust rotation and length/box size by 1° and 1 inch.", color = Color(0xFFD4E8FF))
+                    Text("• Opening Inspector edits selected opening width/height/sill/position live.", color = Color(0xFFD4E8FF))
                     Text("• Shortcuts: F1 Select, F2 Draw, F3 Box, F4 Pan, Esc Cancel, Ctrl+Z/Y Undo/Redo.", color = Color(0xFFD4E8FF))
+                }
+            }
+        }
+
+        if (selectedOpening != null) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 10.dp, bottom = 86.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xCC15243A))
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "Opening Inspector",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = selectedOpeningWidthInput,
+                            onValueChange = { selectedOpeningWidthInput = it },
+                            label = { Text("W ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                        OutlinedTextField(
+                            value = selectedOpeningHeightInput,
+                            onValueChange = { selectedOpeningHeightInput = it },
+                            label = { Text("H ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = selectedOpeningSillInput,
+                            onValueChange = { selectedOpeningSillInput = it },
+                            label = { Text("Sill ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                        OutlinedTextField(
+                            value = selectedOpeningPositionInput,
+                            onValueChange = { selectedOpeningPositionInput = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                            label = { Text("Pos %") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = {
+                            applyToSelectedOpening("Nudge Opening -1in") { opening ->
+                                opening.copy(widthMm = (opening.widthMm - DIAL_LENGTH_STEP_MM).coerceAtLeast(1L))
+                            }
+                        }) { Text("-1in") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Nudge Opening +1in") { opening ->
+                                opening.copy(widthMm = opening.widthMm + DIAL_LENGTH_STEP_MM)
+                            }
+                        }) { Text("+1in") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Move Opening -5%") { opening ->
+                                opening.copy(t = (opening.t - 0.05).coerceIn(0.0, 1.0))
+                            }
+                        }) { Text("-5%") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Move Opening +5%") { opening ->
+                                opening.copy(t = (opening.t + 0.05).coerceIn(0.0, 1.0))
+                            }
+                        }) { Text("+5%") }
+                    }
+                    Button(onClick = {
+                        applyToSelectedOpening("Update Opening") { opening ->
+                            val widthMm = DimensionParser.parseLengthToMillimeters(selectedOpeningWidthInput)
+                                ?.coerceAtLeast(1L)
+                                ?: opening.widthMm
+                            val heightMm = DimensionParser.parseLengthToMillimeters(selectedOpeningHeightInput)
+                                ?.coerceAtLeast(1L)
+                                ?: opening.heightMm
+                            val sillMm = DimensionParser.parseLengthToMillimeters(selectedOpeningSillInput)
+                                ?.coerceAtLeast(0L)
+                                ?: opening.sillMm
+                            val tValue = selectedOpeningPositionInput.toDoubleOrNull()
+                                ?.div(100.0)
+                                ?.coerceIn(0.0, 1.0)
+                                ?: opening.t
+                            opening.copy(
+                                widthMm = widthMm,
+                                heightMm = heightMm,
+                                sillMm = sillMm,
+                                t = tValue
+                            )
+                        }
+                    }) {
+                        Text("Apply Opening")
+                    }
                 }
             }
         }
@@ -1376,30 +1664,59 @@ private fun DesktopBlueprintCanvas(
         canvasSize = size
 
         if (snap.gridEnabled) {
-            val gridStepMm = Millimeters.fromFeet(snap.gridStepFeet).value.coerceAtLeast(1L)
-            val gridSpacingPx = (gridStepMm * (BASE_PX_PER_MM * scale)).coerceAtLeast(10f)
-            if (gridSpacingPx <= 220f) {
-                val originX = size.width / 2f + pan.x
-                val originY = size.height / 2f + pan.y
-                var x = originX % gridSpacingPx
-                while (x < size.width) {
-                    drawLine(
-                        color = Color(0x2C9BC3E8),
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = 1f
-                    )
-                    x += gridSpacingPx
-                }
-                var y = originY % gridSpacingPx
-                while (y < size.height) {
-                    drawLine(
-                        color = Color(0x2C9BC3E8),
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = 1f
-                    )
-                    y += gridSpacingPx
+            val ppm = BASE_PX_PER_MM * scale
+            if (ppm > 0f) {
+                val footStepMm = Millimeters.fromFeet(snap.gridStepFeet.coerceAtLeast(MIN_GRID_STEP_FEET)).value.toDouble()
+                val inchStepMm = (footStepMm / 12.0).coerceAtLeast(1.0)
+                val showInchSubgrid = (inchStepMm * ppm) >= 3f
+                val drawStepMm = if (showInchSubgrid) inchStepMm else footStepMm
+                val linesPerFoot = if (showInchSubgrid) 12L else 1L
+                val drawSpacingPx = (drawStepMm * ppm).toFloat().coerceAtLeast(2f)
+                if (drawSpacingPx <= 220f) {
+                    fun gridLineStyle(index: Long): Pair<Color, Float> {
+                        val isMajor = linesPerFoot > 0 && index % linesPerFoot == 0L
+                        return if (isMajor) {
+                            Color(0x408FCDF0) to 1.25f
+                        } else {
+                            Color(0x229BC3E8) to 0.85f
+                        }
+                    }
+
+                    val minWorldX = ((0f - size.width / 2f - pan.x) / ppm).toDouble()
+                    val maxWorldX = ((size.width - size.width / 2f - pan.x) / ppm).toDouble()
+                    var xIndex = floor(minWorldX / drawStepMm).toLong()
+                    while (true) {
+                        val worldX = xIndex * drawStepMm
+                        if (worldX > maxWorldX) break
+                        val screenX = size.width / 2f + pan.x + (worldX * ppm).toFloat()
+                        val (lineColor, lineWidth) = gridLineStyle(xIndex)
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(screenX, 0f),
+                            end = Offset(screenX, size.height),
+                            strokeWidth = lineWidth
+                        )
+                        xIndex += 1
+                    }
+
+                    val worldYTop = (-(0f - size.height / 2f - pan.y) / ppm).toDouble()
+                    val worldYBottom = (-(size.height - size.height / 2f - pan.y) / ppm).toDouble()
+                    val minWorldY = minOf(worldYTop, worldYBottom)
+                    val maxWorldY = maxOf(worldYTop, worldYBottom)
+                    var yIndex = floor(minWorldY / drawStepMm).toLong()
+                    while (true) {
+                        val worldY = yIndex * drawStepMm
+                        if (worldY > maxWorldY) break
+                        val screenY = size.height / 2f + pan.y - (worldY * ppm).toFloat()
+                        val (lineColor, lineWidth) = gridLineStyle(yIndex)
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(0f, screenY),
+                            end = Offset(size.width, screenY),
+                            strokeWidth = lineWidth
+                        )
+                        yIndex += 1
+                    }
                 }
             }
         }
