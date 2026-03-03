@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -64,7 +65,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerMoveFilter
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.domain.model.BlueprintOpening
@@ -90,6 +92,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.imageio.ImageIO
 import javax.swing.JFileChooser
+import javax.swing.JOptionPane
+import java.util.Locale
 
 private enum class ExportViewMode(val label: String) {
     SUMMARY("Summary"),
@@ -307,16 +311,13 @@ private fun DesktopWorkspaceRail(
             NavigationRailItem(
                 selected = activeTab == tab,
                 onClick = { onSelectTab(tab) },
-                modifier = Modifier.pointerMoveFilter(
-                    onEnter = {
+                modifier = Modifier
+                    .onPointerEvent(PointerEventType.Enter) {
                         hoverLabel = tab.label
-                        false
-                    },
-                    onExit = {
-                        hoverLabel = null
-                        false
                     }
-                ),
+                    .onPointerEvent(PointerEventType.Exit) {
+                        if (hoverLabel == tab.label) hoverLabel = null
+                    },
                 icon = {
                     Icon(
                         imageVector = tab.icon(),
@@ -867,18 +868,18 @@ private fun ExportTab(
     }
 
     val takeoff = state.currentTakeoffResult
-    if (takeoff == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            EmptyStateCard("No takeoff result yet", "Use the Takeoff tab before exporting.")
-        }
-        return
-    }
+    var exportStatus by remember(project.id) { mutableStateOf<String?>(null) }
+    val takeoffReady = takeoff != null
 
-    val content = when (exportViewMode) {
-        ExportViewMode.SUMMARY -> state.exportSummary()
-        ExportViewMode.REPORT -> state.exportTextReport()
-        ExportViewMode.CSV -> state.exportCsv()
-        ExportViewMode.JSON -> state.exportJson()
+    val content = if (takeoffReady) {
+        when (exportViewMode) {
+            ExportViewMode.SUMMARY -> state.exportSummary()
+            ExportViewMode.REPORT -> state.exportTextReport()
+            ExportViewMode.CSV -> state.exportCsv()
+            ExportViewMode.JSON -> state.exportJson()
+        }
+    } else {
+        "No takeoff result yet. Use the Materials tab first for text/PDF/CSV/JSON exports. Blueprint PNG export is available now."
     }
 
     Column(
@@ -897,6 +898,20 @@ private fun ExportTab(
             }
         }
 
+        if (!takeoffReady) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = "Takeoff not ready. You can still export blueprint PNG (grid on/off).",
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Blueprint Grid")
             FilterChip(
@@ -911,13 +926,43 @@ private fun ExportTab(
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { copyToClipboard(content) }) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val plainTextExtension = when (exportViewMode) {
+                ExportViewMode.JSON -> "json"
+                ExportViewMode.CSV -> "csv"
+                else -> "txt"
+            }
+            Button(
+                onClick = {
+                    copyToClipboard(content)
+                        .onSuccess {
+                            exportStatus = "Copied ${exportViewMode.label} to clipboard."
+                        }
+                        .onFailure { error ->
+                            exportStatus = "Copy failed: ${error.message ?: "unknown error"}"
+                        }
+                },
+                enabled = takeoffReady
+            ) {
                 Icon(Icons.Default.ContentCopy, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy")
             }
-            OutlinedButton(onClick = { copyToClipboard(state.exportTextReport()) }) {
+            OutlinedButton(
+                onClick = {
+                    copyToClipboard(state.exportTextReport())
+                        .onSuccess {
+                            exportStatus = "Copied full report to clipboard."
+                        }
+                        .onFailure { error ->
+                            exportStatus = "Copy failed: ${error.message ?: "unknown error"}"
+                        }
+                },
+                enabled = takeoffReady
+            ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy Full Report")
@@ -925,10 +970,16 @@ private fun ExportTab(
             OutlinedButton(
                 onClick = {
                     saveWithDesktopChooser(
-                        suggestedName = "tradesketch_export.${if (exportViewMode == ExportViewMode.JSON) "json" else if (exportViewMode == ExportViewMode.CSV) "csv" else "txt"}",
+                        suggestedName = "tradesketch_export.$plainTextExtension",
+                        expectedExtension = plainTextExtension,
                         bytes = content.toByteArray()
-                    )
-                }
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
+                },
+                enabled = takeoffReady
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -936,17 +987,24 @@ private fun ExportTab(
             }
             OutlinedButton(
                 onClick = {
+                    val currentTakeoff = takeoff ?: return@OutlinedButton
                     val pdfBytes = buildSimplePdfBytes(
                         project = project,
-                        takeoff = takeoff,
+                        takeoff = currentTakeoff,
                         title = "${project.name} ${state.selectedTakeoffType.label} Export",
                         body = state.exportTextReport()
                     )
                     saveWithDesktopChooser(
                         suggestedName = "tradesketch_export.pdf",
+                        expectedExtension = "pdf",
                         bytes = pdfBytes
-                    )
-                }
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
+                },
+                enabled = takeoffReady
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -964,8 +1022,13 @@ private fun ExportTab(
                         } else {
                             "tradesketch_blueprint_nogrid.png"
                         },
+                        expectedExtension = "png",
                         bytes = pngBytes
-                    )
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
                 }
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
@@ -974,12 +1037,30 @@ private fun ExportTab(
             }
         }
 
+        if (!exportStatus.isNullOrBlank()) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Text(
+                    text = exportStatus.orEmpty(),
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         OutlinedTextField(
             value = content,
             onValueChange = {},
             readOnly = true,
             modifier = Modifier.fillMaxSize(),
-            label = { Text("${exportViewMode.label} Output") }
+            label = {
+                Text(
+                    if (takeoffReady) "${exportViewMode.label} Output" else "Export Preview"
+                )
+            }
         )
     }
 }
@@ -1105,23 +1186,53 @@ private fun WorkspaceTab.icon() = when (this) {
     WorkspaceTab.SETTINGS_ABOUT -> Icons.Default.Tune
 }
 
-private fun copyToClipboard(value: String) {
-    val selection = StringSelection(value)
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+private fun copyToClipboard(value: String): Result<Unit> {
+    return runCatching {
+        val selection = StringSelection(value)
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+    }
 }
 
 private fun saveWithDesktopChooser(
     suggestedName: String,
+    expectedExtension: String,
     bytes: ByteArray
-) {
-    val chooser = JFileChooser().apply {
-        selectedFile = File(suggestedName)
+): Result<File> {
+    val homeDir = File(System.getProperty("user.home")).absoluteFile
+    val desktopDir = File(homeDir, "Desktop")
+    val initialDir = if (desktopDir.exists() && desktopDir.isDirectory) desktopDir else homeDir
+    val chooser = JFileChooser(initialDir).apply {
+        selectedFile = File(initialDir, suggestedName)
     }
     val result = chooser.showSaveDialog(null)
-    if (result == JFileChooser.APPROVE_OPTION) {
-        runCatching {
-            chooser.selectedFile.writeBytes(bytes)
+    if (result != JFileChooser.APPROVE_OPTION) {
+        return Result.failure(IllegalStateException("Save canceled."))
+    }
+
+    val normalizedExtension = expectedExtension.trim().trimStart('.').lowercase(Locale.US)
+    val rawTarget = chooser.selectedFile.absoluteFile
+    val resolvedTarget = if (rawTarget.extension.lowercase(Locale.US) == normalizedExtension) {
+        rawTarget
+    } else {
+        File(rawTarget.parentFile ?: initialDir, "${rawTarget.name}.$normalizedExtension")
+    }
+
+    if (resolvedTarget.exists()) {
+        val overwriteResult = JOptionPane.showConfirmDialog(
+            null,
+            "Replace existing file?\n${resolvedTarget.absolutePath}",
+            "Confirm overwrite",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        )
+        if (overwriteResult != JOptionPane.YES_OPTION) {
+            return Result.failure(IllegalStateException("Save canceled."))
         }
+    }
+
+    return runCatching {
+        resolvedTarget.writeBytes(bytes)
+        resolvedTarget
     }
 }
 
@@ -1382,9 +1493,9 @@ private fun buildSimplePdfBytes(
     return builder.toString().toByteArray()
 }
 
-private fun Double.toPdf(): String = "%.2f".format(this)
+private fun Double.toPdf(): String = String.format(Locale.US, "%.2f", this)
 
-private fun Float.toPdf(): String = "%.2f".format(this)
+private fun Float.toPdf(): String = String.format(Locale.US, "%.2f", this)
 
 private fun wrapPdfText(text: String, maxChars: Int): List<String> {
     if (text.length <= maxChars) return listOf(text)
