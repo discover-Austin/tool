@@ -2,6 +2,7 @@ package com.tradesketch.estimator.desktop
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -32,11 +33,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -217,6 +227,7 @@ fun DesktopBlueprintTab(
     var workspaceRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasSize by remember(project.id) { mutableStateOf(Size.Zero) }
+    val workspaceFocusRequester = remember(project.id) { FocusRequester() }
     var wallHeightFeet by remember(project.id, document.params.wallHeightMm) {
         mutableStateOf("%.2f".format(Millimeters(document.params.wallHeightMm).toFeet()))
     }
@@ -237,6 +248,7 @@ fun DesktopBlueprintTab(
         chainOrigin = null
         selectedWallId = null
         selectedOpeningId = null
+        workspaceFocusRequester.requestFocus()
     }
     LaunchedEffect(project.id, openAddonsByDefault) {
         showAddons = openAddonsByDefault
@@ -480,7 +492,12 @@ fun DesktopBlueprintTab(
         else -> "L 0.00ft"
     }
     val precisionSizeTitle = if (hasActiveBoxDraft) "Expand (in)" else "Length (in)"
-    val rightRailPadding = if (showAddons) 214.dp else 10.dp
+    val rightRailPadding = when {
+        showParams -> 286.dp
+        showAddons -> 214.dp
+        showGuide -> 338.dp
+        else -> 10.dp
+    }
     val applyRotateTick: (Int) -> Unit = rotateTick@{ tickCount ->
         if (tickCount == 0) return@rotateTick
         when {
@@ -586,6 +603,54 @@ fun DesktopBlueprintTab(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0E192A))
+            .focusRequester(workspaceFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Escape -> {
+                        cancelCurrentAction()
+                        true
+                    }
+                    event.key == Key.Delete -> {
+                        if (selectedWallId != null || selectedOpeningId != null) {
+                            deleteSelectedGeometry()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    event.isCtrlPressed && event.isShiftPressed && event.key == Key.Z -> {
+                        if (state.canRedoBlueprint) state.redoBlueprint()
+                        true
+                    }
+                    event.isCtrlPressed && event.key == Key.Y -> {
+                        if (state.canRedoBlueprint) state.redoBlueprint()
+                        true
+                    }
+                    event.isCtrlPressed && event.key == Key.Z -> {
+                        if (state.canUndoBlueprint) state.undoBlueprint()
+                        true
+                    }
+                    event.key == Key.F1 -> {
+                        setTool(TOOL_SELECT)
+                        true
+                    }
+                    event.key == Key.F2 -> {
+                        setTool(TOOL_DRAW)
+                        true
+                    }
+                    event.key == Key.F3 -> {
+                        setTool(TOOL_BOX)
+                        true
+                    }
+                    event.key == Key.F4 -> {
+                        setTool(TOOL_PAN)
+                        true
+                    }
+                    else -> false
+                }
+            }
             .onGloballyPositioned { workspaceRoot = it.positionInRoot() }
     ) {
         DesktopBlueprintCanvas(
@@ -814,11 +879,11 @@ fun DesktopBlueprintTab(
                     (livePreview.x - liveStart.x).toDouble()
                 )
             )
-            Card(modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) {
+            Card(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 86.dp)) {
                 Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("${"%.2f".format(liveLen)} ft @ ${"%.1f".format(liveAngle)}°")
-                    OutlinedTextField(lengthInput, { lengthInput = it }, label = { Text("Len") }, singleLine = true, modifier = Modifier.width(90.dp))
-                    OutlinedTextField(angleInput, { angleInput = it }, label = { Text("Ang") }, singleLine = true, modifier = Modifier.width(90.dp))
+                    OutlinedTextField(lengthInput, { lengthInput = it }, label = { Text("Len") }, singleLine = true, modifier = Modifier.width(76.dp))
+                    OutlinedTextField(angleInput, { angleInput = it }, label = { Text("Ang") }, singleLine = true, modifier = Modifier.width(76.dp))
                 }
             }
         }
@@ -833,7 +898,7 @@ fun DesktopBlueprintTab(
             val widthFeet = Millimeters(abs(widthMm).roundToLong()).toFeet()
             val heightFeet = Millimeters(abs(heightMm).roundToLong()).toFeet()
             val rotationDegrees = normalizeDegrees(Math.toDegrees(boxRotationRadians))
-            Card(modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) {
+            Card(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 86.dp)) {
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1063,6 +1128,7 @@ fun DesktopBlueprintTab(
                     Text("• Mouse wheel zooms. Pan tool lets you drag the view.", color = Color(0xFFD4E8FF))
                     Text("• Floor controls scope all drawing/editing to one floor.", color = Color(0xFFD4E8FF))
                     Text("• Side rails adjust rotation and length/box size by 1° and 1 inch.", color = Color(0xFFD4E8FF))
+                    Text("• Shortcuts: F1 Select, F2 Draw, F3 Box, F4 Pan, Esc Cancel, Ctrl+Z/Y Undo/Redo.", color = Color(0xFFD4E8FF))
                 }
             }
         }
