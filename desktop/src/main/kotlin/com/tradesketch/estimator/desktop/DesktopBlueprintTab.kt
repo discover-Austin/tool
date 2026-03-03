@@ -72,6 +72,7 @@ import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
+import javax.swing.JOptionPane
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -100,6 +101,8 @@ private const val MIN_GRID_STEP_FEET = 0.0328084 // 1 cm
 private const val MAX_GRID_STEP_FEET = 20.0
 private const val MIN_SNAP_THRESHOLD_FEET = 0.2
 private const val MAX_SNAP_THRESHOLD_FEET = 2.0
+private const val WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM = 30L
+private val MIN_WALL_LENGTH_TO_ADD_MM = Millimeters.fromInches(1.0).value
 
 private data class DesktopOpeningPreset(
     val name: String,
@@ -277,6 +280,7 @@ fun DesktopBlueprintTab(
     var workspaceRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasSize by remember(project.id) { mutableStateOf(Size.Zero) }
+    var livePointer by remember(project.id) { mutableStateOf<PointMm?>(null) }
     val workspaceFocusRequester = remember(project.id) { FocusRequester() }
     var wallHeightFeet by remember(project.id, document.params.wallHeightMm) {
         mutableStateOf("%.2f".format(Millimeters(document.params.wallHeightMm).toFeet()))
@@ -303,6 +307,7 @@ fun DesktopBlueprintTab(
         chainOrigin = null
         selectedWallId = null
         selectedOpeningId = null
+        livePointer = null
         workspaceFocusRequester.requestFocus()
     }
     LaunchedEffect(snap.gridStepFeet) {
@@ -326,6 +331,7 @@ fun DesktopBlueprintTab(
         draggingScreenPoint = null
         selectedWallId = null
         selectedOpeningId = null
+        livePointer = null
     }
     val allWalls = document.walls
     val wallsById = allWalls.associateBy { it.id }
@@ -505,6 +511,7 @@ fun DesktopBlueprintTab(
         draggingScreenPoint = null
         selectedWallId = null
         selectedOpeningId = null
+        livePointer = null
         if (tool != TOOL_SELECT && tool != TOOL_PAN) {
             tool = TOOL_DRAW
         }
@@ -538,6 +545,40 @@ fun DesktopBlueprintTab(
                 )
                 selectedWallId = null
             }
+        }
+    }
+    val clearAllBlueprintGeometry: () -> Unit = clearAll@{
+        if (document.walls.isEmpty() && document.openings.isEmpty() && document.rooms.isEmpty()) return@clearAll
+        val result = JOptionPane.showConfirmDialog(
+            null,
+            "This removes all geometry on floor ${selectedFloor.floorLabel()}.\nContinue?",
+            "Clear floor",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        )
+        if (result == JOptionPane.YES_OPTION) {
+            val retainedWalls = document.walls.filterNot { wall -> wall.isOnFloor(selectedFloor) }
+            val retainedWallIds = retainedWalls.map { wall -> wall.id }.toSet()
+            val retainedOpenings = document.openings.filter { opening ->
+                val openingFloor = opening.isOnFloor(selectedFloor, wallsById)
+                !openingFloor && retainedWallIds.contains(opening.wallId)
+            }
+            val retainedRooms = document.rooms.filterNot { room -> room.isOnFloor(selectedFloor) }
+            state.updateBlueprintDocument(
+                updated = document.copy(
+                    walls = retainedWalls,
+                    openings = retainedOpenings,
+                    rooms = retainedRooms
+                ),
+                label = "Clear Floor"
+            )
+            selectedWallId = null
+            selectedOpeningId = null
+            drawingStart = null
+            drawingPreview = null
+            boxStart = null
+            boxPreview = null
+            livePointer = null
         }
     }
     fun applyToSelectedWall(
@@ -805,6 +846,7 @@ fun DesktopBlueprintTab(
                 canvasSize = size
             },
             onLivePointer = {
+                livePointer = it
                 if (drawingStart != null && tool == TOOL_DRAW) {
                     drawingPreview = it
                 }
@@ -856,7 +898,18 @@ fun DesktopBlueprintTab(
                                     )?.let { end = it }
                                 }
                             }
-                            if (end != start) {
+                            val wallLengthMm = BlueprintSnapMath.distanceMillimeters(start, end)
+                            val shouldDetachThisWall = detachedWalls
+                            if (
+                                end != start &&
+                                wallLengthMm >= MIN_WALL_LENGTH_TO_ADD_MM &&
+                                !wallAlreadyExists(
+                                    walls = document.walls,
+                                    start = start,
+                                    end = end,
+                                    toleranceMm = WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM
+                                )
+                            ) {
                                 val newWall = WallSegment(
                                     id = UUID.randomUUID().toString(),
                                     start = start,
@@ -878,8 +931,9 @@ fun DesktopBlueprintTab(
                                 selectedWallId = newWall.id
                                 selectedOpeningId = null
                             }
+                            if (shouldDetachThisWall) detachedWalls = false
                             val closed = chainOrigin != null && end == chainOrigin
-                            if (chainWalls && !detachedWalls && !closed) {
+                            if (chainWalls && !shouldDetachThisWall && !closed) {
                                 drawingStart = end
                                 drawingPreview = end
                             } else {
@@ -905,8 +959,16 @@ fun DesktopBlueprintTab(
                                 params = document.params,
                                 floorLevel = selectedFloor
                             )
-                            if (walls.isNotEmpty()) {
-                                val updatedWalls = document.walls + walls
+                            val candidateWalls = walls.filterNot { wall ->
+                                wallAlreadyExists(
+                                    walls = document.walls,
+                                    start = wall.start,
+                                    end = wall.end,
+                                    toleranceMm = WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM
+                                )
+                            }
+                            if (candidateWalls.isNotEmpty()) {
+                                val updatedWalls = document.walls + candidateWalls
                                 state.updateBlueprintDocument(
                                     updated = document.copy(
                                         walls = updatedWalls,
@@ -918,7 +980,7 @@ fun DesktopBlueprintTab(
                                     ),
                                     label = "Add Box"
                                 )
-                                selectedWallId = walls.last().id
+                                selectedWallId = candidateWalls.last().id
                                 selectedOpeningId = null
                             }
                             boxStart = null
@@ -965,6 +1027,12 @@ fun DesktopBlueprintTab(
                 Text("Openings: ${floorOpenings.size}", color = Color.White)
                 Text("Wall Length: ${"%.1f".format(wallLength)} ft", color = Color.White)
                 Text("Net Area: ${"%.1f".format(netArea.coerceAtLeast(0.0))} sq ft", color = Color.White)
+                livePointer?.let { pointer ->
+                    Text(
+                        "Cursor: X ${"%.2f".format(Millimeters(pointer.x).toFeet())} ft | Y ${"%.2f".format(Millimeters(pointer.y).toFeet())} ft",
+                        color = Color(0xFFB8DFFF)
+                    )
+                }
                 selectedWall?.let { wall ->
                     Text(
                         "Selected Wall: ${"%.1f".format(Millimeters(wall.lengthMillimeters()).toFeet())} ft",
@@ -1506,6 +1574,12 @@ fun DesktopBlueprintTab(
                     }
                 }
                 Button(
+                    onClick = clearAllBlueprintGeometry,
+                    enabled = floorWalls.isNotEmpty() || floorOpenings.isNotEmpty() || floorRooms.isNotEmpty()
+                ) {
+                    Text("Clear Floor")
+                }
+                Button(
                     onClick = deleteSelectedGeometry,
                     enabled = selectedWallId != null || selectedOpeningId != null
                 ) {
@@ -2040,8 +2114,8 @@ private fun draftBoxCorners(
         rotationRadians = rotationRadians
     )
     if (
-        abs(widthMm) < MIN_DRAFT_GEOMETRY_MM.toDouble() ||
-            abs(heightMm) < MIN_DRAFT_GEOMETRY_MM.toDouble()
+        abs(widthMm) < MIN_WALL_LENGTH_TO_ADD_MM.toDouble() ||
+            abs(heightMm) < MIN_WALL_LENGTH_TO_ADD_MM.toDouble()
     ) {
         return emptyList()
     }
@@ -2131,6 +2205,21 @@ private fun findNearestOpeningAtPoint(
         .minByOrNull { (_, distance) -> distance }
         ?.takeIf { (_, distance) -> distance <= thresholdMm }
         ?.first
+}
+
+private fun wallAlreadyExists(
+    walls: List<WallSegment>,
+    start: PointMm,
+    end: PointMm,
+    toleranceMm: Long
+): Boolean {
+    return walls.any { wall ->
+        val sameDirection = BlueprintSnapMath.distanceMillimeters(wall.start, start) <= toleranceMm &&
+            BlueprintSnapMath.distanceMillimeters(wall.end, end) <= toleranceMm
+        val reverseDirection = BlueprintSnapMath.distanceMillimeters(wall.start, end) <= toleranceMm &&
+            BlueprintSnapMath.distanceMillimeters(wall.end, start) <= toleranceMm
+        sameDirection || reverseDirection
+    }
 }
 
 private fun mergeDetectedRoomsForFloor(
