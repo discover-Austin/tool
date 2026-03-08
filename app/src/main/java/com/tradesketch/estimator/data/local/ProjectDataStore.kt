@@ -3,6 +3,7 @@ package com.tradesketch.estimator.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -12,11 +13,15 @@ import com.tradesketch.estimator.domain.calc.RoomLoopDetector
 import com.tradesketch.estimator.domain.model.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToLong
@@ -26,49 +31,104 @@ private val Context.projectsDataStore: DataStore<Preferences> by preferencesData
 
 @Singleton
 class ProjectDataStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val projectFileStore: ProjectFileStore
 ) {
     private val gson = Gson()
+    private val migrationMutex = Mutex()
+    private val refreshSignal = MutableStateFlow(0L)
     
     companion object {
         private val PROJECTS_KEY = stringPreferencesKey("projects_json")
+        private val MIGRATED_TO_FILES_KEY = booleanPreferencesKey("migrated_to_files")
     }
     
-    val projects: Flow<List<Project>> = context.projectsDataStore.data
+    val projects: Flow<List<Project>> = combine(
+        context.projectsDataStore.data,
+        refreshSignal
+    ) { preferences, _ ->
+        preferences
+    }
         .map { preferences ->
-            val projectsJson = preferences[PROJECTS_KEY] ?: return@map emptyList()
-            try {
-                val type = object : TypeToken<List<ProjectJson>>() {}.type
-                val projectJsonList: List<ProjectJson> = gson.fromJson(projectsJson, type)
-                projectJsonList.map { it.toProject() }
-            } catch (e: Exception) {
-                emptyList()
-            }
+            ensureMigrated(preferences)
+            projectFileStore.loadAllProjects()
         }
     
     suspend fun saveProjects(projects: List<Project>) {
-        context.projectsDataStore.edit { preferences ->
-            val projectJsonList = projects.map { ProjectJson.fromProject(it) }
-            preferences[PROJECTS_KEY] = gson.toJson(projectJsonList)
+        ensureMigrated(context.projectsDataStore.data.first())
+        val targetById = projects.associateBy { it.id }
+        val existingIds = projectFileStore.loadAllProjects().map { it.id }.toSet()
+        existingIds
+            .filterNot { it in targetById.keys }
+            .forEach { staleId ->
+                projectFileStore.deleteProject(staleId)
+            }
+        projects.forEach { project ->
+            projectFileStore.saveProject(project)
         }
+        refreshSignal.value = System.currentTimeMillis()
     }
     
     suspend fun saveProject(project: Project) {
-        val currentProjects = projects.first().toMutableList()
-        val index = currentProjects.indexOfFirst { it.id == project.id }
-        if (index != -1) {
-            currentProjects[index] = project.copy(updatedAt = System.currentTimeMillis())
-        } else {
-            currentProjects.add(project)
-        }
-        saveProjects(currentProjects)
+        ensureMigrated(context.projectsDataStore.data.first())
+        projectFileStore.saveProject(
+            project.copy(updatedAt = System.currentTimeMillis())
+        )
+        refreshSignal.value = System.currentTimeMillis()
     }
     
     suspend fun deleteProject(projectId: String) {
-        val currentProjects = projects.first().toMutableList()
-        currentProjects.removeAll { it.id == projectId }
-        saveProjects(currentProjects)
+        ensureMigrated(context.projectsDataStore.data.first())
+        projectFileStore.deleteProject(projectId)
+        refreshSignal.value = System.currentTimeMillis()
     }
+
+    private suspend fun ensureMigrated(preferencesSnapshot: Preferences) {
+        if (preferencesSnapshot[MIGRATED_TO_FILES_KEY] == true) return
+        migrationMutex.withLock {
+            val latest = context.projectsDataStore.data.first()
+            if (latest[MIGRATED_TO_FILES_KEY] == true) return@withLock
+
+            migrateLegacyProjectsJsonToFileStore(
+                projectsJson = latest[PROJECTS_KEY],
+                gson = gson,
+                storageEngine = projectFileStore.storageEngine()
+            )
+
+            context.projectsDataStore.edit { preferences ->
+                preferences[MIGRATED_TO_FILES_KEY] = true
+            }
+        }
+    }
+}
+
+internal data class LegacyMigrationResult(
+    val migratedToFiles: Boolean,
+    val writtenCount: Int
+)
+
+internal suspend fun migrateLegacyProjectsJsonToFileStore(
+    projectsJson: String?,
+    gson: Gson,
+    storageEngine: ProjectFileStorageEngine
+): LegacyMigrationResult {
+    if (projectsJson.isNullOrBlank()) {
+        return LegacyMigrationResult(
+            migratedToFiles = true,
+            writtenCount = 0
+        )
+    }
+    val parsed = runCatching {
+        val type = object : TypeToken<List<ProjectJson>>() {}.type
+        gson.fromJson<List<ProjectJson>>(projectsJson, type)
+    }.getOrDefault(emptyList())
+    parsed.forEach { projectJson ->
+        storageEngine.saveProject(projectJson.toProject())
+    }
+    return LegacyMigrationResult(
+        migratedToFiles = true,
+        writtenCount = parsed.size
+    )
 }
 
 // JSON data classes for Gson serialization

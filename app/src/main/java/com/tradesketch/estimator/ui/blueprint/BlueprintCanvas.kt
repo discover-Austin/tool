@@ -404,13 +404,15 @@ internal fun BlueprintCanvas(
         drawBlueprintTexturePattern()
         val ppm = BASE_PX_PER_MM * scale
         if (snapSettings.gridEnabled && ppm > 0f) {
-            val footStepMm = Millimeters.fromFeet(snapSettings.gridStepFeet.coerceAtLeast(MIN_GRID_STEP_FEET)).value
+            val majorStepMm = Millimeters.fromFeet(snapSettings.gridStepFeet.coerceAtLeast(MIN_GRID_STEP_FEET)).value
                 .coerceAtLeast(MIN_GRID_STEP_MM)
                 .toDouble()
-            val inchStepMm = (footStepMm / 12.0).coerceAtLeast(1.0)
-            val showInchSubgrid = (inchStepMm * ppm) >= 3f
-            val drawStepMm = if (showInchSubgrid) inchStepMm else footStepMm
-            val linesPerFoot = if (showInchSubgrid) 12L else 1L
+            val subdivisionsPerMajor = if (useMetric) 10L else 12L
+            val minorStepMm = (majorStepMm / subdivisionsPerMajor.toDouble()).coerceAtLeast(1.0)
+            val showMinorSubgrid = (minorStepMm * ppm) >= 1.1f
+            val drawStepMm = if (showMinorSubgrid) minorStepMm else majorStepMm
+            val linesPerMajor = if (showMinorSubgrid) subdivisionsPerMajor else 1L
+            val emphasizedMajorEvery = if (useMetric) 10L else 5L
 
             val leftWorldX = screenToWorld(Offset(0f, 0f)).x.toDouble()
             val rightWorldX = screenToWorld(Offset(size.width, 0f)).x.toDouble()
@@ -422,11 +424,11 @@ internal fun BlueprintCanvas(
             val maxWorldY = maxOf(topWorldY, bottomWorldY)
 
             fun gridLineStyle(index: Long): Pair<Color, Float> {
-                val isFootLine = index % linesPerFoot == 0L
-                if (!isFootLine) return GRID_MINOR_COLOR to 0.62f
-                val footIndex = index / linesPerFoot
-                val isFiveFoot = footIndex % 5L == 0L
-                return if (isFiveFoot) {
+                val isMajorLine = index % linesPerMajor == 0L
+                if (!isMajorLine) return GRID_MINOR_COLOR to 0.62f
+                val majorIndex = index / linesPerMajor
+                val isEmphasisLine = majorIndex % emphasizedMajorEvery == 0L
+                return if (isEmphasisLine) {
                     GRID_FIVE_FOOT_COLOR to 1.75f
                 } else {
                     GRID_MAJOR_COLOR to 1.2f

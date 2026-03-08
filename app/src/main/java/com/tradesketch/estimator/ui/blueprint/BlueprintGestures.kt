@@ -200,7 +200,7 @@ internal fun DualJoystickOverlay(
             verticalAlignment = Alignment.Bottom
         ) {
             JoystickPad(
-                insideLabel = "Scroll/Start/Pickup",
+                insideLabel = "Pan / Left Tap",
                 vector = leftVector,
                 onVectorChange = onLeftVectorChange,
                 onTap = onLeftTap,
@@ -267,7 +267,7 @@ internal fun DualJoystickOverlay(
                 }
             }
             JoystickPad(
-                insideLabel = "Cursor/Cancel/Select",
+                insideLabel = "Cursor / Right Tap",
                 vector = rightVector,
                 onVectorChange = onRightVectorChange,
                 onTap = onRightTap,
@@ -288,6 +288,7 @@ internal fun DrawLineEdgeDialsOverlay(
     onAngleTicks: (Int) -> Unit,
     onLengthTicks: (Int) -> Unit,
     onInteractionChanged: (Boolean) -> Unit = {},
+    leftInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
@@ -308,7 +309,7 @@ internal fun DrawLineEdgeDialsOverlay(
             verticalAlignment = Alignment.Bottom
         ) {
             Column(
-                modifier = Modifier.padding(start = sideInset),
+                modifier = Modifier.padding(start = sideInset + leftInset),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {

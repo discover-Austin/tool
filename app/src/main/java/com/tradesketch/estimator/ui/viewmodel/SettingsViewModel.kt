@@ -92,6 +92,22 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setAppTutorialCompleted(completed: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            if (current.hasCompletedAppTutorial == completed) return@launch
+            saveSettingsUseCase(current.copy(hasCompletedAppTutorial = completed))
+        }
+    }
+
+    fun setTouchModeQuickToolsTutorialSeen(seen: Boolean) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            if (current.hasSeenTouchModeQuickToolsTutorial == seen) return@launch
+            saveSettingsUseCase(current.copy(hasSeenTouchModeQuickToolsTutorial = seen))
+        }
+    }
+
     fun updateDrywallDefaults(sheetArea: Double? = null, screwsPerSheet: Int? = null, mudGallons: Double? = null) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -185,7 +201,8 @@ class SettingsViewModel @Inject constructor(
         endpointEnabled: Boolean? = null,
         midpointEnabled: Boolean? = null,
         angleEnabled: Boolean? = null,
-        closureEnabled: Boolean? = null
+        closureEnabled: Boolean? = null,
+        thresholdFeet: Double? = null
     ) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -195,7 +212,8 @@ class SettingsViewModel @Inject constructor(
                     blueprintSnapEndpointEnabled = endpointEnabled ?: current.blueprintSnapEndpointEnabled,
                     blueprintSnapMidpointEnabled = midpointEnabled ?: current.blueprintSnapMidpointEnabled,
                     blueprintSnapAngleEnabled = angleEnabled ?: current.blueprintSnapAngleEnabled,
-                    blueprintSnapClosureEnabled = closureEnabled ?: current.blueprintSnapClosureEnabled
+                    blueprintSnapClosureEnabled = closureEnabled ?: current.blueprintSnapClosureEnabled,
+                    blueprintSnapThresholdFeet = thresholdFeet ?: current.blueprintSnapThresholdFeet
                 )
             )
         }

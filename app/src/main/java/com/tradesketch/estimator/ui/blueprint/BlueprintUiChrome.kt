@@ -1202,7 +1202,7 @@ internal fun RailHelpPanel(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
             ) {
                 Text(
-                    text = "Tip: With dual joysticks on, use right stick for cursor and left for pan/select.",
+                    text = "Tip: Right stick moves cursor + right tap cancels/alt-select. Left stick pans + left tap performs primary action at cursor.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
