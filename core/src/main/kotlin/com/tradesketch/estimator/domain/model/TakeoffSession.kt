@@ -7,15 +7,30 @@ enum class TakeoffScope {
     PAINT
 }
 
+enum class TakeoffInputMode {
+    BLUEPRINT,
+    MANUAL
+}
+
 data class ProjectTakeoffSession(
     val selectedScope: TakeoffScope = TakeoffScope.DRYWALL,
     val selectedPlaybook: String = "BALANCED",
+    val inputMode: TakeoffInputMode = TakeoffInputMode.BLUEPRINT,
     val snapSettings: BlueprintSnapSettings = BlueprintSnapSettings(),
+    val manual: ManualTakeoffSessionParams = ManualTakeoffSessionParams(),
     val drywall: DrywallSessionParams = DrywallSessionParams(),
     val concrete: ConcreteSessionParams = ConcreteSessionParams(),
     val gravel: GravelSessionParams = GravelSessionParams(),
     val paint: PaintSessionParams = PaintSessionParams(),
     val pricing: PricingSessionParams = PricingSessionParams()
+)
+
+data class ManualTakeoffSessionParams(
+    val drywallWallAreaSqFt: Double = 0.0,
+    val drywallCeilingAreaSqFt: Double = 0.0,
+    val concreteAreaSqFt: Double = 0.0,
+    val gravelAreaSqFt: Double = 0.0,
+    val paintAreaSqFt: Double = 0.0
 )
 
 data class DrywallSessionParams(

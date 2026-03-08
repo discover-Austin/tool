@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -64,7 +65,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerMoveFilter
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.domain.model.BlueprintOpening
@@ -79,10 +81,19 @@ import com.tradesketch.estimator.domain.model.elementCount
 import com.tradesketch.estimator.domain.model.totalAreaSqFt
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.Formatters
+import java.awt.BasicStroke
+import java.awt.Color as AwtColor
+import java.awt.RenderingHints
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.awt.geom.Arc2D
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.imageio.ImageIO
 import javax.swing.JFileChooser
+import javax.swing.JOptionPane
+import java.util.Locale
 
 private enum class ExportViewMode(val label: String) {
     SUMMARY("Summary"),
@@ -96,6 +107,7 @@ private enum class ExportViewMode(val label: String) {
 fun TradeSketchDesktopApp() {
     val state = remember { DesktopAppState() }
     var exportViewMode by remember { mutableStateOf(ExportViewMode.SUMMARY) }
+    var exportGridEnabled by remember { mutableStateOf(true) }
     var showWelcomeDetail by remember { mutableStateOf(false) }
     var ritualProjectName by remember { mutableStateOf("My First Project") }
     var ritualType by remember { mutableStateOf(DesktopTakeoffType.DRYWALL) }
@@ -122,6 +134,15 @@ fun TradeSketchDesktopApp() {
                     .fillMaxSize()
                     .padding(12.dp)
             ) {
+                ProjectsSidebar(
+                    state = state,
+                    modifier = Modifier
+                        .width(300.dp)
+                        .fillMaxHeight()
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                VerticalDivider()
+                Spacer(modifier = Modifier.width(10.dp))
                 DesktopWorkspaceRail(
                     activeTab = state.activeTab,
                     onSelectTab = { state.activeTab = it },
@@ -149,7 +170,9 @@ fun TradeSketchDesktopApp() {
                             WorkspaceTab.EXPORT -> ExportTab(
                                 state = state,
                                 exportViewMode = exportViewMode,
-                                onExportViewModeChange = { exportViewMode = it }
+                                onExportViewModeChange = { exportViewMode = it },
+                                exportGridEnabled = exportGridEnabled,
+                                onExportGridEnabledChange = { exportGridEnabled = it }
                             )
                             WorkspaceTab.SETTINGS_ABOUT -> SettingsTab(state = state)
                         }
@@ -288,16 +311,13 @@ private fun DesktopWorkspaceRail(
             NavigationRailItem(
                 selected = activeTab == tab,
                 onClick = { onSelectTab(tab) },
-                modifier = Modifier.pointerMoveFilter(
-                    onEnter = {
+                modifier = Modifier
+                    .onPointerEvent(PointerEventType.Enter) {
                         hoverLabel = tab.label
-                        false
-                    },
-                    onExit = {
-                        hoverLabel = null
-                        false
                     }
-                ),
+                    .onPointerEvent(PointerEventType.Exit) {
+                        if (hoverLabel == tab.label) hoverLabel = null
+                    },
                 icon = {
                     Icon(
                         imageVector = tab.icon(),
@@ -835,7 +855,9 @@ private fun ResultsCard(result: com.tradesketch.estimator.domain.model.TakeoffRe
 private fun ExportTab(
     state: DesktopAppState,
     exportViewMode: ExportViewMode,
-    onExportViewModeChange: (ExportViewMode) -> Unit
+    onExportViewModeChange: (ExportViewMode) -> Unit,
+    exportGridEnabled: Boolean,
+    onExportGridEnabledChange: (Boolean) -> Unit
 ) {
     val project = state.selectedProject
     if (project == null) {
@@ -846,18 +868,18 @@ private fun ExportTab(
     }
 
     val takeoff = state.currentTakeoffResult
-    if (takeoff == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            EmptyStateCard("No takeoff result yet", "Use the Takeoff tab before exporting.")
-        }
-        return
-    }
+    var exportStatus by remember(project.id) { mutableStateOf<String?>(null) }
+    val takeoffReady = takeoff != null
 
-    val content = when (exportViewMode) {
-        ExportViewMode.SUMMARY -> state.exportSummary()
-        ExportViewMode.REPORT -> state.exportTextReport()
-        ExportViewMode.CSV -> state.exportCsv()
-        ExportViewMode.JSON -> state.exportJson()
+    val content = if (takeoffReady) {
+        when (exportViewMode) {
+            ExportViewMode.SUMMARY -> state.exportSummary()
+            ExportViewMode.REPORT -> state.exportTextReport()
+            ExportViewMode.CSV -> state.exportCsv()
+            ExportViewMode.JSON -> state.exportJson()
+        }
+    } else {
+        "No takeoff result yet. Use the Materials tab first for text/PDF/CSV/JSON exports. Blueprint PNG export is available now."
     }
 
     Column(
@@ -876,13 +898,71 @@ private fun ExportTab(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { copyToClipboard(content) }) {
+        if (!takeoffReady) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = "Takeoff not ready. You can still export blueprint PNG (grid on/off).",
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Blueprint Grid")
+            FilterChip(
+                selected = exportGridEnabled,
+                onClick = { onExportGridEnabledChange(true) },
+                label = { Text("On") }
+            )
+            FilterChip(
+                selected = !exportGridEnabled,
+                onClick = { onExportGridEnabledChange(false) },
+                label = { Text("Off") }
+            )
+        }
+
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val plainTextExtension = when (exportViewMode) {
+                ExportViewMode.JSON -> "json"
+                ExportViewMode.CSV -> "csv"
+                else -> "txt"
+            }
+            Button(
+                onClick = {
+                    copyToClipboard(content)
+                        .onSuccess {
+                            exportStatus = "Copied ${exportViewMode.label} to clipboard."
+                        }
+                        .onFailure { error ->
+                            exportStatus = "Copy failed: ${error.message ?: "unknown error"}"
+                        }
+                },
+                enabled = takeoffReady
+            ) {
                 Icon(Icons.Default.ContentCopy, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy")
             }
-            OutlinedButton(onClick = { copyToClipboard(state.exportTextReport()) }) {
+            OutlinedButton(
+                onClick = {
+                    copyToClipboard(state.exportTextReport())
+                        .onSuccess {
+                            exportStatus = "Copied full report to clipboard."
+                        }
+                        .onFailure { error ->
+                            exportStatus = "Copy failed: ${error.message ?: "unknown error"}"
+                        }
+                },
+                enabled = takeoffReady
+            ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Copy Full Report")
@@ -890,10 +970,16 @@ private fun ExportTab(
             OutlinedButton(
                 onClick = {
                     saveWithDesktopChooser(
-                        suggestedName = "tradesketch_export.${if (exportViewMode == ExportViewMode.JSON) "json" else if (exportViewMode == ExportViewMode.CSV) "csv" else "txt"}",
+                        suggestedName = "tradesketch_export.$plainTextExtension",
+                        expectedExtension = plainTextExtension,
                         bytes = content.toByteArray()
-                    )
-                }
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
+                },
+                enabled = takeoffReady
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -901,21 +987,67 @@ private fun ExportTab(
             }
             OutlinedButton(
                 onClick = {
+                    val currentTakeoff = takeoff ?: return@OutlinedButton
                     val pdfBytes = buildSimplePdfBytes(
                         project = project,
-                        takeoff = takeoff,
+                        takeoff = currentTakeoff,
                         title = "${project.name} ${state.selectedTakeoffType.label} Export",
                         body = state.exportTextReport()
                     )
                     saveWithDesktopChooser(
                         suggestedName = "tradesketch_export.pdf",
+                        expectedExtension = "pdf",
                         bytes = pdfBytes
-                    )
-                }
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
+                },
+                enabled = takeoffReady
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Save PDF")
+            }
+            OutlinedButton(
+                onClick = {
+                    val pngBytes = buildBlueprintPngBytes(
+                        project = project,
+                        includeGrid = exportGridEnabled
+                    )
+                    saveWithDesktopChooser(
+                        suggestedName = if (exportGridEnabled) {
+                            "tradesketch_blueprint_grid.png"
+                        } else {
+                            "tradesketch_blueprint_nogrid.png"
+                        },
+                        expectedExtension = "png",
+                        bytes = pngBytes
+                    ).onSuccess { file ->
+                        exportStatus = "Saved ${file.name}"
+                    }.onFailure { error ->
+                        exportStatus = "Save failed: ${error.message ?: "unknown error"}"
+                    }
+                }
+            ) {
+                Icon(Icons.Default.FileDownload, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Save Blueprint PNG")
+            }
+        }
+
+        if (!exportStatus.isNullOrBlank()) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Text(
+                    text = exportStatus.orEmpty(),
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
 
@@ -924,7 +1056,11 @@ private fun ExportTab(
             onValueChange = {},
             readOnly = true,
             modifier = Modifier.fillMaxSize(),
-            label = { Text("${exportViewMode.label} Output") }
+            label = {
+                Text(
+                    if (takeoffReady) "${exportViewMode.label} Output" else "Export Preview"
+                )
+            }
         )
     }
 }
@@ -1050,23 +1186,197 @@ private fun WorkspaceTab.icon() = when (this) {
     WorkspaceTab.SETTINGS_ABOUT -> Icons.Default.Tune
 }
 
-private fun copyToClipboard(value: String) {
-    val selection = StringSelection(value)
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+private fun copyToClipboard(value: String): Result<Unit> {
+    return runCatching {
+        val selection = StringSelection(value)
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+    }
 }
 
 private fun saveWithDesktopChooser(
     suggestedName: String,
+    expectedExtension: String,
     bytes: ByteArray
-) {
-    val chooser = JFileChooser().apply {
-        selectedFile = File(suggestedName)
+): Result<File> {
+    val homeDir = File(System.getProperty("user.home")).absoluteFile
+    val desktopDir = File(homeDir, "Desktop")
+    val initialDir = if (desktopDir.exists() && desktopDir.isDirectory) desktopDir else homeDir
+    val chooser = JFileChooser(initialDir).apply {
+        selectedFile = File(initialDir, suggestedName)
     }
     val result = chooser.showSaveDialog(null)
-    if (result == JFileChooser.APPROVE_OPTION) {
-        runCatching {
-            chooser.selectedFile.writeBytes(bytes)
+    if (result != JFileChooser.APPROVE_OPTION) {
+        return Result.failure(IllegalStateException("Save canceled."))
+    }
+
+    val normalizedExtension = expectedExtension.trim().trimStart('.').lowercase(Locale.US)
+    val rawTarget = chooser.selectedFile.absoluteFile
+    val resolvedTarget = if (rawTarget.extension.lowercase(Locale.US) == normalizedExtension) {
+        rawTarget
+    } else {
+        File(rawTarget.parentFile ?: initialDir, "${rawTarget.name}.$normalizedExtension")
+    }
+
+    if (resolvedTarget.exists()) {
+        val overwriteResult = JOptionPane.showConfirmDialog(
+            null,
+            "Replace existing file?\n${resolvedTarget.absolutePath}",
+            "Confirm overwrite",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        )
+        if (overwriteResult != JOptionPane.YES_OPTION) {
+            return Result.failure(IllegalStateException("Save canceled."))
         }
+    }
+
+    return runCatching {
+        resolvedTarget.writeBytes(bytes)
+        resolvedTarget
+    }
+}
+
+private fun buildBlueprintPngBytes(
+    project: Project,
+    includeGrid: Boolean
+): ByteArray {
+    val blueprint = project.authoritativeBlueprint()
+    val widthPx = 1600
+    val heightPx = 1000
+    val paddingPx = 70.0
+    val image = BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB)
+    val graphics = image.createGraphics()
+
+    val allPoints = blueprint.walls.flatMap { wall -> listOf(wall.start, wall.end) }
+    val minX = allPoints.minOfOrNull { it.x.toDouble() } ?: -10_000.0
+    val maxX = allPoints.maxOfOrNull { it.x.toDouble() } ?: 10_000.0
+    val minY = allPoints.minOfOrNull { it.y.toDouble() } ?: -10_000.0
+    val maxY = allPoints.maxOfOrNull { it.y.toDouble() } ?: 10_000.0
+    val spanX = (maxX - minX).coerceAtLeast(1.0)
+    val spanY = (maxY - minY).coerceAtLeast(1.0)
+    val scale = minOf(
+        (widthPx - (paddingPx * 2.0)) / spanX,
+        (heightPx - (paddingPx * 2.0)) / spanY
+    )
+    fun mapX(worldX: Double): Double = paddingPx + ((worldX - minX) * scale)
+    fun mapY(worldY: Double): Double = heightPx - paddingPx - ((worldY - minY) * scale)
+
+    try {
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+        graphics.color = AwtColor(14, 25, 42)
+        graphics.fillRect(0, 0, widthPx, heightPx)
+
+        if (includeGrid) {
+            val gridStepMm = Millimeters.fromFeet(1.0).value.toDouble()
+            val gridStepPx = gridStepMm * scale
+            if (gridStepPx in 12.0..220.0) {
+                graphics.color = AwtColor(155, 195, 232, 60)
+                graphics.stroke = BasicStroke(1f)
+                var gridX = kotlin.math.floor(minX / gridStepMm) * gridStepMm
+                while (gridX <= maxX) {
+                    val x = mapX(gridX)
+                    graphics.drawLine(x.toInt(), 0, x.toInt(), heightPx)
+                    gridX += gridStepMm
+                }
+                var gridY = kotlin.math.floor(minY / gridStepMm) * gridStepMm
+                while (gridY <= maxY) {
+                    val y = mapY(gridY)
+                    graphics.drawLine(0, y.toInt(), widthPx, y.toInt())
+                    gridY += gridStepMm
+                }
+            }
+        }
+
+        graphics.color = AwtColor(46, 84, 121, 220)
+        graphics.stroke = BasicStroke(2f)
+        val axisX = mapX(0.0).toInt()
+        val axisY = mapY(0.0).toInt()
+        graphics.drawLine(axisX, 0, axisX, heightPx)
+        graphics.drawLine(0, axisY, widthPx, axisY)
+
+        graphics.stroke = BasicStroke(4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+        graphics.color = AwtColor(170, 218, 255)
+        blueprint.walls.forEach { wall ->
+            graphics.drawLine(
+                mapX(wall.start.x.toDouble()).toInt(),
+                mapY(wall.start.y.toDouble()).toInt(),
+                mapX(wall.end.x.toDouble()).toInt(),
+                mapY(wall.end.y.toDouble()).toInt()
+            )
+        }
+
+        blueprint.openings.forEach { opening ->
+            val wall = blueprint.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
+            val center = com.tradesketch.estimator.domain.calc.BlueprintSnapMath.pointOnWall(wall, opening.t)
+            val centerX = mapX(center.x.toDouble())
+            val centerY = mapY(center.y.toDouble())
+            val width = maxOf(opening.widthMm.toDouble() * scale, 12.0)
+            when (opening.type) {
+                OpeningType.DOOR -> {
+                    graphics.color = AwtColor(233, 192, 111)
+                    graphics.stroke = BasicStroke(2.4f)
+                    graphics.draw(
+                        Arc2D.Double(
+                            centerX - (width / 2.0),
+                            centerY - (width / 2.0),
+                            width,
+                            width,
+                            -90.0,
+                            90.0,
+                            Arc2D.OPEN
+                        )
+                    )
+                }
+                OpeningType.WINDOW -> {
+                    graphics.color = AwtColor(194, 247, 255)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                }
+                OpeningType.STAIR_UP -> {
+                    graphics.color = AwtColor(141, 224, 161)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                    graphics.drawLine(centerX.toInt(), (centerY + 9).toInt(), centerX.toInt(), (centerY - 9).toInt())
+                }
+                OpeningType.STAIR_DOWN -> {
+                    graphics.color = AwtColor(255, 182, 119)
+                    graphics.stroke = BasicStroke(3f)
+                    graphics.drawLine(
+                        (centerX - (width / 2.0)).toInt(),
+                        centerY.toInt(),
+                        (centerX + (width / 2.0)).toInt(),
+                        centerY.toInt()
+                    )
+                    graphics.drawLine((centerX - 9).toInt(), centerY.toInt(), (centerX + 9).toInt(), centerY.toInt())
+                }
+            }
+        }
+
+        graphics.color = AwtColor(236, 245, 255)
+        graphics.drawString("${project.name} Blueprint", 22, 28)
+        graphics.drawString(
+            "Grid: ${if (includeGrid) "On" else "Off"}  Walls: ${blueprint.walls.size}  Openings: ${blueprint.openings.size}",
+            22,
+            48
+        )
+    } finally {
+        graphics.dispose()
+    }
+
+    return ByteArrayOutputStream().use { output ->
+        ImageIO.write(image, "png", output)
+        output.toByteArray()
     }
 }
 
@@ -1183,9 +1493,9 @@ private fun buildSimplePdfBytes(
     return builder.toString().toByteArray()
 }
 
-private fun Double.toPdf(): String = "%.2f".format(this)
+private fun Double.toPdf(): String = String.format(Locale.US, "%.2f", this)
 
-private fun Float.toPdf(): String = "%.2f".format(this)
+private fun Float.toPdf(): String = String.format(Locale.US, "%.2f", this)
 
 private fun wrapPdfText(text: String, maxChars: Int): List<String> {
     if (text.length <= maxChars) return listOf(text)

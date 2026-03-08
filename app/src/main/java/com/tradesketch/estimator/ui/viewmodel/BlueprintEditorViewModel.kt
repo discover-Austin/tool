@@ -112,6 +112,21 @@ class BlueprintEditorViewModel @Inject constructor(
         }
     }
 
+    fun addWalls(walls: List<WallSegment>) {
+        if (walls.isEmpty()) return
+        updateDocument(label = "Add Walls") { document ->
+            val updatedWalls = document.walls + walls
+            val rooms = detectRoomsByFloor(
+                walls = updatedWalls,
+                existingRooms = document.rooms
+            )
+            document.copy(
+                walls = updatedWalls,
+                rooms = rooms
+            ).withUndoMeta(undoDepth = undoStack.size + 1)
+        }
+    }
+
     fun replaceWalls(walls: List<WallSegment>) {
         updateDocument(label = "Replace Walls") { document ->
             val rooms = detectRoomsByFloor(
@@ -570,6 +585,7 @@ class BlueprintEditorViewModel @Inject constructor(
 enum class BlueprintDraftTool {
     SELECT,
     DRAW_WALL,
+    DRAW_BOX,
     PLACE_DOOR,
     PLACE_WINDOW,
     PLACE_STAIR_UP,

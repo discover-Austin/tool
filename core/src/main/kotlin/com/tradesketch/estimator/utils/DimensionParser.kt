@@ -6,6 +6,7 @@ import kotlin.math.roundToLong
 object DimensionParser {
     private val mixedFeetPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*'\s*(\d+(?:\.\d+)?)?\s*(?:"|in)?\s*$""")
     private val millimeterPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*mm\s*$""", RegexOption.IGNORE_CASE)
+    private val centimeterPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*(?:cm|centimeters?|centimetres?)\s*$""", RegexOption.IGNORE_CASE)
     private val meterPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*m\s*$""", RegexOption.IGNORE_CASE)
     private val feetPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*(?:ft|feet|')\s*$""", RegexOption.IGNORE_CASE)
     private val inchPattern = Regex("""^\s*(-?\d+(?:\.\d+)?)\s*(?:in|")\s*$""", RegexOption.IGNORE_CASE)
@@ -24,6 +25,11 @@ object DimensionParser {
         millimeterPattern.matchEntire(trimmed)?.let { match ->
             val mm = match.groupValues[1].toDoubleOrNull() ?: return null
             return mm.roundToLong()
+        }
+
+        centimeterPattern.matchEntire(trimmed)?.let { match ->
+            val cm = match.groupValues[1].toDoubleOrNull() ?: return null
+            return (cm * 10.0).roundToLong()
         }
 
         meterPattern.matchEntire(trimmed)?.let { match ->

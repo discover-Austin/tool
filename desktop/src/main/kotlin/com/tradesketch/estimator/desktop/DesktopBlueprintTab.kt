@@ -2,7 +2,9 @@ package com.tradesketch.estimator.desktop
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -25,15 +28,25 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -54,12 +67,16 @@ import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.ProjectTemplate
+import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
+import javax.swing.JOptionPane
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.roundToLong
 import kotlin.math.roundToInt
@@ -68,10 +85,62 @@ import kotlin.math.sin
 private const val BASE_PX_PER_MM = 0.065f
 private const val TOOL_SELECT = "select"
 private const val TOOL_DRAW = "draw"
+private const val TOOL_BOX = "box"
 private const val TOOL_DOOR = "door"
 private const val TOOL_WINDOW = "window"
+private const val TOOL_STAIR_UP = "stair_up"
+private const val TOOL_STAIR_DOWN = "stair_down"
 private const val TOOL_PAN = "pan"
-private const val TOOL_MEASURE = "measure"
+private const val FLOOR_TAG_PREFIX = "floor:"
+private const val FLOOR_GROUND_LEVEL = 0
+private const val DIAL_ANGLE_STEP_DEGREES = 1.0
+private val DIAL_LENGTH_STEP_MM = Millimeters.fromInches(1.0).value
+private const val MIN_DRAFT_GEOMETRY_MM = 1L
+private const val MAX_DRAFT_GEOMETRY_MM = 1_000_000L
+private const val MIN_GRID_STEP_FEET = 0.0328084 // 1 cm
+private const val MAX_GRID_STEP_FEET = 20.0
+private const val MIN_SNAP_THRESHOLD_FEET = 0.2
+private const val MAX_SNAP_THRESHOLD_FEET = 2.0
+private const val WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM = 30L
+private val MIN_WALL_LENGTH_TO_ADD_MM = Millimeters.fromInches(1.0).value
+
+private data class DesktopOpeningPreset(
+    val name: String,
+    val type: OpeningType,
+    val widthFeet: Double,
+    val heightFeet: Double,
+    val sillFeet: Double
+)
+
+private val desktopDoorPresets = listOf(
+    DesktopOpeningPreset("2'8\" x 6'8\"", OpeningType.DOOR, 2.67, 6.67, 0.0),
+    DesktopOpeningPreset("3'0\" x 7'0\"", OpeningType.DOOR, 3.0, 7.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 7'0\"", OpeningType.DOOR, 3.5, 7.0, 0.0),
+    DesktopOpeningPreset("5'0\" x 7'0\" dbl", OpeningType.DOOR, 5.0, 7.0, 0.0),
+    DesktopOpeningPreset("8'0\" x 7'0\" slider", OpeningType.DOOR, 8.0, 7.0, 0.0),
+    DesktopOpeningPreset("16'0\" x 7'0\" garage", OpeningType.DOOR, 16.0, 7.0, 0.0)
+)
+
+private val desktopWindowPresets = listOf(
+    DesktopOpeningPreset("2'0\" x 3'0\"", OpeningType.WINDOW, 2.0, 3.0, 3.0),
+    DesktopOpeningPreset("3'0\" x 3'0\"", OpeningType.WINDOW, 3.0, 3.0, 3.0),
+    DesktopOpeningPreset("3'0\" x 4'0\"", OpeningType.WINDOW, 3.0, 4.0, 3.0),
+    DesktopOpeningPreset("4'0\" x 4'0\"", OpeningType.WINDOW, 4.0, 4.0, 3.0),
+    DesktopOpeningPreset("5'0\" x 4'0\"", OpeningType.WINDOW, 5.0, 4.0, 3.0),
+    DesktopOpeningPreset("6'0\" x 4'0\"", OpeningType.WINDOW, 6.0, 4.0, 3.0)
+)
+
+private val desktopStairUpPresets = listOf(
+    DesktopOpeningPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_UP, 3.0, 9.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_UP, 3.5, 10.0, 0.0),
+    DesktopOpeningPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_UP, 4.0, 11.0, 0.0)
+)
+
+private val desktopStairDownPresets = listOf(
+    DesktopOpeningPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_DOWN, 3.0, 9.0, 0.0),
+    DesktopOpeningPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_DOWN, 3.5, 10.0, 0.0),
+    DesktopOpeningPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_DOWN, 4.0, 11.0, 0.0)
+)
 
 private data class DesktopToolChipSpec(
     val key: String,
@@ -94,17 +163,19 @@ private data class DesktopActionButtonSpec(
 private val desktopToolChipSpecs = listOf(
     DesktopToolChipSpec(key = TOOL_SELECT, label = "Select"),
     DesktopToolChipSpec(key = TOOL_DRAW, label = "Draw"),
+    DesktopToolChipSpec(key = TOOL_BOX, label = "Box"),
     DesktopToolChipSpec(key = TOOL_DOOR, label = "Door", openingType = OpeningType.DOOR),
     DesktopToolChipSpec(key = TOOL_WINDOW, label = "Window", openingType = OpeningType.WINDOW),
-    DesktopToolChipSpec(key = TOOL_PAN, label = "Pan"),
-    DesktopToolChipSpec(key = TOOL_MEASURE, label = "Measure")
+    DesktopToolChipSpec(key = TOOL_STAIR_UP, label = "Stair Up", openingType = OpeningType.STAIR_UP),
+    DesktopToolChipSpec(key = TOOL_STAIR_DOWN, label = "Stair Down", openingType = OpeningType.STAIR_DOWN),
+    DesktopToolChipSpec(key = TOOL_PAN, label = "Pan")
 )
 
 private fun OpeningType.toolKey(): String = when (this) {
     OpeningType.DOOR -> TOOL_DOOR
     OpeningType.WINDOW -> TOOL_WINDOW
-    OpeningType.STAIR_UP -> TOOL_DRAW
-    OpeningType.STAIR_DOWN -> TOOL_DRAW
+    OpeningType.STAIR_UP -> TOOL_STAIR_UP
+    OpeningType.STAIR_DOWN -> TOOL_STAIR_DOWN
 }
 
 private fun OpeningType.label(): String = when (this) {
@@ -112,6 +183,50 @@ private fun OpeningType.label(): String = when (this) {
     OpeningType.WINDOW -> "Window"
     OpeningType.STAIR_UP -> "Stair Up"
     OpeningType.STAIR_DOWN -> "Stair Down"
+}
+
+private fun openingPresetsForType(type: OpeningType): List<DesktopOpeningPreset> = when (type) {
+    OpeningType.DOOR -> desktopDoorPresets
+    OpeningType.WINDOW -> desktopWindowPresets
+    OpeningType.STAIR_UP -> desktopStairUpPresets
+    OpeningType.STAIR_DOWN -> desktopStairDownPresets
+}
+
+private fun floorTag(level: Int): String = "$FLOOR_TAG_PREFIX$level"
+
+private fun parseFloorLevelTag(tag: String?): Int? {
+    val normalized = tag?.trim() ?: return null
+    if (!normalized.startsWith(FLOOR_TAG_PREFIX)) return null
+    val raw = normalized.removePrefix(FLOOR_TAG_PREFIX)
+    if (raw.equals("lower", ignoreCase = true)) return FLOOR_GROUND_LEVEL
+    if (raw.equals("upper", ignoreCase = true)) return FLOOR_GROUND_LEVEL + 1
+    return raw.toIntOrNull()
+}
+
+private fun Set<String>.resolveFloorLevelOrDefault(defaultLevel: Int = FLOOR_GROUND_LEVEL): Int {
+    val rawFloorTag = firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
+    return parseFloorLevelTag(rawFloorTag) ?: defaultLevel
+}
+
+private fun WallSegment.isOnFloor(level: Int): Boolean {
+    return tags.resolveFloorLevelOrDefault() == level
+}
+
+private fun com.tradesketch.estimator.domain.model.Room.isOnFloor(level: Int): Boolean {
+    return tags.resolveFloorLevelOrDefault() == level
+}
+
+private fun BlueprintOpening.isOnFloor(level: Int, wallsById: Map<String, WallSegment>): Boolean {
+    val inheritedFloor = wallsById[wallId]?.tags?.resolveFloorLevelOrDefault()
+    val openingFloor = tags.resolveFloorLevelOrDefault(inheritedFloor ?: FLOOR_GROUND_LEVEL)
+    return openingFloor == level
+}
+
+private fun Int.floorLabel(): String = when {
+    this == FLOOR_GROUND_LEVEL -> "Ground"
+    this > FLOOR_GROUND_LEVEL -> (this + 1).toString()
+    this == -1 -> "Basement"
+    else -> "Basement ${abs(this)}"
 }
 
 @Composable
@@ -139,9 +254,15 @@ fun DesktopBlueprintTab(
     var tool by remember(project.id) { mutableStateOf(TOOL_DRAW) }
     var drawingStart by remember(project.id) { mutableStateOf<PointMm?>(null) }
     var drawingPreview by remember(project.id) { mutableStateOf<PointMm?>(null) }
+    var boxStart by remember(project.id) { mutableStateOf<PointMm?>(null) }
+    var boxPreview by remember(project.id) { mutableStateOf<PointMm?>(null) }
+    var boxRotationRadians by remember(project.id) { mutableStateOf(0.0) }
     var chainOrigin by remember(project.id) { mutableStateOf<PointMm?>(null) }
     var chainWalls by remember(project.id) { mutableStateOf(true) }
     var detachedWalls by remember(project.id) { mutableStateOf(false) }
+    var selectedWallId by remember(project.id) { mutableStateOf<String?>(null) }
+    var selectedOpeningId by remember(project.id) { mutableStateOf<String?>(null) }
+    var selectedFloor by remember(project.id) { mutableStateOf(FLOOR_GROUND_LEVEL) }
     var scale by remember(project.id) { mutableStateOf(1f) }
     var pan by remember(project.id) { mutableStateOf(Offset.Zero) }
     var snap by remember(project.id) { mutableStateOf(BlueprintSnapSettings()) }
@@ -149,6 +270,7 @@ fun DesktopBlueprintTab(
     var angleInput by remember(project.id) { mutableStateOf("") }
     var showAddons by remember(project.id) { mutableStateOf(openAddonsByDefault) }
     var showParams by remember(project.id) { mutableStateOf(false) }
+    var showGuide by remember(project.id) { mutableStateOf(false) }
     var openingType by remember(project.id) { mutableStateOf(OpeningType.DOOR) }
     var customWidthFeet by remember(project.id) { mutableStateOf("3.0") }
     var customHeightFeet by remember(project.id) { mutableStateOf("7.0") }
@@ -158,6 +280,8 @@ fun DesktopBlueprintTab(
     var workspaceRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasRoot by remember(project.id) { mutableStateOf(Offset.Zero) }
     var canvasSize by remember(project.id) { mutableStateOf(Size.Zero) }
+    var livePointer by remember(project.id) { mutableStateOf<PointMm?>(null) }
+    val workspaceFocusRequester = remember(project.id) { FocusRequester() }
     var wallHeightFeet by remember(project.id, document.params.wallHeightMm) {
         mutableStateOf("%.2f".format(Millimeters(document.params.wallHeightMm).toFeet()))
     }
@@ -167,27 +291,115 @@ fun DesktopBlueprintTab(
     var wastePercent by remember(project.id, document.params.wasteFactorPercent) {
         mutableStateOf(document.params.wasteFactorPercent.toString())
     }
+    var gridStepInput by remember(project.id) { mutableStateOf("%.2f".format(snap.gridStepFeet)) }
+    var snapThresholdInput by remember(project.id) { mutableStateOf("%.2f".format(snap.thresholdFeet)) }
+    var selectedOpeningPresetName by remember(project.id, openingType) {
+        mutableStateOf(openingPresetsForType(openingType).firstOrNull()?.name ?: "Custom")
+    }
 
+    LaunchedEffect(project.id) {
+        selectedFloor = FLOOR_GROUND_LEVEL
+        drawingStart = null
+        drawingPreview = null
+        boxStart = null
+        boxPreview = null
+        boxRotationRadians = 0.0
+        chainOrigin = null
+        selectedWallId = null
+        selectedOpeningId = null
+        livePointer = null
+        workspaceFocusRequester.requestFocus()
+    }
+    LaunchedEffect(snap.gridStepFeet) {
+        gridStepInput = "%.2f".format(snap.gridStepFeet)
+    }
+    LaunchedEffect(snap.thresholdFeet) {
+        snapThresholdInput = "%.2f".format(snap.thresholdFeet)
+    }
     LaunchedEffect(project.id, openAddonsByDefault) {
         showAddons = openAddonsByDefault
         showParams = false
     }
+    LaunchedEffect(selectedFloor) {
+        drawingStart = null
+        drawingPreview = null
+        boxStart = null
+        boxPreview = null
+        boxRotationRadians = 0.0
+        chainOrigin = null
+        draggingOpeningType = null
+        draggingScreenPoint = null
+        selectedWallId = null
+        selectedOpeningId = null
+        livePointer = null
+    }
+    val allWalls = document.walls
+    val wallsById = allWalls.associateBy { it.id }
+    val floorWalls = allWalls.filter { wall -> wall.isOnFloor(selectedFloor) }
+    val floorRooms = document.rooms.filter { room -> room.isOnFloor(selectedFloor) }
+    val floorOpenings = document.openings.filter { opening ->
+        opening.isOnFloor(selectedFloor, wallsById)
+    }
+    val floorDocument = document.copy(
+        walls = floorWalls,
+        rooms = floorRooms,
+        openings = floorOpenings
+    )
 
-    val wallLength = document.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
-    val netArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(document).values.sum() -
-        BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(document).values.sum()
+    LaunchedEffect(floorWalls, floorOpenings) {
+        if (selectedWallId != null && floorWalls.none { it.id == selectedWallId }) {
+            selectedWallId = null
+        }
+        if (selectedOpeningId != null && floorOpenings.none { it.id == selectedOpeningId }) {
+            selectedOpeningId = null
+        }
+    }
+
+    val wallLength = floorWalls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
+    val netArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(floorDocument).values.sum() -
+        BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(floorDocument).values.sum()
+    val selectedWall = selectedWallId?.let { id -> floorWalls.firstOrNull { it.id == id } }
+    val selectedOpening = selectedOpeningId?.let { id -> floorOpenings.firstOrNull { it.id == id } }
+    var selectedOpeningWidthInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningHeightInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningSillInput by remember(project.id) { mutableStateOf("") }
+    var selectedOpeningPositionInput by remember(project.id) { mutableStateOf("") }
+    LaunchedEffect(
+        selectedOpening?.id,
+        selectedOpening?.widthMm,
+        selectedOpening?.heightMm,
+        selectedOpening?.sillMm,
+        selectedOpening?.t
+    ) {
+        if (selectedOpening != null) {
+            selectedOpeningWidthInput = "%.2f".format(Millimeters(selectedOpening.widthMm).toFeet())
+            selectedOpeningHeightInput = "%.2f".format(Millimeters(selectedOpening.heightMm).toFeet())
+            selectedOpeningSillInput = "%.2f".format(Millimeters(selectedOpening.sillMm).toFeet())
+            selectedOpeningPositionInput = "%.0f".format(selectedOpening.t * 100.0)
+        } else {
+            selectedOpeningWidthInput = ""
+            selectedOpeningHeightInput = ""
+            selectedOpeningSillInput = ""
+            selectedOpeningPositionInput = ""
+        }
+    }
     val openingDimensions: (OpeningType) -> Triple<Long, Long, Long> = { type ->
-        val defaults = if (type == OpeningType.DOOR) {
-            Triple(
+        val defaults = when (type) {
+            OpeningType.DOOR -> Triple(
                 Millimeters.fromFeet(3.0).value,
                 Millimeters.fromFeet(7.0).value,
                 0L
             )
-        } else {
-            Triple(
+            OpeningType.WINDOW -> Triple(
                 Millimeters.fromFeet(4.0).value,
                 Millimeters.fromFeet(4.0).value,
                 Millimeters.fromFeet(3.0).value
+            )
+            OpeningType.STAIR_UP,
+            OpeningType.STAIR_DOWN -> Triple(
+                Millimeters.fromFeet(3.0).value,
+                Millimeters.fromFeet(10.0).value,
+                Millimeters.fromFeet(9.0).value
             )
         }
         Triple(
@@ -197,7 +409,7 @@ fun DesktopBlueprintTab(
         )
     }
     val placeOpeningAtWorld: (PointMm, OpeningType) -> Unit = { worldPoint, type ->
-        val nearest = document.walls
+        val nearest = floorWalls
             .map { it to BlueprintSnapMath.pointToWallDistanceMm(worldPoint, it) }
             .minByOrNull { it.second }
             ?.takeIf { it.second <= Millimeters.fromFeet(snap.thresholdFeet * 2).value }
@@ -212,11 +424,15 @@ fun DesktopBlueprintTab(
                 sillMm = dims.third,
                 type = type,
                 openingId = UUID.randomUUID().toString()
+            ).copy(
+                tags = setOf(floorTag(selectedFloor))
             )
             state.updateBlueprintDocument(
                 updated = document.copy(openings = document.openings + opening),
                 label = "Add Opening"
             )
+            selectedOpeningId = opening.id
+            selectedWallId = null
         }
     }
     val finishAddonDrag: () -> Unit = {
@@ -236,9 +452,290 @@ fun DesktopBlueprintTab(
         draggingOpeningType = null
         draggingScreenPoint = null
     }
+    val setTool: (String) -> Unit = { nextTool ->
+        tool = nextTool
+        if (nextTool != TOOL_DRAW) {
+            drawingStart = null
+            drawingPreview = null
+            chainOrigin = null
+        }
+        if (nextTool != TOOL_BOX) {
+            boxStart = null
+            boxPreview = null
+            boxRotationRadians = 0.0
+        }
+    }
     val selectOpeningTool: (OpeningType) -> Unit = { type ->
         openingType = type
-        tool = type.toolKey()
+        selectedOpeningPresetName = openingPresetsForType(type).firstOrNull()?.name ?: "Custom"
+        setTool(type.toolKey())
+    }
+    val applyOpeningPreset: (DesktopOpeningPreset) -> Unit = { preset ->
+        selectOpeningTool(preset.type)
+        customWidthFeet = "%.2f".format(preset.widthFeet)
+        customHeightFeet = "%.2f".format(preset.heightFeet)
+        customSillFeet = "%.2f".format(preset.sillFeet)
+        selectedOpeningPresetName = preset.name
+    }
+    val applyGridStepFeet: (Double) -> Unit = { value ->
+        val clamped = value.coerceIn(MIN_GRID_STEP_FEET, MAX_GRID_STEP_FEET)
+        snap = snap.copy(
+            gridEnabled = true,
+            gridStepFeet = clamped
+        )
+        gridStepInput = "%.2f".format(clamped)
+    }
+    val nudgeGridStepInches: (Int) -> Unit = { deltaInches ->
+        val currentInches = (snap.gridStepFeet * 12.0).roundToInt()
+        val minInches = (MIN_GRID_STEP_FEET * 12.0).roundToInt()
+        val maxInches = (MAX_GRID_STEP_FEET * 12.0).roundToInt()
+        val nextInches = (currentInches + deltaInches).coerceIn(minInches, maxInches)
+        applyGridStepFeet(nextInches / 12.0)
+    }
+    val applySnapThresholdFeet: (Double) -> Unit = { value ->
+        val clamped = value.coerceIn(MIN_SNAP_THRESHOLD_FEET, MAX_SNAP_THRESHOLD_FEET)
+        snap = snap.copy(thresholdFeet = clamped)
+        snapThresholdInput = "%.2f".format(clamped)
+    }
+    val nudgeSnapThreshold: (Double) -> Unit = { delta ->
+        applySnapThresholdFeet(snap.thresholdFeet + delta)
+    }
+    val cancelCurrentAction: () -> Unit = {
+        drawingStart = null
+        drawingPreview = null
+        chainOrigin = null
+        boxStart = null
+        boxPreview = null
+        boxRotationRadians = 0.0
+        draggingOpeningType = null
+        draggingScreenPoint = null
+        selectedWallId = null
+        selectedOpeningId = null
+        livePointer = null
+        if (tool != TOOL_SELECT && tool != TOOL_PAN) {
+            tool = TOOL_DRAW
+        }
+    }
+    val deleteSelectedGeometry: () -> Unit = {
+        val openingId = selectedOpeningId
+        if (openingId != null) {
+            state.updateBlueprintDocument(
+                updated = document.copy(
+                    openings = document.openings.filterNot { it.id == openingId }
+                ),
+                label = "Delete Opening"
+            )
+            selectedOpeningId = null
+        } else {
+            val wallId = selectedWallId
+            if (wallId != null) {
+                val updatedWalls = document.walls.filterNot { it.id == wallId }
+                val updatedOpenings = document.openings.filterNot { it.wallId == wallId }
+                state.updateBlueprintDocument(
+                    updated = document.copy(
+                        walls = updatedWalls,
+                        openings = updatedOpenings,
+                        rooms = mergeDetectedRoomsForFloor(
+                            existingRooms = document.rooms,
+                            walls = updatedWalls,
+                            floorLevel = selectedFloor
+                        )
+                    ),
+                    label = "Delete Wall"
+                )
+                selectedWallId = null
+            }
+        }
+    }
+    val clearAllBlueprintGeometry: () -> Unit = clearAll@{
+        if (document.walls.isEmpty() && document.openings.isEmpty() && document.rooms.isEmpty()) return@clearAll
+        val result = JOptionPane.showConfirmDialog(
+            null,
+            "This removes all geometry on floor ${selectedFloor.floorLabel()}.\nContinue?",
+            "Clear floor",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        )
+        if (result == JOptionPane.YES_OPTION) {
+            val retainedWalls = document.walls.filterNot { wall -> wall.isOnFloor(selectedFloor) }
+            val retainedWallIds = retainedWalls.map { wall -> wall.id }.toSet()
+            val retainedOpenings = document.openings.filter { opening ->
+                val openingFloor = opening.isOnFloor(selectedFloor, wallsById)
+                !openingFloor && retainedWallIds.contains(opening.wallId)
+            }
+            val retainedRooms = document.rooms.filterNot { room -> room.isOnFloor(selectedFloor) }
+            state.updateBlueprintDocument(
+                updated = document.copy(
+                    walls = retainedWalls,
+                    openings = retainedOpenings,
+                    rooms = retainedRooms
+                ),
+                label = "Clear Floor"
+            )
+            selectedWallId = null
+            selectedOpeningId = null
+            drawingStart = null
+            drawingPreview = null
+            boxStart = null
+            boxPreview = null
+            livePointer = null
+        }
+    }
+    fun applyToSelectedWall(
+        label: String,
+        transform: (WallSegment) -> WallSegment
+    ) {
+        val wallId = selectedWallId ?: return
+        val current = document.walls.firstOrNull { wall -> wall.id == wallId } ?: return
+        val updatedWall = transform(current)
+        if (updatedWall == current) return
+        val updatedWalls = document.walls.map { wall ->
+            if (wall.id == wallId) updatedWall else wall
+        }
+        state.updateBlueprintDocument(
+            updated = document.copy(
+                walls = updatedWalls,
+                rooms = mergeDetectedRoomsForFloor(
+                    existingRooms = document.rooms,
+                    walls = updatedWalls,
+                    floorLevel = selectedFloor
+                )
+            ),
+            label = label
+        )
+    }
+    fun applyToSelectedOpening(
+        label: String,
+        transform: (BlueprintOpening) -> BlueprintOpening
+    ) {
+        val openingId = selectedOpeningId ?: return
+        val current = document.openings.firstOrNull { opening -> opening.id == openingId } ?: return
+        val updatedOpening = transform(current)
+        if (updatedOpening == current) return
+        val updatedOpenings = document.openings.map { opening ->
+            if (opening.id == openingId) updatedOpening else opening
+        }
+        state.updateBlueprintDocument(
+            updated = document.copy(openings = updatedOpenings),
+            label = label
+        )
+    }
+    val hasActiveLineDraft = tool == TOOL_DRAW && drawingStart != null && drawingPreview != null
+    val hasActiveBoxDraft = tool == TOOL_BOX && boxStart != null && boxPreview != null
+    val showPrecisionRails = hasActiveLineDraft || hasActiveBoxDraft || selectedWall != null
+    val precisionRotationValue = when {
+        hasActiveLineDraft -> {
+            val start = drawingStart ?: PointMm(0L, 0L)
+            val end = drawingPreview ?: start
+            Math.toDegrees(
+                atan2(
+                    (end.y - start.y).toDouble(),
+                    (end.x - start.x).toDouble()
+                )
+            )
+        }
+        hasActiveBoxDraft -> Math.toDegrees(boxRotationRadians)
+        selectedWall != null -> selectedWall.angleDegrees()
+        else -> 0.0
+    }
+    val precisionSizeLabel = when {
+        hasActiveLineDraft -> {
+            val start = drawingStart ?: PointMm(0L, 0L)
+            val end = drawingPreview ?: start
+            val lengthFeet = Millimeters(BlueprintSnapMath.distanceMillimeters(start, end)).toFeet()
+            "L ${"%.2f".format(lengthFeet)}ft"
+        }
+        hasActiveBoxDraft -> {
+            val start = boxStart ?: PointMm(0L, 0L)
+            val end = boxPreview ?: start
+            val (widthMm, heightMm) = projectDraftBoxDimensions(
+                start = start,
+                oppositeCorner = end,
+                rotationRadians = boxRotationRadians
+            )
+            val widthFeet = Millimeters(abs(widthMm).roundToLong()).toFeet()
+            val heightFeet = Millimeters(abs(heightMm).roundToLong()).toFeet()
+            "${"%.1f".format(widthFeet)}x${"%.1f".format(heightFeet)}ft"
+        }
+        selectedWall != null -> {
+            val lengthFeet = Millimeters(selectedWall.lengthMillimeters()).toFeet()
+            "L ${"%.2f".format(lengthFeet)}ft"
+        }
+        else -> "L 0.00ft"
+    }
+    val precisionSizeTitle = if (hasActiveBoxDraft) "Expand (in)" else "Length (in)"
+    val rightRailPadding = when {
+        showParams -> 286.dp
+        showAddons -> 214.dp
+        showGuide -> 338.dp
+        else -> 10.dp
+    }
+    val applyRotateTick: (Int) -> Unit = rotateTick@{ tickCount ->
+        if (tickCount == 0) return@rotateTick
+        when {
+            hasActiveLineDraft -> {
+                val start = drawingStart ?: return@rotateTick
+                val preview = drawingPreview ?: return@rotateTick
+                drawingPreview = rotateDraftPreviewByDialTicks(
+                    start = start,
+                    currentPreview = preview,
+                    tickCount = tickCount,
+                    scale = scale
+                )
+                lengthInput = ""
+                angleInput = ""
+            }
+            hasActiveBoxDraft -> {
+                val start = boxStart ?: return@rotateTick
+                val preview = boxPreview ?: return@rotateTick
+                val rotated = rotateDraftBoxPreviewByDialTicks(
+                    start = start,
+                    currentPreview = preview,
+                    currentRotationRadians = boxRotationRadians,
+                    tickCount = tickCount
+                )
+                boxPreview = rotated.preview
+                boxRotationRadians = rotated.rotationRadians
+            }
+            selectedWall != null -> {
+                applyToSelectedWall(label = "Rotate Wall") { wall ->
+                    wall.rotateByDegrees(deltaDegrees = tickCount * DIAL_ANGLE_STEP_DEGREES)
+                }
+            }
+        }
+    }
+    val applyLengthTick: (Int) -> Unit = lengthTick@{ tickCount ->
+        if (tickCount == 0) return@lengthTick
+        when {
+            hasActiveLineDraft -> {
+                val start = drawingStart ?: return@lengthTick
+                val preview = drawingPreview ?: return@lengthTick
+                drawingPreview = resizeDraftPreviewByDialTicks(
+                    start = start,
+                    currentPreview = preview,
+                    tickCount = tickCount,
+                    scale = scale
+                )
+                lengthInput = ""
+                angleInput = ""
+            }
+            hasActiveBoxDraft -> {
+                val start = boxStart ?: return@lengthTick
+                val preview = boxPreview ?: return@lengthTick
+                boxPreview = resizeDraftBoxPreviewByDialTicks(
+                    start = start,
+                    currentPreview = preview,
+                    currentRotationRadians = boxRotationRadians,
+                    tickCount = tickCount,
+                    scale = scale
+                )
+            }
+            selectedWall != null -> {
+                applyToSelectedWall(label = "Resize Wall") { wall ->
+                    wall.resizeByLengthDeltaMm(tickCount * DIAL_LENGTH_STEP_MM)
+                }
+            }
+        }
     }
     val updateBlueprintParams: (BlueprintParams) -> Unit = { updatedParams ->
         state.updateBlueprintDocument(
@@ -278,17 +775,70 @@ fun DesktopBlueprintTab(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF0E192A))
+            .focusRequester(workspaceFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Escape -> {
+                        cancelCurrentAction()
+                        true
+                    }
+                    event.key == Key.Delete -> {
+                        if (selectedWallId != null || selectedOpeningId != null) {
+                            deleteSelectedGeometry()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    event.isCtrlPressed && event.isShiftPressed && event.key == Key.Z -> {
+                        if (state.canRedoBlueprint) state.redoBlueprint()
+                        true
+                    }
+                    event.isCtrlPressed && event.key == Key.Y -> {
+                        if (state.canRedoBlueprint) state.redoBlueprint()
+                        true
+                    }
+                    event.isCtrlPressed && event.key == Key.Z -> {
+                        if (state.canUndoBlueprint) state.undoBlueprint()
+                        true
+                    }
+                    event.key == Key.F1 -> {
+                        setTool(TOOL_SELECT)
+                        true
+                    }
+                    event.key == Key.F2 -> {
+                        setTool(TOOL_DRAW)
+                        true
+                    }
+                    event.key == Key.F3 -> {
+                        setTool(TOOL_BOX)
+                        true
+                    }
+                    event.key == Key.F4 -> {
+                        setTool(TOOL_PAN)
+                        true
+                    }
+                    else -> false
+                }
+            }
             .onGloballyPositioned { workspaceRoot = it.positionInRoot() }
     ) {
         DesktopBlueprintCanvas(
-            walls = document.walls,
-            openings = document.openings,
+            walls = floorWalls,
+            openings = floorOpenings,
             tool = tool,
             snap = snap,
             scale = scale,
             pan = pan,
             drawingStart = drawingStart,
             drawingPreview = drawingPreview,
+            boxStart = boxStart,
+            boxPreview = boxPreview,
+            boxRotationRadians = boxRotationRadians,
+            selectedWallId = selectedWallId,
+            selectedOpeningId = selectedOpeningId,
             onScaleChange = { scale = it.coerceIn(0.2f, 7f) },
             onPanChange = { pan = it },
             onCanvasLayout = { root, size ->
@@ -296,72 +846,231 @@ fun DesktopBlueprintTab(
                 canvasSize = size
             },
             onLivePointer = {
+                livePointer = it
                 if (drawingStart != null && tool == TOOL_DRAW) {
                     drawingPreview = it
                 }
+                if (boxStart != null && tool == TOOL_BOX) {
+                    boxPreview = it
+                }
             },
             onTap = { tap ->
-                if (tool == TOOL_DRAW) {
-                    val snapped = BlueprintSnapMath.applySnapping(tap, drawingStart, snap, document.walls)
-                    if (drawingStart == null) {
-                        val chained = if (chainWalls && !detachedWalls) document.walls.lastOrNull()?.end else null
-                        drawingStart = chained ?: snapped
-                        drawingPreview = snapped
-                        if (chainOrigin == null) chainOrigin = drawingStart
-                    } else {
-                        val start = drawingStart ?: return@DesktopBlueprintCanvas
-                        var end = applyLengthAngleOverride(start, snapped, lengthInput, angleInput)
-                        chainOrigin?.let { origin ->
-                            BlueprintSnapMath.roomClosureSnap(
-                                candidateEnd = end,
-                                roomStart = origin,
-                                thresholdMm = Millimeters.fromFeet(snap.thresholdFeet).value
-                            )?.let { end = it }
-                        }
-                        if (end != start) {
-                            val updatedWalls = document.walls + WallSegment(
-                                id = UUID.randomUUID().toString(),
-                                start = start,
-                                end = end,
-                                height = Millimeters(document.params.wallHeightMm),
-                                thickness = Millimeters(document.params.defaultWallThicknessMm),
-                                tags = setOf("drawn")
-                            )
-                            val rooms = RoomLoopDetector.detectRooms(updatedWalls)
-                            state.updateBlueprintDocument(
-                                updated = document.copy(walls = updatedWalls, rooms = rooms),
-                                label = "Add Wall"
-                            )
-                        }
-                        val closed = chainOrigin != null && end == chainOrigin
-                        if (chainWalls && !detachedWalls && !closed) {
-                            drawingStart = end
-                            drawingPreview = end
+                when (tool) {
+                    TOOL_SELECT -> {
+                        val thresholdMm = Millimeters.fromFeet(snap.thresholdFeet * 2.0).value
+                        val nearestOpening = findNearestOpeningAtPoint(
+                            point = tap,
+                            openings = floorOpenings,
+                            walls = floorWalls,
+                            thresholdMm = thresholdMm
+                        )
+                        if (nearestOpening != null) {
+                            selectedOpeningId = nearestOpening.id
+                            selectedWallId = null
                         } else {
-                            drawingStart = null
-                            drawingPreview = null
-                            chainOrigin = null
+                            val nearestWall = findNearestWallAtPoint(
+                                point = tap,
+                                walls = floorWalls,
+                                thresholdMm = thresholdMm
+                            )
+                            selectedWallId = nearestWall?.id
+                            selectedOpeningId = null
                         }
                     }
-                } else if (tool == TOOL_DOOR || tool == TOOL_WINDOW) {
-                    placeOpeningAtWorld(tap, openingType)
+
+                    TOOL_DRAW -> {
+                        val snapped = BlueprintSnapMath.applySnapping(tap, drawingStart, snap, floorWalls)
+                        if (drawingStart == null) {
+                            val chained = if (chainWalls && !detachedWalls) floorWalls.lastOrNull()?.end else null
+                            drawingStart = chained ?: snapped
+                            drawingPreview = snapped
+                            if (chainOrigin == null) chainOrigin = drawingStart
+                        } else {
+                            val start = drawingStart ?: return@DesktopBlueprintCanvas
+                            val previewEnd = drawingPreview ?: snapped
+                            var end = applyLengthAngleOverride(start, previewEnd, lengthInput, angleInput)
+                            if (snap.closureEnabled) {
+                                chainOrigin?.let { origin ->
+                                    BlueprintSnapMath.roomClosureSnap(
+                                        candidateEnd = end,
+                                        roomStart = origin,
+                                        thresholdMm = Millimeters.fromFeet(snap.thresholdFeet).value
+                                    )?.let { end = it }
+                                }
+                            }
+                            val wallLengthMm = BlueprintSnapMath.distanceMillimeters(start, end)
+                            val shouldDetachThisWall = detachedWalls
+                            if (
+                                end != start &&
+                                wallLengthMm >= MIN_WALL_LENGTH_TO_ADD_MM &&
+                                !wallAlreadyExists(
+                                    walls = document.walls,
+                                    start = start,
+                                    end = end,
+                                    toleranceMm = WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM
+                                )
+                            ) {
+                                val newWall = WallSegment(
+                                    id = UUID.randomUUID().toString(),
+                                    start = start,
+                                    end = end,
+                                    height = Millimeters(document.params.wallHeightMm),
+                                    thickness = Millimeters(document.params.defaultWallThicknessMm),
+                                    tags = setOf("drawn", floorTag(selectedFloor))
+                                )
+                                val updatedWalls = document.walls + newWall
+                                val rooms = mergeDetectedRoomsForFloor(
+                                    existingRooms = document.rooms,
+                                    walls = updatedWalls,
+                                    floorLevel = selectedFloor
+                                )
+                                state.updateBlueprintDocument(
+                                    updated = document.copy(walls = updatedWalls, rooms = rooms),
+                                    label = "Add Wall"
+                                )
+                                selectedWallId = newWall.id
+                                selectedOpeningId = null
+                            }
+                            if (shouldDetachThisWall) detachedWalls = false
+                            val closed = chainOrigin != null && end == chainOrigin
+                            if (chainWalls && !shouldDetachThisWall && !closed) {
+                                drawingStart = end
+                                drawingPreview = end
+                            } else {
+                                drawingStart = null
+                                drawingPreview = null
+                                chainOrigin = null
+                            }
+                        }
+                    }
+
+                    TOOL_BOX -> {
+                        if (boxStart == null) {
+                            boxStart = tap
+                            boxPreview = tap
+                            boxRotationRadians = 0.0
+                        } else {
+                            val start = boxStart ?: return@DesktopBlueprintCanvas
+                            val end = boxPreview ?: tap
+                            val walls = buildBoxWalls(
+                                start = start,
+                                end = end,
+                                rotationRadians = boxRotationRadians,
+                                params = document.params,
+                                floorLevel = selectedFloor
+                            )
+                            val candidateWalls = walls.filterNot { wall ->
+                                wallAlreadyExists(
+                                    walls = document.walls,
+                                    start = wall.start,
+                                    end = wall.end,
+                                    toleranceMm = WALL_DUPLICATE_ENDPOINT_TOLERANCE_MM
+                                )
+                            }
+                            if (candidateWalls.isNotEmpty()) {
+                                val updatedWalls = document.walls + candidateWalls
+                                state.updateBlueprintDocument(
+                                    updated = document.copy(
+                                        walls = updatedWalls,
+                                        rooms = mergeDetectedRoomsForFloor(
+                                            existingRooms = document.rooms,
+                                            walls = updatedWalls,
+                                            floorLevel = selectedFloor
+                                        )
+                                    ),
+                                    label = "Add Box"
+                                )
+                                selectedWallId = candidateWalls.last().id
+                                selectedOpeningId = null
+                            }
+                            boxStart = null
+                            boxPreview = null
+                            boxRotationRadians = 0.0
+                        }
+                    }
+
+                    TOOL_DOOR,
+                    TOOL_WINDOW,
+                    TOOL_STAIR_UP,
+                    TOOL_STAIR_DOWN -> {
+                        placeOpeningAtWorld(tap, openingType)
+                    }
                 }
             }
         )
 
         Card(modifier = Modifier.align(Alignment.TopStart).padding(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xCC122035))) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                Text("Rooms: ${document.rooms.size}", color = Color.White)
-                Text("Walls: ${document.walls.size}", color = Color.White)
-                Text("Openings: ${document.openings.size}", color = Color.White)
+            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Floor: ${selectedFloor.floorLabel()}", color = Color.White)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(
+                        onClick = { selectedFloor -= 1 },
+                        modifier = Modifier.width(72.dp)
+                    ) {
+                        Text("Down")
+                    }
+                    Button(
+                        onClick = { selectedFloor = FLOOR_GROUND_LEVEL },
+                        modifier = Modifier.width(84.dp)
+                    ) {
+                        Text("Ground")
+                    }
+                    Button(
+                        onClick = { selectedFloor += 1 },
+                        modifier = Modifier.width(72.dp)
+                    ) {
+                        Text("Up")
+                    }
+                }
+                Text("Rooms: ${floorRooms.size}", color = Color.White)
+                Text("Walls: ${floorWalls.size}", color = Color.White)
+                Text("Openings: ${floorOpenings.size}", color = Color.White)
                 Text("Wall Length: ${"%.1f".format(wallLength)} ft", color = Color.White)
                 Text("Net Area: ${"%.1f".format(netArea.coerceAtLeast(0.0))} sq ft", color = Color.White)
+                livePointer?.let { pointer ->
+                    Text(
+                        "Cursor: X ${"%.2f".format(Millimeters(pointer.x).toFeet())} ft | Y ${"%.2f".format(Millimeters(pointer.y).toFeet())} ft",
+                        color = Color(0xFFB8DFFF)
+                    )
+                }
+                selectedWall?.let { wall ->
+                    Text(
+                        "Selected Wall: ${"%.1f".format(Millimeters(wall.lengthMillimeters()).toFeet())} ft",
+                        color = Color(0xFFFFE09B)
+                    )
+                }
+                selectedOpening?.let { opening ->
+                    Text(
+                        "Selected ${opening.type.label()}: ${"%.1f".format(Millimeters(opening.widthMm).toFeet())} ft",
+                        color = Color(0xFF9DF0FF)
+                    )
+                }
             }
+        }
+        if (showPrecisionRails) {
+            PrecisionDialRail(
+                title = "Rotate (deg)",
+                value = "${"%.1f".format(normalizeDegrees(precisionRotationValue))}°",
+                onIncrement = { applyRotateTick(1) },
+                onDecrement = { applyRotateTick(-1) },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 10.dp)
+            )
+            PrecisionDialRail(
+                title = precisionSizeTitle,
+                value = precisionSizeLabel,
+                onIncrement = { applyLengthTick(1) },
+                onDecrement = { applyLengthTick(-1) },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = rightRailPadding)
+            )
         }
 
         val liveStart = drawingStart
         val livePreview = drawingPreview
-        if (liveStart != null && livePreview != null) {
+        if (liveStart != null && livePreview != null && tool == TOOL_DRAW) {
             val liveLen = Millimeters(BlueprintSnapMath.distanceMillimeters(liveStart, livePreview)).toFeet()
             val liveAngle = Math.toDegrees(
                 atan2(
@@ -369,11 +1078,32 @@ fun DesktopBlueprintTab(
                     (livePreview.x - liveStart.x).toDouble()
                 )
             )
-            Card(modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)) {
+            Card(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 86.dp)) {
                 Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("${"%.2f".format(liveLen)} ft @ ${"%.1f".format(liveAngle)}°")
-                    OutlinedTextField(lengthInput, { lengthInput = it }, label = { Text("Len") }, singleLine = true, modifier = Modifier.width(90.dp))
-                    OutlinedTextField(angleInput, { angleInput = it }, label = { Text("Ang") }, singleLine = true, modifier = Modifier.width(90.dp))
+                    OutlinedTextField(lengthInput, { lengthInput = it }, label = { Text("Len") }, singleLine = true, modifier = Modifier.width(76.dp))
+                    OutlinedTextField(angleInput, { angleInput = it }, label = { Text("Ang") }, singleLine = true, modifier = Modifier.width(76.dp))
+                }
+            }
+        }
+        val liveBoxStart = boxStart
+        val liveBoxPreview = boxPreview
+        if (liveBoxStart != null && liveBoxPreview != null && tool == TOOL_BOX) {
+            val (widthMm, heightMm) = projectDraftBoxDimensions(
+                start = liveBoxStart,
+                oppositeCorner = liveBoxPreview,
+                rotationRadians = boxRotationRadians
+            )
+            val widthFeet = Millimeters(abs(widthMm).roundToLong()).toFeet()
+            val heightFeet = Millimeters(abs(heightMm).roundToLong()).toFeet()
+            val rotationDegrees = normalizeDegrees(Math.toDegrees(boxRotationRadians))
+            Card(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 86.dp)) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Box: ${"%.2f".format(widthFeet)} ft x ${"%.2f".format(heightFeet)} ft @ ${"%.1f".format(rotationDegrees)}°")
                 }
             }
         }
@@ -434,6 +1164,40 @@ fun DesktopBlueprintTab(
                         label = { Text("Waste (%)") },
                         singleLine = true
                     )
+                    OutlinedTextField(
+                        value = gridStepInput,
+                        onValueChange = { gridStepInput = it },
+                        label = { Text("Grid step (ft)") },
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { nudgeGridStepInches(-1) }) { Text("-1\"") }
+                        Button(onClick = { nudgeGridStepInches(1) }) { Text("+1\"") }
+                        Button(onClick = { nudgeGridStepInches(6) }) { Text("+6\"") }
+                        Button(onClick = {
+                            val parsedFeet = gridStepInput.toDoubleOrNull()
+                                ?: DimensionParser.parseLengthToMillimeters(gridStepInput)
+                                    ?.let { mm -> Millimeters(mm).toFeet() }
+                            if (parsedFeet != null) {
+                                applyGridStepFeet(parsedFeet)
+                            }
+                        }) { Text("Apply Grid") }
+                    }
+                    OutlinedTextField(
+                        value = snapThresholdInput,
+                        onValueChange = { snapThresholdInput = it },
+                        label = { Text("Snap threshold (ft)") },
+                        singleLine = true
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { nudgeSnapThreshold(-0.1) }) { Text("-0.1") }
+                        Button(onClick = { nudgeSnapThreshold(0.1) }) { Text("+0.1") }
+                        Button(onClick = {
+                            snapThresholdInput.toDoubleOrNull()?.let { value ->
+                                applySnapThresholdFeet(value)
+                            }
+                        }) { Text("Apply Snap") }
+                    }
                     snapChipSpecs.chunked(2).forEach { chipRow ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             chipRow.forEach { chip ->
@@ -448,14 +1212,29 @@ fun DesktopBlueprintTab(
                     Button(
                         onClick = {
                             state.updateBlueprintDocument(
-                                document.copy(rooms = RoomLoopDetector.detectRooms(document.walls))
+                                document.copy(
+                                    rooms = mergeDetectedRoomsForFloor(
+                                        existingRooms = document.rooms,
+                                        walls = document.walls,
+                                        floorLevel = selectedFloor
+                                    )
+                                )
                             )
                         }
                     ) { Text("Detect Rooms") }
                     Button(
                         onClick = {
+                            val floorTagValue = floorTag(selectedFloor)
                             state.updateBlueprintDocument(
-                                document.copy(rooms = document.rooms.map { it.copy(tags = it.tags + "paint") })
+                                document.copy(
+                                    rooms = document.rooms.map { room ->
+                                        if (room.isOnFloor(selectedFloor)) {
+                                            room.copy(tags = room.tags + "paint" + floorTagValue)
+                                        } else {
+                                            room
+                                        }
+                                    }
+                                )
                             )
                         }
                     ) { Text("Scope + Paint") }
@@ -502,21 +1281,69 @@ fun DesktopBlueprintTab(
                         onDrag = { rootPoint -> draggingScreenPoint = rootPoint },
                         onDragEnd = finishAddonDrag
                     )
+                    DesktopAddonDragButton(
+                        label = OpeningType.STAIR_UP.label(),
+                        onClick = {
+                            selectOpeningTool(OpeningType.STAIR_UP)
+                        },
+                        onDragStart = { rootPoint ->
+                            selectOpeningTool(OpeningType.STAIR_UP)
+                            draggingOpeningType = OpeningType.STAIR_UP
+                            draggingScreenPoint = rootPoint
+                        },
+                        onDrag = { rootPoint -> draggingScreenPoint = rootPoint },
+                        onDragEnd = finishAddonDrag
+                    )
+                    DesktopAddonDragButton(
+                        label = OpeningType.STAIR_DOWN.label(),
+                        onClick = {
+                            selectOpeningTool(OpeningType.STAIR_DOWN)
+                        },
+                        onDragStart = { rootPoint ->
+                            selectOpeningTool(OpeningType.STAIR_DOWN)
+                            draggingOpeningType = OpeningType.STAIR_DOWN
+                            draggingScreenPoint = rootPoint
+                        },
+                        onDrag = { rootPoint -> draggingScreenPoint = rootPoint },
+                        onDragEnd = finishAddonDrag
+                    )
+                    Text("${openingType.label()} presets")
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        openingPresetsForType(openingType).forEach { preset ->
+                            FilterChip(
+                                selected = selectedOpeningPresetName == preset.name,
+                                onClick = { applyOpeningPreset(preset) },
+                                label = { Text(preset.name) }
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = customWidthFeet,
-                        onValueChange = { customWidthFeet = it },
+                        onValueChange = {
+                            customWidthFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Width") },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = customHeightFeet,
-                        onValueChange = { customHeightFeet = it },
+                        onValueChange = {
+                            customHeightFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Height") },
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = customSillFeet,
-                        onValueChange = { customSillFeet = it },
+                        onValueChange = {
+                            customSillFeet = it
+                            selectedOpeningPresetName = "Custom"
+                        },
                         label = { Text("Sill") },
                         singleLine = true
                     )
@@ -532,6 +1359,134 @@ fun DesktopBlueprintTab(
                 },
                 modifier = Modifier.align(Alignment.CenterEnd).padding(10.dp)
             )
+        }
+        if (showGuide) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 210.dp, end = 10.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xE11A2A43)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Desktop Guide", color = Color.White)
+                    Text("• Select: click nearest wall/opening on current floor.", color = Color(0xFFD4E8FF))
+                    Text("• Draw: click start then end. Chain continues from last corner.", color = Color(0xFFD4E8FF))
+                    Text("• Box: click once to start rectangle, click again to finish.", color = Color(0xFFD4E8FF))
+                    Text("• Door/Window/Stairs: click canvas or drag from Add-ons onto a wall.", color = Color(0xFFD4E8FF))
+                    Text("• Add-ons now include presets plus custom sizing for each opening type.", color = Color(0xFFD4E8FF))
+                    Text("• Mouse wheel zooms. Pan tool lets you drag the view.", color = Color(0xFFD4E8FF))
+                    Text("• Floor controls scope all drawing/editing to one floor.", color = Color(0xFFD4E8FF))
+                    Text("• Side rails adjust rotation and length/box size by 1° and 1 inch.", color = Color(0xFFD4E8FF))
+                    Text("• Opening Inspector edits selected opening width/height/sill/position live.", color = Color(0xFFD4E8FF))
+                    Text("• Shortcuts: F1 Select, F2 Draw, F3 Box, F4 Pan, Esc Cancel, Ctrl+Z/Y Undo/Redo.", color = Color(0xFFD4E8FF))
+                }
+            }
+        }
+
+        if (selectedOpening != null) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 10.dp, bottom = 86.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xCC15243A))
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        "Opening Inspector",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = selectedOpeningWidthInput,
+                            onValueChange = { selectedOpeningWidthInput = it },
+                            label = { Text("W ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                        OutlinedTextField(
+                            value = selectedOpeningHeightInput,
+                            onValueChange = { selectedOpeningHeightInput = it },
+                            label = { Text("H ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = selectedOpeningSillInput,
+                            onValueChange = { selectedOpeningSillInput = it },
+                            label = { Text("Sill ft") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                        OutlinedTextField(
+                            value = selectedOpeningPositionInput,
+                            onValueChange = { selectedOpeningPositionInput = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                            label = { Text("Pos %") },
+                            singleLine = true,
+                            modifier = Modifier.width(82.dp)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = {
+                            applyToSelectedOpening("Nudge Opening -1in") { opening ->
+                                opening.copy(widthMm = (opening.widthMm - DIAL_LENGTH_STEP_MM).coerceAtLeast(1L))
+                            }
+                        }) { Text("-1in") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Nudge Opening +1in") { opening ->
+                                opening.copy(widthMm = opening.widthMm + DIAL_LENGTH_STEP_MM)
+                            }
+                        }) { Text("+1in") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Move Opening -5%") { opening ->
+                                opening.copy(t = (opening.t - 0.05).coerceIn(0.0, 1.0))
+                            }
+                        }) { Text("-5%") }
+                        Button(onClick = {
+                            applyToSelectedOpening("Move Opening +5%") { opening ->
+                                opening.copy(t = (opening.t + 0.05).coerceIn(0.0, 1.0))
+                            }
+                        }) { Text("+5%") }
+                    }
+                    Button(onClick = {
+                        applyToSelectedOpening("Update Opening") { opening ->
+                            val widthMm = DimensionParser.parseLengthToMillimeters(selectedOpeningWidthInput)
+                                ?.coerceAtLeast(1L)
+                                ?: opening.widthMm
+                            val heightMm = DimensionParser.parseLengthToMillimeters(selectedOpeningHeightInput)
+                                ?.coerceAtLeast(1L)
+                                ?: opening.heightMm
+                            val sillMm = DimensionParser.parseLengthToMillimeters(selectedOpeningSillInput)
+                                ?.coerceAtLeast(0L)
+                                ?: opening.sillMm
+                            val tValue = selectedOpeningPositionInput.toDoubleOrNull()
+                                ?.div(100.0)
+                                ?.coerceIn(0.0, 1.0)
+                                ?: opening.t
+                            opening.copy(
+                                widthMm = widthMm,
+                                heightMm = heightMm,
+                                sillMm = sillMm,
+                                t = tValue
+                            )
+                        }
+                    }) {
+                        Text("Apply Opening")
+                    }
+                }
+            }
         }
 
         if (draggingOpeningType != null && draggingScreenPoint != null) {
@@ -565,12 +1520,18 @@ fun DesktopBlueprintTab(
         }
 
         Card(modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp)) {
-            Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .padding(8.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 desktopToolChipSpecs.forEach { spec ->
                     FilterChip(
                         selected = tool == spec.key,
                         onClick = {
-                            spec.openingType?.let(selectOpeningTool) ?: run { tool = spec.key }
+                            spec.openingType?.let(selectOpeningTool) ?: run { setTool(spec.key) }
                         },
                         label = { Text(spec.label) }
                     )
@@ -612,6 +1573,24 @@ fun DesktopBlueprintTab(
                         Text(action.label)
                     }
                 }
+                Button(
+                    onClick = clearAllBlueprintGeometry,
+                    enabled = floorWalls.isNotEmpty() || floorOpenings.isNotEmpty() || floorRooms.isNotEmpty()
+                ) {
+                    Text("Clear Floor")
+                }
+                Button(
+                    onClick = deleteSelectedGeometry,
+                    enabled = selectedWallId != null || selectedOpeningId != null
+                ) {
+                    Text("Delete Selected")
+                }
+                Button(onClick = cancelCurrentAction) {
+                    Text("Cancel")
+                }
+                Button(onClick = { showGuide = !showGuide }) {
+                    Text(if (showGuide) "Hide Guide" else "Guide")
+                }
             }
         }
     }
@@ -629,6 +1608,31 @@ private fun DesktopPanelLaunchButton(
 }
 
 @Composable
+private fun PrecisionDialRail(
+    title: String,
+    value: String,
+    onIncrement: () -> Unit,
+    onDecrement: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.width(108.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xCC15243A))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(title, color = Color.White, style = MaterialTheme.typography.labelSmall)
+            Text(value, color = Color(0xFFFFE09B), style = MaterialTheme.typography.bodySmall)
+            Button(onClick = onIncrement, modifier = Modifier.fillMaxWidth()) { Text("+") }
+            Button(onClick = onDecrement, modifier = Modifier.fillMaxWidth()) { Text("-") }
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalComposeUiApi::class)
 private fun DesktopBlueprintCanvas(
     walls: List<WallSegment>,
@@ -639,6 +1643,11 @@ private fun DesktopBlueprintCanvas(
     pan: Offset,
     drawingStart: PointMm?,
     drawingPreview: PointMm?,
+    boxStart: PointMm?,
+    boxPreview: PointMm?,
+    boxRotationRadians: Double,
+    selectedWallId: String?,
+    selectedOpeningId: String?,
     onScaleChange: (Float) -> Unit,
     onPanChange: (Offset) -> Unit,
     onCanvasLayout: (Offset, Size) -> Unit,
@@ -646,13 +1655,26 @@ private fun DesktopBlueprintCanvas(
     onTap: (PointMm) -> Unit
 ) {
     var canvasSize by remember { mutableStateOf(Size.Zero) }
+    val latestTool by rememberUpdatedState(tool)
+    val latestScale by rememberUpdatedState(scale)
+    val latestPan by rememberUpdatedState(pan)
+    val latestSnap by rememberUpdatedState(snap)
+    val latestWalls by rememberUpdatedState(walls)
+    val latestDrawingStart by rememberUpdatedState(drawingStart)
+    val latestBoxStart by rememberUpdatedState(boxStart)
+    val latestOnTap by rememberUpdatedState(onTap)
+    val latestOnLivePointer by rememberUpdatedState(onLivePointer)
     fun worldToScreen(p: PointMm): Offset {
         val ppm = BASE_PX_PER_MM * scale
         return Offset(canvasSize.width / 2f + pan.x + (p.x * ppm), canvasSize.height / 2f + pan.y - (p.y * ppm))
     }
     fun screenToWorld(p: Offset): PointMm {
-        val ppm = BASE_PX_PER_MM * scale
-        return PointMm(((p.x - canvasSize.width / 2f - pan.x) / ppm).roundToLong(), (-(p.y - canvasSize.height / 2f - pan.y) / ppm).roundToLong())
+        val ppm = BASE_PX_PER_MM * latestScale
+        val currentPan = latestPan
+        return PointMm(
+            ((p.x - canvasSize.width / 2f - currentPan.x) / ppm).roundToLong(),
+            (-(p.y - canvasSize.height / 2f - currentPan.y) / ppm).roundToLong()
+        )
     }
 
     Canvas(
@@ -664,44 +1686,201 @@ private fun DesktopBlueprintCanvas(
             .onPointerEvent(PointerEventType.Scroll) { event ->
                 val scroll = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                 val factor = if (scroll < 0f) 1.12f else 0.9f
-                onScaleChange(scale * factor)
+                onScaleChange(latestScale * factor)
             }
-            .pointerInput(tool) {
-                detectDragGestures { change, dragAmount ->
-                    if (tool == TOOL_PAN) {
-                        onPanChange(pan + dragAmount)
+            .pointerInput(Unit) {
+                var dragPan = Offset.Zero
+                detectDragGestures(
+                    onDragStart = {
+                        dragPan = latestPan
+                    }
+                ) { change, dragAmount ->
+                    if (latestTool == TOOL_PAN) {
+                        dragPan += dragAmount
+                        onPanChange(dragPan)
                         change.consume()
                     }
                 }
             }
-            .pointerInput(tool, scale, pan, snap, walls, drawingStart) {
+            .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Main)
                         val change = event.changes.firstOrNull() ?: continue
-                        onLivePointer(BlueprintSnapMath.applySnapping(screenToWorld(change.position), drawingStart, snap, walls))
-                        if (change.changedToUpIfUnconsumed()) onTap(screenToWorld(change.position))
+                        val worldPoint = screenToWorld(change.position)
+                        val currentTool = latestTool
+                        val currentSnap = latestSnap
+                        val currentWalls = latestWalls
+                        val snapAnchor = when (currentTool) {
+                            TOOL_DRAW -> latestDrawingStart
+                            TOOL_BOX -> latestBoxStart
+                            else -> null
+                        }
+                        val snapSettings = if (currentTool == TOOL_BOX) {
+                            currentSnap.copy(angleEnabled = false, closureEnabled = false)
+                        } else {
+                            currentSnap
+                        }
+                        val snappedPoint = BlueprintSnapMath.applySnapping(
+                            rawPoint = worldPoint,
+                            drawingStart = snapAnchor,
+                            settings = snapSettings,
+                            walls = currentWalls
+                        )
+                        latestOnLivePointer(snappedPoint)
+                        if (change.changedToUpIfUnconsumed()) {
+                            latestOnTap(snappedPoint)
+                        }
                     }
                 }
             }
     ) {
         canvasSize = size
+
+        if (snap.gridEnabled) {
+            val ppm = BASE_PX_PER_MM * scale
+            if (ppm > 0f) {
+                val footStepMm = Millimeters.fromFeet(snap.gridStepFeet.coerceAtLeast(MIN_GRID_STEP_FEET)).value.toDouble()
+                val inchStepMm = (footStepMm / 12.0).coerceAtLeast(1.0)
+                val showInchSubgrid = (inchStepMm * ppm) >= 3f
+                val drawStepMm = if (showInchSubgrid) inchStepMm else footStepMm
+                val linesPerFoot = if (showInchSubgrid) 12L else 1L
+                val drawSpacingPx = (drawStepMm * ppm).toFloat().coerceAtLeast(2f)
+                if (drawSpacingPx <= 220f) {
+                    fun gridLineStyle(index: Long): Pair<Color, Float> {
+                        val isMajor = linesPerFoot > 0 && index % linesPerFoot == 0L
+                        return if (isMajor) {
+                            Color(0x408FCDF0) to 1.25f
+                        } else {
+                            Color(0x229BC3E8) to 0.85f
+                        }
+                    }
+
+                    val minWorldX = ((0f - size.width / 2f - pan.x) / ppm).toDouble()
+                    val maxWorldX = ((size.width - size.width / 2f - pan.x) / ppm).toDouble()
+                    var xIndex = floor(minWorldX / drawStepMm).toLong()
+                    while (true) {
+                        val worldX = xIndex * drawStepMm
+                        if (worldX > maxWorldX) break
+                        val screenX = size.width / 2f + pan.x + (worldX * ppm).toFloat()
+                        val (lineColor, lineWidth) = gridLineStyle(xIndex)
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(screenX, 0f),
+                            end = Offset(screenX, size.height),
+                            strokeWidth = lineWidth
+                        )
+                        xIndex += 1
+                    }
+
+                    val worldYTop = (-(0f - size.height / 2f - pan.y) / ppm).toDouble()
+                    val worldYBottom = (-(size.height - size.height / 2f - pan.y) / ppm).toDouble()
+                    val minWorldY = minOf(worldYTop, worldYBottom)
+                    val maxWorldY = maxOf(worldYTop, worldYBottom)
+                    var yIndex = floor(minWorldY / drawStepMm).toLong()
+                    while (true) {
+                        val worldY = yIndex * drawStepMm
+                        if (worldY > maxWorldY) break
+                        val screenY = size.height / 2f + pan.y - (worldY * ppm).toFloat()
+                        val (lineColor, lineWidth) = gridLineStyle(yIndex)
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(0f, screenY),
+                            end = Offset(size.width, screenY),
+                            strokeWidth = lineWidth
+                        )
+                        yIndex += 1
+                    }
+                }
+            }
+        }
+
         drawLine(Color(0xFF2E5479), worldToScreen(PointMm(-70_000, 0)), worldToScreen(PointMm(70_000, 0)), strokeWidth = 1.4f)
         drawLine(Color(0xFF2E5479), worldToScreen(PointMm(0, -70_000)), worldToScreen(PointMm(0, 70_000)), strokeWidth = 1.4f)
-        walls.forEach { wall -> drawLine(Color(0xFFA9D9FF), worldToScreen(wall.start), worldToScreen(wall.end), strokeWidth = 3f, cap = StrokeCap.Round) }
+        walls.forEach { wall ->
+            val isSelected = wall.id == selectedWallId
+            drawLine(
+                color = if (isSelected) Color(0xFFFFD37A) else Color(0xFFA9D9FF),
+                start = worldToScreen(wall.start),
+                end = worldToScreen(wall.end),
+                strokeWidth = if (isSelected) 5.2f else 3f,
+                cap = StrokeCap.Round
+            )
+        }
         openings.forEach { opening ->
             val wall = walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
             val center = BlueprintSnapMath.pointOnWall(wall, opening.t)
             val c = worldToScreen(center)
             val w = opening.widthMm * (BASE_PX_PER_MM * scale)
-            if (opening.type == OpeningType.DOOR) {
-                drawArc(Color(0xFFE9C06F), -90f, 90f, false, Offset(c.x - w / 2f, c.y - w / 2f), Size(w, w), style = Stroke(width = 2f))
-            } else {
-                drawLine(Color(0xFFC2F7FF), Offset(c.x - w / 2f, c.y), Offset(c.x + w / 2f, c.y), strokeWidth = 3f)
+            val isSelected = opening.id == selectedOpeningId
+            when (opening.type) {
+                OpeningType.DOOR -> {
+                    drawArc(
+                        color = if (isSelected) Color(0xFFFFE09B) else Color(0xFFE9C06F),
+                        startAngle = -90f,
+                        sweepAngle = 90f,
+                        useCenter = false,
+                        topLeft = Offset(c.x - w / 2f, c.y - w / 2f),
+                        size = Size(w, w),
+                        style = Stroke(width = if (isSelected) 3f else 2f)
+                    )
+                }
+
+                OpeningType.WINDOW -> {
+                    drawLine(
+                        color = if (isSelected) Color(0xFF9EF4FF) else Color(0xFFC2F7FF),
+                        start = Offset(c.x - w / 2f, c.y),
+                        end = Offset(c.x + w / 2f, c.y),
+                        strokeWidth = if (isSelected) 4.2f else 3f
+                    )
+                }
+
+                OpeningType.STAIR_UP -> {
+                    drawLine(
+                        color = if (isSelected) Color(0xFFD2FFDB) else Color(0xFF8DE0A1),
+                        start = Offset(c.x - w / 2f, c.y),
+                        end = Offset(c.x + w / 2f, c.y),
+                        strokeWidth = if (isSelected) 4.2f else 3f
+                    )
+                    drawLine(
+                        color = if (isSelected) Color(0xFFD2FFDB) else Color(0xFF8DE0A1),
+                        start = Offset(c.x, c.y + 8f),
+                        end = Offset(c.x, c.y - 8f),
+                        strokeWidth = 2f
+                    )
+                }
+
+                OpeningType.STAIR_DOWN -> {
+                    drawLine(
+                        color = if (isSelected) Color(0xFFFFDEBA) else Color(0xFFFFB677),
+                        start = Offset(c.x - w / 2f, c.y),
+                        end = Offset(c.x + w / 2f, c.y),
+                        strokeWidth = if (isSelected) 4.2f else 3f
+                    )
+                    drawLine(
+                        color = if (isSelected) Color(0xFFFFDEBA) else Color(0xFFFFB677),
+                        start = Offset(c.x - 8f, c.y),
+                        end = Offset(c.x + 8f, c.y),
+                        strokeWidth = 2f
+                    )
+                }
             }
         }
         if (drawingStart != null && drawingPreview != null && tool == TOOL_DRAW) {
             drawLine(Color(0xFFFFB66E), worldToScreen(drawingStart), worldToScreen(drawingPreview), strokeWidth = 3f, cap = StrokeCap.Round)
+        }
+        if (boxStart != null && boxPreview != null && tool == TOOL_BOX) {
+            val corners = draftBoxCorners(
+                start = boxStart,
+                end = boxPreview,
+                rotationRadians = boxRotationRadians
+            )
+            if (corners.size == 4) {
+                drawLine(Color(0xFFFFB66E), worldToScreen(corners[0]), worldToScreen(corners[1]), strokeWidth = 3f)
+                drawLine(Color(0xFFFFB66E), worldToScreen(corners[1]), worldToScreen(corners[2]), strokeWidth = 3f)
+                drawLine(Color(0xFFFFB66E), worldToScreen(corners[2]), worldToScreen(corners[3]), strokeWidth = 3f)
+                drawLine(Color(0xFFFFB66E), worldToScreen(corners[3]), worldToScreen(corners[0]), strokeWidth = 3f)
+            }
         }
     }
 }
@@ -755,6 +1934,346 @@ private fun screenPointToWorldPoint(
         x = ((local.x - canvasSize.width / 2f - pan.x) / ppm).roundToLong(),
         y = (-(local.y - canvasSize.height / 2f - pan.y) / ppm).roundToLong()
     )
+}
+
+private fun normalizeDegrees(value: Double): Double {
+    var normalized = value % 360.0
+    if (normalized <= -180.0) normalized += 360.0
+    if (normalized > 180.0) normalized -= 360.0
+    return normalized
+}
+
+private fun defaultDraftDialLengthMm(scale: Float): Double {
+    val clampedScale = scale.coerceIn(0.2f, 7f)
+    val visibleLengthMm = (24f / (BASE_PX_PER_MM * clampedScale)).toDouble()
+    return visibleLengthMm
+        .coerceAtLeast(MIN_DRAFT_GEOMETRY_MM.toDouble())
+        .coerceAtMost(MAX_DRAFT_GEOMETRY_MM.toDouble())
+}
+
+private fun pointFromPolarDraft(
+    start: PointMm,
+    angleRadians: Double,
+    lengthMm: Double
+): PointMm {
+    return PointMm(
+        x = (start.x + cos(angleRadians) * lengthMm).roundToLong(),
+        y = (start.y + sin(angleRadians) * lengthMm).roundToLong()
+    )
+}
+
+private fun rotateDraftPreviewByDialTicks(
+    start: PointMm,
+    currentPreview: PointMm,
+    tickCount: Int,
+    scale: Float
+): PointMm {
+    if (tickCount == 0) return currentPreview
+    val dx = (currentPreview.x - start.x).toDouble()
+    val dy = (currentPreview.y - start.y).toDouble()
+    val measuredLengthMm = hypot(dx, dy)
+    val baseAngleRadians = if (measuredLengthMm <= 0.0001) 0.0 else atan2(dy, dx)
+    val lengthMm = if (measuredLengthMm <= 0.0001) {
+        defaultDraftDialLengthMm(scale)
+    } else {
+        measuredLengthMm.coerceAtMost(MAX_DRAFT_GEOMETRY_MM.toDouble())
+    }
+    val nextAngleRadians = baseAngleRadians + Math.toRadians(tickCount * DIAL_ANGLE_STEP_DEGREES)
+    return pointFromPolarDraft(
+        start = start,
+        angleRadians = nextAngleRadians,
+        lengthMm = lengthMm
+    )
+}
+
+private fun resizeDraftPreviewByDialTicks(
+    start: PointMm,
+    currentPreview: PointMm,
+    tickCount: Int,
+    scale: Float
+): PointMm {
+    if (tickCount == 0) return currentPreview
+    val dx = (currentPreview.x - start.x).toDouble()
+    val dy = (currentPreview.y - start.y).toDouble()
+    val measuredLengthMm = hypot(dx, dy)
+    val baseAngleRadians = if (measuredLengthMm <= 0.0001) 0.0 else atan2(dy, dx)
+    val baseLengthMm = if (measuredLengthMm <= 0.0001) {
+        defaultDraftDialLengthMm(scale)
+    } else {
+        measuredLengthMm
+    }
+    val nextLengthMm = (baseLengthMm + (tickCount * DIAL_LENGTH_STEP_MM))
+        .coerceIn(MIN_DRAFT_GEOMETRY_MM.toDouble(), MAX_DRAFT_GEOMETRY_MM.toDouble())
+    return pointFromPolarDraft(
+        start = start,
+        angleRadians = baseAngleRadians,
+        lengthMm = nextLengthMm
+    )
+}
+
+private data class DraftBoxRotationResult(
+    val preview: PointMm,
+    val rotationRadians: Double
+)
+
+private fun projectDraftBoxDimensions(
+    start: PointMm,
+    oppositeCorner: PointMm,
+    rotationRadians: Double
+): Pair<Double, Double> {
+    val dx = (oppositeCorner.x - start.x).toDouble()
+    val dy = (oppositeCorner.y - start.y).toDouble()
+    val cosTheta = cos(rotationRadians)
+    val sinTheta = sin(rotationRadians)
+    val widthMm = (dx * cosTheta) + (dy * sinTheta)
+    val heightMm = (-dx * sinTheta) + (dy * cosTheta)
+    return widthMm to heightMm
+}
+
+private fun pointFromDraftBoxDimensions(
+    origin: PointMm,
+    rotationRadians: Double,
+    widthMm: Double,
+    heightMm: Double
+): PointMm {
+    val cosTheta = cos(rotationRadians)
+    val sinTheta = sin(rotationRadians)
+    val x = origin.x + (widthMm * cosTheta) + (heightMm * -sinTheta)
+    val y = origin.y + (widthMm * sinTheta) + (heightMm * cosTheta)
+    return PointMm(x = x.roundToLong(), y = y.roundToLong())
+}
+
+private fun rotateDraftBoxPreviewByDialTicks(
+    start: PointMm,
+    currentPreview: PointMm,
+    currentRotationRadians: Double,
+    tickCount: Int
+): DraftBoxRotationResult {
+    if (tickCount == 0) {
+        return DraftBoxRotationResult(
+            preview = currentPreview,
+            rotationRadians = currentRotationRadians
+        )
+    }
+    val (widthMm, heightMm) = projectDraftBoxDimensions(
+        start = start,
+        oppositeCorner = currentPreview,
+        rotationRadians = currentRotationRadians
+    )
+    val nextRotation = currentRotationRadians + Math.toRadians(tickCount * DIAL_ANGLE_STEP_DEGREES)
+    val nextPreview = pointFromDraftBoxDimensions(
+        origin = start,
+        rotationRadians = nextRotation,
+        widthMm = widthMm,
+        heightMm = heightMm
+    )
+    return DraftBoxRotationResult(preview = nextPreview, rotationRadians = nextRotation)
+}
+
+private fun resizeDraftBoxPreviewByDialTicks(
+    start: PointMm,
+    currentPreview: PointMm,
+    currentRotationRadians: Double,
+    tickCount: Int,
+    scale: Float
+): PointMm {
+    if (tickCount == 0) return currentPreview
+    var (widthMm, heightMm) = projectDraftBoxDimensions(
+        start = start,
+        oppositeCorner = currentPreview,
+        rotationRadians = currentRotationRadians
+    )
+    if (abs(widthMm) <= 0.0001 && abs(heightMm) <= 0.0001) {
+        val seedLength = defaultDraftDialLengthMm(scale)
+        widthMm = seedLength
+        heightMm = seedLength
+    }
+    val deltaMm = tickCount * DIAL_LENGTH_STEP_MM.toDouble()
+    val widthSign = if (widthMm < 0.0) -1.0 else 1.0
+    val heightSign = if (heightMm < 0.0) -1.0 else 1.0
+    val nextWidthAbs = (abs(widthMm) + deltaMm)
+        .coerceIn(MIN_DRAFT_GEOMETRY_MM.toDouble(), MAX_DRAFT_GEOMETRY_MM.toDouble())
+    val nextHeightAbs = (abs(heightMm) + deltaMm)
+        .coerceIn(MIN_DRAFT_GEOMETRY_MM.toDouble(), MAX_DRAFT_GEOMETRY_MM.toDouble())
+    return pointFromDraftBoxDimensions(
+        origin = start,
+        rotationRadians = currentRotationRadians,
+        widthMm = widthSign * nextWidthAbs,
+        heightMm = heightSign * nextHeightAbs
+    )
+}
+
+private fun draftBoxCorners(
+    start: PointMm,
+    end: PointMm,
+    rotationRadians: Double
+): List<PointMm> {
+    val (widthMm, heightMm) = projectDraftBoxDimensions(
+        start = start,
+        oppositeCorner = end,
+        rotationRadians = rotationRadians
+    )
+    if (
+        abs(widthMm) < MIN_WALL_LENGTH_TO_ADD_MM.toDouble() ||
+            abs(heightMm) < MIN_WALL_LENGTH_TO_ADD_MM.toDouble()
+    ) {
+        return emptyList()
+    }
+    val cornerA = start
+    val cornerB = pointFromDraftBoxDimensions(
+        origin = cornerA,
+        rotationRadians = rotationRadians,
+        widthMm = widthMm,
+        heightMm = 0.0
+    )
+    val cornerD = pointFromDraftBoxDimensions(
+        origin = cornerA,
+        rotationRadians = rotationRadians,
+        widthMm = 0.0,
+        heightMm = heightMm
+    )
+    val cornerC = pointFromDraftBoxDimensions(
+        origin = cornerA,
+        rotationRadians = rotationRadians,
+        widthMm = widthMm,
+        heightMm = heightMm
+    )
+    return listOf(cornerA, cornerB, cornerC, cornerD)
+}
+
+private fun buildBoxWalls(
+    start: PointMm,
+    end: PointMm,
+    rotationRadians: Double,
+    params: BlueprintParams,
+    floorLevel: Int
+): List<WallSegment> {
+    val corners = draftBoxCorners(
+        start = start,
+        end = end,
+        rotationRadians = rotationRadians
+    )
+    if (corners.size != 4) return emptyList()
+    val a = corners[0]
+    val b = corners[1]
+    val c = corners[2]
+    val d = corners[3]
+    val thickness = Millimeters(params.defaultWallThicknessMm)
+    val height = Millimeters(params.wallHeightMm)
+    return listOf(
+        a to b,
+        b to c,
+        c to d,
+        d to a
+    ).map { (from, to) ->
+        WallSegment(
+            id = UUID.randomUUID().toString(),
+            start = from,
+            end = to,
+            thickness = thickness,
+            height = height,
+            tags = setOf("box", floorTag(floorLevel))
+        )
+    }
+}
+
+private fun findNearestWallAtPoint(
+    point: PointMm,
+    walls: List<WallSegment>,
+    thresholdMm: Long
+): WallSegment? {
+    return walls
+        .map { it to BlueprintSnapMath.pointToWallDistanceMm(point, it) }
+        .minByOrNull { (_, distance) -> distance }
+        ?.takeIf { (_, distance) -> distance <= thresholdMm }
+        ?.first
+}
+
+private fun findNearestOpeningAtPoint(
+    point: PointMm,
+    openings: List<BlueprintOpening>,
+    walls: List<WallSegment>,
+    thresholdMm: Long
+): BlueprintOpening? {
+    return openings
+        .mapNotNull { opening ->
+            val wall = walls.firstOrNull { it.id == opening.wallId } ?: return@mapNotNull null
+            val center = BlueprintSnapMath.pointOnWall(wall, opening.t)
+            val distance = BlueprintSnapMath.distanceMillimeters(point, center)
+            opening to distance
+        }
+        .minByOrNull { (_, distance) -> distance }
+        ?.takeIf { (_, distance) -> distance <= thresholdMm }
+        ?.first
+}
+
+private fun wallAlreadyExists(
+    walls: List<WallSegment>,
+    start: PointMm,
+    end: PointMm,
+    toleranceMm: Long
+): Boolean {
+    return walls.any { wall ->
+        val sameDirection = BlueprintSnapMath.distanceMillimeters(wall.start, start) <= toleranceMm &&
+            BlueprintSnapMath.distanceMillimeters(wall.end, end) <= toleranceMm
+        val reverseDirection = BlueprintSnapMath.distanceMillimeters(wall.start, end) <= toleranceMm &&
+            BlueprintSnapMath.distanceMillimeters(wall.end, start) <= toleranceMm
+        sameDirection || reverseDirection
+    }
+}
+
+private fun mergeDetectedRoomsForFloor(
+    existingRooms: List<Room>,
+    walls: List<WallSegment>,
+    floorLevel: Int
+): List<Room> {
+    val floorWalls = walls.filter { wall -> wall.isOnFloor(floorLevel) }
+    val detectedFloorRooms = RoomLoopDetector.detectRooms(floorWalls).map { room ->
+        room.copy(tags = room.tags + floorTag(floorLevel))
+    }
+    val otherRooms = existingRooms.filterNot { room -> room.isOnFloor(floorLevel) }
+    return otherRooms + detectedFloorRooms
+}
+
+private fun WallSegment.rotateByDegrees(deltaDegrees: Double): WallSegment {
+    if (abs(deltaDegrees) <= 0.0001) return this
+    val pivot = midpoint()
+    val radians = Math.toRadians(deltaDegrees)
+    fun rotatePoint(point: PointMm): PointMm {
+        val translatedX = (point.x - pivot.x).toDouble()
+        val translatedY = (point.y - pivot.y).toDouble()
+        val rotatedX = (translatedX * cos(radians)) - (translatedY * sin(radians))
+        val rotatedY = (translatedX * sin(radians)) + (translatedY * cos(radians))
+        return PointMm(
+            x = (pivot.x + rotatedX).roundToLong(),
+            y = (pivot.y + rotatedY).roundToLong()
+        )
+    }
+    return copy(
+        start = rotatePoint(start),
+        end = rotatePoint(end)
+    )
+}
+
+private fun WallSegment.resizeByLengthDeltaMm(deltaMm: Long): WallSegment {
+    if (deltaMm == 0L) return this
+    val currentLengthMm = lengthMillimeters().toDouble().coerceAtLeast(1.0)
+    val nextLengthMm = (currentLengthMm + deltaMm.toDouble()).coerceAtLeast(1.0)
+    val angleRadians = atan2(
+        (end.y - start.y).toDouble(),
+        (end.x - start.x).toDouble()
+    )
+    val center = midpoint()
+    val halfLengthMm = nextLengthMm / 2.0
+    val nextStart = PointMm(
+        x = (center.x + cos(angleRadians + Math.PI) * halfLengthMm).roundToLong(),
+        y = (center.y + sin(angleRadians + Math.PI) * halfLengthMm).roundToLong()
+    )
+    val nextEnd = PointMm(
+        x = (center.x + cos(angleRadians) * halfLengthMm).roundToLong(),
+        y = (center.y + sin(angleRadians) * halfLengthMm).roundToLong()
+    )
+    return copy(start = nextStart, end = nextEnd)
 }
 
 private fun applyLengthAngleOverride(start: PointMm, fallbackEnd: PointMm, lengthInputFeet: String, angleInputDegrees: String): PointMm {
