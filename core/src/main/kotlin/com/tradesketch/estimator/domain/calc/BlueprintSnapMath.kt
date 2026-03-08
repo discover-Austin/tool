@@ -16,6 +16,8 @@ import kotlin.math.sin
 
 object BlueprintSnapMath {
     private const val CONNECTED_ENDPOINT_TOLERANCE_MM = 120L
+    private const val GRID_SNAP_SUBDIVISIONS = 12L
+    private const val GRID_SNAP_MIN_STEP_MM = 10L
     private const val RIGHT_ANGLE_FAVOR_DEGREES = 14.0
     private const val PARALLEL_ANGLE_FAVOR_DEGREES = 8.0
     private val PRIORITIZED_ANGLE_STEPS_DEGREES = listOf(90.0, 45.0, 22.5, 11.25)
@@ -112,13 +114,15 @@ object BlueprintSnapMath {
     ): PointMm {
         var snapped = rawPoint
         val thresholdMm = Millimeters.fromFeet(settings.thresholdFeet).value.coerceAtLeast(1L)
+        val gridSnapStepMm = Millimeters.fromFeet(settings.gridStepFeet).value
+            .coerceAtLeast(1L)
+            .let(::computeGridSnapStepMm)
         var snappedToFeaturePoint = false
 
         if (settings.gridEnabled) {
-            val gridStepMm = Millimeters.fromFeet(settings.gridStepFeet).value.coerceAtLeast(1L)
             snapped = PointMm(
-                x = snapToStep(snapped.x, gridStepMm),
-                y = snapToStep(snapped.y, gridStepMm)
+                x = snapToStep(snapped.x, gridSnapStepMm),
+                y = snapToStep(snapped.y, gridSnapStepMm)
             )
         }
 
@@ -182,10 +186,9 @@ object BlueprintSnapMath {
         }
 
         if (settings.gridEnabled && !snappedToFeaturePoint) {
-            val gridStepMm = Millimeters.fromFeet(settings.gridStepFeet).value.coerceAtLeast(1L)
             snapped = PointMm(
-                x = snapToStep(snapped.x, gridStepMm),
-                y = snapToStep(snapped.y, gridStepMm)
+                x = snapToStep(snapped.x, gridSnapStepMm),
+                y = snapToStep(snapped.y, gridSnapStepMm)
             )
         }
 
@@ -216,6 +219,15 @@ object BlueprintSnapMath {
     private fun snapToStep(value: Long, step: Long): Long {
         if (step <= 0L) return value
         return ((value.toDouble() / step.toDouble()).roundToLong()) * step
+    }
+
+    private fun computeGridSnapStepMm(baseStepMm: Long): Long {
+        val clampedBase = baseStepMm.coerceAtLeast(1L)
+        val subdivided = (clampedBase.toDouble() / GRID_SNAP_SUBDIVISIONS.toDouble())
+            .roundToLong()
+            .coerceAtLeast(1L)
+        val minStep = minOf(GRID_SNAP_MIN_STEP_MM, clampedBase)
+        return subdivided.coerceIn(minStep, clampedBase)
     }
 
     private fun favorPerpendicularToConnectedWall(

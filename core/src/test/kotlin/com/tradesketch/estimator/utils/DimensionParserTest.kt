@@ -79,6 +79,21 @@ class DimensionParserTest {
     }
 
     @Test
+    fun `parse centimeter formats`() {
+        val result1 = DimensionParser.parseLengthToMillimeters("25cm")
+        assertNotNull(result1)
+        assertEquals(250L, result1)
+
+        val result2 = DimensionParser.parseLengthToMillimeters("182.9 cm")
+        assertNotNull(result2)
+        assertEquals(1829L, result2)
+
+        val result3 = DimensionParser.parseLengthToMillimeters("100 centimeters")
+        assertNotNull(result3)
+        assertEquals(1000L, result3)
+    }
+
+    @Test
     fun `parse meter formats`() {
         // 3.8m format
         val result1 = DimensionParser.parseLengthToMillimeters("3.8m")

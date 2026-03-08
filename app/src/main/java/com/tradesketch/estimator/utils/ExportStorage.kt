@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.utils
 
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -15,6 +16,14 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+internal data class ShareIntentSpec(
+    val mimeType: String,
+    val subject: String,
+    val text: String,
+    val chooserTitle: String,
+    val flags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
+)
 
 object ExportStorage {
     fun buildFileName(
@@ -35,20 +44,45 @@ object ExportStorage {
         text: String,
         chooserTitle: String
     ): Intent {
+        val spec = buildShareIntentSpec(
+            mimeType = mimeType,
+            subject = subject,
+            text = text,
+            chooserTitle = chooserTitle
+        )
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
             shareFile
         )
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = spec.mimeType
+            putExtra(Intent.EXTRA_SUBJECT, spec.subject)
+            putExtra(Intent.EXTRA_TEXT, spec.text)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            // Some OEM share targets require clip data grants in addition to EXTRA_STREAM.
+            clipData = ClipData.newRawUri(spec.subject, uri)
+            addFlags(spec.flags)
+        }
         return Intent.createChooser(
-            Intent(Intent.ACTION_SEND).apply {
-                type = mimeType
-                putExtra(Intent.EXTRA_SUBJECT, subject)
-                putExtra(Intent.EXTRA_TEXT, text)
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            chooserTitle
+            shareIntent,
+            spec.chooserTitle
+        ).apply {
+            addFlags(spec.flags)
+        }
+    }
+
+    internal fun buildShareIntentSpec(
+        mimeType: String,
+        subject: String,
+        text: String,
+        chooserTitle: String
+    ): ShareIntentSpec {
+        return ShareIntentSpec(
+            mimeType = mimeType,
+            subject = subject,
+            text = text,
+            chooserTitle = chooserTitle
         )
     }
 
@@ -89,10 +123,7 @@ object ExportStorage {
         fileName: String
     ): Uri? {
         return try {
-            val downloadsDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                "TradeSketch"
-            ).apply { mkdirs() }
+            val downloadsDir = resolveAppScopedExportDir(context)
             val file = File(downloadsDir, fileName)
             FileOutputStream(file).use { output ->
                 output.write(bytes)
@@ -142,10 +173,7 @@ object ExportStorage {
         fileName: String
     ): Uri? {
         return try {
-            val downloadsDir = File(
-                context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                "TradeSketch"
-            ).apply { mkdirs() }
+            val downloadsDir = resolveAppScopedExportDir(context)
             val file = File(downloadsDir, fileName)
             FileOutputStream(file).use { output ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
@@ -168,5 +196,11 @@ object ExportStorage {
             .replace(Regex("_+"), "_")
             .take(40)
             .ifBlank { "project" }
+    }
+
+    private fun resolveAppScopedExportDir(context: Context): File {
+        val externalDownloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        val baseDir = externalDownloads ?: File(context.filesDir, "exports")
+        return File(baseDir, "TradeSketch").apply { mkdirs() }
     }
 }

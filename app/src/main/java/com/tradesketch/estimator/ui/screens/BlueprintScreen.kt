@@ -2,6 +2,8 @@ package com.tradesketch.estimator.ui.screens
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
@@ -12,6 +14,7 @@ fun BlueprintScreen(
     modifier: Modifier = Modifier,
     initialShowAddons: Boolean = false,
     initialShowParams: Boolean = false,
+    leftEdgeDialInset: Dp = 0.dp,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
     viewModel: BlueprintEditorViewModel = hiltViewModel(),
@@ -22,6 +25,7 @@ fun BlueprintScreen(
         modifier = modifier,
         initialShowAddons = initialShowAddons,
         initialShowParams = initialShowParams,
+        leftEdgeDialInset = leftEdgeDialInset,
         onOpenTakeoff = onOpenTakeoff,
         onFullscreenBlueprintChanged = onFullscreenBlueprintChanged,
         viewModel = viewModel,

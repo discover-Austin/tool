@@ -1,8 +1,11 @@
 package com.tradesketch.estimator.domain.calc
 
+import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
+import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
+import kotlin.math.roundToLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -73,5 +76,33 @@ class BlueprintMathTest {
         assertEquals(15_000_000L, room.areaSquareMillimeters())
         assertEquals(16_000L, room.perimeterMillimeters())
         assertTrue(room.wallSurfaceAreaSqFt(openingAreaSqFt = 12.0) > 0.0)
+    }
+
+    @Test
+    fun `grid snapping uses finer sub steps to reduce endpoint gaps`() {
+        val settings = BlueprintSnapSettings(
+            gridEnabled = true,
+            gridStepFeet = 1.0,
+            endpointEnabled = false,
+            midpointEnabled = false,
+            angleEnabled = false,
+            closureEnabled = false
+        )
+        val oneInchMm = Millimeters.fromInches(1.0).value
+        val rawPoint = PointMm(
+            x = Millimeters.fromInches(3.0).value,
+            y = Millimeters.fromInches(7.0).value
+        )
+        val snapped = BlueprintSnapMath.applySnapping(
+            rawPoint = rawPoint,
+            drawingStart = null,
+            settings = settings,
+            walls = emptyList()
+        )
+
+        val expectedX = ((rawPoint.x.toDouble() / oneInchMm.toDouble()).roundToLong()) * oneInchMm
+        val expectedY = ((rawPoint.y.toDouble() / oneInchMm.toDouble()).roundToLong()) * oneInchMm
+        assertEquals(expectedX, snapped.x)
+        assertEquals(expectedY, snapped.y)
     }
 }

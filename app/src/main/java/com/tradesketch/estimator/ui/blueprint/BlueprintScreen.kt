@@ -154,6 +154,7 @@ fun BlueprintScreen(
     modifier: Modifier = Modifier,
     initialShowAddons: Boolean = false,
     initialShowParams: Boolean = false,
+    leftEdgeDialInset: Dp = 0.dp,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
     viewModel: BlueprintEditorViewModel = hiltViewModel(),
@@ -1170,6 +1171,7 @@ fun BlueprintScreen(
             }
         }
     }
+    val leftControlsInset = leftEdgeDialInset.coerceAtLeast(0.dp)
     val joystickRailPadding = if (dualJoysticksEnabled) 56.dp else 0.dp
     val panelBottomPadding = DEFAULT_PANEL_BOTTOM_PADDING + joystickRailPadding
     val helpBottomPadding = panelBottomPadding + 14.dp
@@ -1834,7 +1836,7 @@ fun BlueprintScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)
+                .padding(start = 8.dp + leftControlsInset, end = 8.dp, top = 4.dp, bottom = 8.dp)
                 .navigationBarsPadding()
                 .imePadding()
                 .onGloballyPositioned {
@@ -1900,7 +1902,7 @@ fun BlueprintScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = joystickRailPadding)
+                    .padding(start = 12.dp + leftControlsInset, end = 12.dp, bottom = joystickRailPadding)
                     .navigationBarsPadding()
             )
         } else {
@@ -1995,7 +1997,7 @@ fun BlueprintScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 56.dp)
+                    .padding(start = 16.dp + leftControlsInset, end = 16.dp, bottom = 56.dp)
                     .navigationBarsPadding()
             )
         }
@@ -2004,6 +2006,7 @@ fun BlueprintScreen(
                 onAngleTicks = onAngleDialTicks,
                 onLengthTicks = onLengthDialTicks,
                 onInteractionChanged = onEdgeDialInteractionChanged,
+                leftInset = leftControlsInset,
                 bottomInset = if (dualJoysticksEnabled) 72.dp else 14.dp,
                 modifier = Modifier
                     .fillMaxSize()

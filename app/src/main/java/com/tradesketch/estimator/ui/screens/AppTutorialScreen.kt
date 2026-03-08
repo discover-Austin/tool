@@ -243,6 +243,19 @@ private fun tutorialSteps(): List<TutorialStep> = listOf(
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
+        title = "Dual Joystick Mastery",
+        summary = "Use right stick for cursor and left stick for camera pan, then tap from either side for action flow.",
+        controls = listOf(
+            "Right stick moves the cursor. Small movement gives precision; full movement crosses the canvas quickly.",
+            "Left stick pans the blueprint without changing zoom.",
+            "Left-stick tap is your primary tap at cursor (start walls, place endpoints/openings, confirm).",
+            "Right-stick tap is alternate action (cancel active draw/pick-up, quick-select or clear nearby wall).",
+            "Practice: right-stick to a corner, left-tap start, move, left-tap place, right-tap reset."
+        ),
+        tip = "Fine-tune in Settings/About: lower joystick sensitivity and raise deadzone for tighter control.",
+        icon = Icons.Filled.Architecture
+    ),
+    TutorialStep(
         title = "Materials",
         summary = "Validate quantities and tune estimating assumptions.",
         controls = listOf(

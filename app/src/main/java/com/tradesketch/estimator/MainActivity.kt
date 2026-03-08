@@ -81,10 +81,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.PrimaryTrade
@@ -476,6 +478,19 @@ private fun WorkspaceShell(
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
+                title = "Dual Joystick Mastery",
+                message = "Dual joysticks let you draw and edit continuously without lifting your thumbs.",
+                controls = listOf(
+                    "Right stick moves the cursor: slight push for precision, full push for fast travel.",
+                    "Left stick pans the canvas while keeping your current zoom level.",
+                    "Left-stick tap sends the primary tap at cursor: start/end walls, place openings, confirm actions.",
+                    "Right-stick tap sends alternate action: cancel current draw/pick-up, or quick-select/clear nearby wall.",
+                    "30-second drill: move cursor to corner, left-tap start wall, move cursor, left-tap place wall, right-tap to cancel/reset."
+                ),
+                tip = "If control feels twitchy, lower joystick sensitivity and raise deadzone in Settings > Blueprint.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
                 title = "Precision Controls",
                 message = "Use advanced controls when you need exact alignment, rotation, and sizing.",
                 controls = listOf(
@@ -622,35 +637,23 @@ private fun WorkspaceShell(
         showSavedProjects = false
     }
 
-    Row(modifier = modifier.fillMaxSize()) {
-        WorkspaceLeftRail(
-            currentTab = selectedTab,
-            collapsed = leftRailCollapsed,
-            onSelectTab = navigateToTab,
-            showSavedProjects = showSavedProjects,
-            onCreateNewProject = {
-                if (activeProject != null) {
-                    showNewProjectConfirm = true
-                    showSavedProjects = false
-                } else {
-                    launchNewProject(true)
-                }
-            },
-            onToggleSavedProjects = {
-                showSavedProjects = !showSavedProjects
-            },
-            onToggleCollapsed = toggleLeftRail,
-            modifier = Modifier.fillMaxHeight()
-        )
-        if (!leftRailCollapsed) {
-            VerticalDivider(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            )
-        }
+    val configuration = LocalConfiguration.current
+    val leftRailHeightFraction = when {
+        configuration.screenHeightDp <= 700 -> 0.68f
+        configuration.screenHeightDp <= 840 -> 0.62f
+        else -> 0.56f
+    }
+    val railCompact = configuration.screenWidthDp <= 390
+    val collapsedRailWidth = if (railCompact) 22.dp else 24.dp
+    val expandedRailWidth = if (railCompact) 44.dp else 48.dp
+    val leftBlueprintOverlayInset = if (leftRailCollapsed) {
+        collapsedRailWidth + 8.dp
+    } else {
+        expandedRailWidth + 13.dp
+    }
+    Box(modifier = modifier.fillMaxSize()) {
         Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
+            modifier = Modifier.fillMaxSize()
         ) {
             val projectTabContent: (@Composable (String) -> Unit)? = when (selectedTab) {
                 DetailTab.BLUEPRINT -> { projectId ->
@@ -658,6 +661,7 @@ private fun WorkspaceShell(
                         projectId = projectId,
                         initialShowAddons = false,
                         initialShowParams = false,
+                        leftEdgeDialInset = leftBlueprintOverlayInset,
                         onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -810,6 +814,43 @@ private fun WorkspaceShell(
                 )
             }
         }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxHeight(leftRailHeightFraction)
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom)
+                ),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            WorkspaceLeftRail(
+                currentTab = selectedTab,
+                collapsed = leftRailCollapsed,
+                compact = railCompact,
+                onSelectTab = navigateToTab,
+                showSavedProjects = showSavedProjects,
+                onCreateNewProject = {
+                    if (activeProject != null) {
+                        showNewProjectConfirm = true
+                        showSavedProjects = false
+                    } else {
+                        launchNewProject(true)
+                    }
+                },
+                onToggleSavedProjects = {
+                    showSavedProjects = !showSavedProjects
+                },
+                onToggleCollapsed = toggleLeftRail,
+                modifier = Modifier.fillMaxHeight()
+            )
+            if (!leftRailCollapsed) {
+                VerticalDivider(
+                    modifier = Modifier.fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                )
+            }
+        }
     }
 }
 
@@ -906,6 +947,7 @@ private fun WorkspaceTourOverlay(
 private fun WorkspaceLeftRail(
     currentTab: DetailTab,
     collapsed: Boolean,
+    compact: Boolean,
     onSelectTab: (DetailTab) -> Unit,
     showSavedProjects: Boolean,
     onCreateNewProject: () -> Unit,
@@ -914,6 +956,8 @@ private fun WorkspaceLeftRail(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val collapsedWidth = if (compact) 22.dp else 24.dp
+    val expandedWidth = if (compact) 44.dp else 48.dp
     val primaryTabs = DetailTab.entries.filterNot { tab ->
         tab == DetailTab.QUANTITIES ||
             tab == DetailTab.ADDONS ||
@@ -923,11 +967,11 @@ private fun WorkspaceLeftRail(
     val blueprintTab = primaryTabs.firstOrNull { it == DetailTab.BLUEPRINT } ?: DetailTab.BLUEPRINT
     val secondaryTabs = primaryTabs.filterNot { it == DetailTab.BLUEPRINT }
     if (collapsed) {
-        Column(
+        Box(
             modifier = modifier
-                .width(40.dp)
-                .padding(top = 8.dp, bottom = 8.dp),
-            horizontalAlignment = Alignment.Start
+                .width(collapsedWidth)
+                .padding(bottom = 8.dp),
+            contentAlignment = Alignment.BottomStart
         ) {
             Surface(
                 onClick = onToggleCollapsed,
@@ -944,13 +988,17 @@ private fun WorkspaceLeftRail(
         return
     }
     NavigationRail(
-        modifier = modifier.width(62.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f),
-        header = {
+        modifier = modifier.width(expandedWidth),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+    ) {
+        Box(modifier = Modifier.fillMaxHeight()) {
             Column(
-                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 8.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Surface(
                     onClick = onToggleCollapsed,
@@ -967,16 +1015,8 @@ private fun WorkspaceLeftRail(
                     imageVector = Icons.Filled.Architecture,
                     contentDescription = "TradeSketch",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(8.dp)
+                    modifier = Modifier.padding(6.dp)
                 )
-            }
-        }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxHeight(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
                 WorkspaceRailActionItem(
                     label = "New+",
                     icon = Icons.Filled.Add,
@@ -1013,15 +1053,15 @@ private fun WorkspaceLeftRail(
                         }
                     )
                 }
+                WorkspaceRailItem(
+                    tab = DetailTab.SETTINGS_ABOUT,
+                    currentTab = currentTab,
+                    onSelectTab = onSelectTab,
+                    onLongPress = {
+                        Toast.makeText(context, DetailTab.SETTINGS_ABOUT.label, Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
-            WorkspaceRailItem(
-                tab = DetailTab.SETTINGS_ABOUT,
-                currentTab = currentTab,
-                onSelectTab = onSelectTab,
-                onLongPress = {
-                    Toast.makeText(context, DetailTab.SETTINGS_ABOUT.label, Toast.LENGTH_SHORT).show()
-                }
-            )
         }
     }
 }
@@ -1053,7 +1093,9 @@ private fun WorkspaceRailActionItem(
         label = {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         },
         alwaysShowLabel = true
@@ -1085,12 +1127,21 @@ private fun WorkspaceRailItem(
         },
         label = {
             Text(
-                text = tab.label,
-                style = MaterialTheme.typography.labelSmall
+                text = tab.railLabel(),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         },
-        alwaysShowLabel = false
+        alwaysShowLabel = true
     )
+}
+
+private fun DetailTab.railLabel(): String = when (this) {
+    DetailTab.BLUEPRINT -> "Plan"
+    DetailTab.MATERIALS -> "Mats"
+    DetailTab.SETTINGS_ABOUT -> "Settings"
+    else -> label
 }
 
 @Composable

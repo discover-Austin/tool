@@ -26,6 +26,9 @@ class SettingsDataStore @Inject constructor(
         private val REDUCED_MOTION_ENABLED = booleanPreferencesKey("reduced_motion_enabled")
         private val FIRST_RUN = booleanPreferencesKey("first_run")
         private val HAS_COMPLETED_TRADE_ONBOARDING = booleanPreferencesKey("has_completed_trade_onboarding")
+        private val HAS_COMPLETED_APP_TUTORIAL = booleanPreferencesKey("has_completed_app_tutorial")
+        private val HAS_SEEN_TOUCH_MODE_QUICK_TOOLS_TUTORIAL =
+            booleanPreferencesKey("has_seen_touch_mode_quick_tools_tutorial")
         private val DEFAULT_WASTE_PERCENT = doublePreferencesKey("default_waste_percent")
         private val USE_METRIC = booleanPreferencesKey("use_metric")
         private val DEFAULT_DRYWALL_SHEET_AREA = doublePreferencesKey("default_drywall_sheet_area")
@@ -53,6 +56,7 @@ class SettingsDataStore @Inject constructor(
         private val BLUEPRINT_SNAP_MIDPOINT_ENABLED = booleanPreferencesKey("blueprint_snap_midpoint_enabled")
         private val BLUEPRINT_SNAP_ANGLE_ENABLED = booleanPreferencesKey("blueprint_snap_angle_enabled")
         private val BLUEPRINT_SNAP_CLOSURE_ENABLED = booleanPreferencesKey("blueprint_snap_closure_enabled")
+        private val BLUEPRINT_SNAP_THRESHOLD_FEET = doublePreferencesKey("blueprint_snap_threshold_feet")
         private val BLUEPRINT_DUAL_JOYSTICKS_ENABLED = booleanPreferencesKey("blueprint_dual_joysticks_enabled")
         private val BLUEPRINT_JOYSTICK_SENSITIVITY = floatPreferencesKey("blueprint_joystick_sensitivity")
         private val BLUEPRINT_JOYSTICK_DEADZONE = floatPreferencesKey("blueprint_joystick_deadzone")
@@ -75,6 +79,11 @@ class SettingsDataStore @Inject constructor(
                 firstRun = preferences[FIRST_RUN] ?: defaults.firstRun,
                 hasCompletedTradeOnboarding = preferences[HAS_COMPLETED_TRADE_ONBOARDING]
                     ?: defaults.hasCompletedTradeOnboarding,
+                hasCompletedAppTutorial = preferences[HAS_COMPLETED_APP_TUTORIAL]
+                    ?: defaults.hasCompletedAppTutorial,
+                hasSeenTouchModeQuickToolsTutorial =
+                    preferences[HAS_SEEN_TOUCH_MODE_QUICK_TOOLS_TUTORIAL]
+                        ?: defaults.hasSeenTouchModeQuickToolsTutorial,
                 defaultWastePercent = preferences[DEFAULT_WASTE_PERCENT] ?: defaults.defaultWastePercent,
                 useMetric = preferences[USE_METRIC] ?: defaults.useMetric,
                 defaultDrywallSheetArea = preferences[DEFAULT_DRYWALL_SHEET_AREA]
@@ -111,6 +120,8 @@ class SettingsDataStore @Inject constructor(
                     ?: defaults.blueprintSnapAngleEnabled,
                 blueprintSnapClosureEnabled = preferences[BLUEPRINT_SNAP_CLOSURE_ENABLED]
                     ?: defaults.blueprintSnapClosureEnabled,
+                blueprintSnapThresholdFeet = preferences[BLUEPRINT_SNAP_THRESHOLD_FEET]
+                    ?: defaults.blueprintSnapThresholdFeet,
                 blueprintDualJoysticksEnabled = preferences[BLUEPRINT_DUAL_JOYSTICKS_ENABLED]
                     ?: defaults.blueprintDualJoysticksEnabled,
                 blueprintJoystickSensitivity = preferences[BLUEPRINT_JOYSTICK_SENSITIVITY]
@@ -131,6 +142,9 @@ class SettingsDataStore @Inject constructor(
             preferences[REDUCED_MOTION_ENABLED] = settings.reducedMotionEnabled
             preferences[FIRST_RUN] = settings.firstRun
             preferences[HAS_COMPLETED_TRADE_ONBOARDING] = settings.hasCompletedTradeOnboarding
+            preferences[HAS_COMPLETED_APP_TUTORIAL] = settings.hasCompletedAppTutorial
+            preferences[HAS_SEEN_TOUCH_MODE_QUICK_TOOLS_TUTORIAL] =
+                settings.hasSeenTouchModeQuickToolsTutorial
             preferences[DEFAULT_WASTE_PERCENT] = settings.defaultWastePercent
             preferences[USE_METRIC] = settings.useMetric
             preferences[DEFAULT_DRYWALL_SHEET_AREA] = settings.defaultDrywallSheetArea
@@ -158,6 +172,7 @@ class SettingsDataStore @Inject constructor(
             preferences[BLUEPRINT_SNAP_MIDPOINT_ENABLED] = settings.blueprintSnapMidpointEnabled
             preferences[BLUEPRINT_SNAP_ANGLE_ENABLED] = settings.blueprintSnapAngleEnabled
             preferences[BLUEPRINT_SNAP_CLOSURE_ENABLED] = settings.blueprintSnapClosureEnabled
+            preferences[BLUEPRINT_SNAP_THRESHOLD_FEET] = settings.blueprintSnapThresholdFeet
             preferences[BLUEPRINT_DUAL_JOYSTICKS_ENABLED] = settings.blueprintDualJoysticksEnabled
             preferences[BLUEPRINT_JOYSTICK_SENSITIVITY] = settings.blueprintJoystickSensitivity
             preferences[BLUEPRINT_JOYSTICK_DEADZONE] = settings.blueprintJoystickDeadzone

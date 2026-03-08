@@ -46,6 +46,7 @@ import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
 
 @Composable
 fun SettingsScreen(
+    onReplayTutorial: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -161,6 +162,31 @@ fun SettingsScreen(
             }
         }
 
+        if (onReplayTutorial != null) {
+            item {
+                TitledSectionCard(
+                    title = "Help & Onboarding",
+                    subtitle = "Short walkthrough for the core workflow."
+                ) {
+                    Text(
+                        text = "Need a refresher? Launch the skippable tutorial session anytime.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    QuietActionButton(
+                        onClick = {
+                            haptics.tap()
+                            onReplayTutorial()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Replay Tutorial")
+                    }
+                }
+            }
+        }
+
         item {
             TitledSectionCard(
                 title = "Blueprint Controls",
@@ -218,6 +244,26 @@ fun SettingsScreen(
                         label = { Text("Room closure") }
                     )
                 }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Snap sensitivity: ${"%.2f".format(uiState.settings.blueprintSnapThresholdFeet)} ft",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = uiState.settings.blueprintSnapThresholdFeet.coerceIn(0.2, 2.0).toFloat(),
+                    onValueChange = {
+                        viewModel.updateBlueprintSnapDefaults(
+                            thresholdFeet = it.coerceIn(0.2f, 2.0f).toDouble()
+                        )
+                    },
+                    valueRange = 0.2f..2.0f
+                )
+                Text(
+                    text = "Lower values require closer alignment. Higher values snap more aggressively.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Controls",
