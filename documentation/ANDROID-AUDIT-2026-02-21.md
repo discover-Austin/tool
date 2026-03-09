@@ -83,7 +83,7 @@ Major docs were updated to align with current code and release behavior:
 ## 5) Remaining Manual Release Gates
 
 - Upload current AAB to Play Console production track
-- Confirm Play parses expected version (`code 5`, `name 1.0.3`)
+- Confirm Play parses expected version (`code 10`, `name 1.0.8`)
 - Execute final smoke run on release commit/device matrix
 - Confirm listing screenshots and copy match current app UI
 
@@ -97,3 +97,4 @@ Technical baseline is Play-ready:
 - Submission docs aligned to current state
 
 Remaining work is console-side submission and final manual rollout checks.
+

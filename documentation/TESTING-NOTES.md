@@ -1,7 +1,7 @@
 # Testing Notes
 
 ## TradeSketch Estimator
-Updated: February 21, 2026
+Updated: March 8, 2026
 
 This checklist targets the current blueprint-first UI.
 
@@ -49,7 +49,7 @@ Expected: no startup/runtime fatal exceptions on normal flows.
 - [ ] Project setup step 2 trade selection completes and opens workspace.
 
 ### Workspace Navigation
-- [ ] Rail opens tabs: Blueprint, Materials, Quantities, Export, Settings/About.
+- [ ] Rail opens tabs: Blueprint, Materials, Export, Settings.
 - [ ] Saved projects panel opens/closes.
 - [ ] Creating a starter/new project works.
 - [ ] Switching projects from Saved list updates active project.
@@ -60,8 +60,8 @@ Expected: no startup/runtime fatal exceptions on normal flows.
 - [ ] Undo/redo and delete actions behave correctly.
 - [ ] Blueprint-derived live quantities update as geometry changes.
 
-### Materials and Quantities
-- [ ] Estimate type switching (drywall/concrete/gravel-paint) works.
+### Materials
+- [ ] Estimate type switching (drywall/concrete/gravel/mulch/paint) works.
 - [ ] Parameter changes recalculate outputs.
 - [ ] Smart checks/warnings display when expected.
 

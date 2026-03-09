@@ -79,6 +79,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -638,14 +639,10 @@ private fun WorkspaceShell(
     }
 
     val configuration = LocalConfiguration.current
-    val leftRailHeightFraction = when {
-        configuration.screenHeightDp <= 700 -> 0.68f
-        configuration.screenHeightDp <= 840 -> 0.62f
-        else -> 0.56f
-    }
-    val railCompact = configuration.screenWidthDp <= 390
-    val collapsedRailWidth = if (railCompact) 22.dp else 24.dp
-    val expandedRailWidth = if (railCompact) 44.dp else 48.dp
+    val railCompact = configuration.screenWidthDp < 600
+    val railExpandedForLargeWindow = configuration.screenWidthDp >= 840
+    val collapsedRailWidth = if (railCompact) 32.dp else 36.dp
+    val expandedRailWidth = if (railExpandedForLargeWindow) 84.dp else 72.dp
     val leftBlueprintOverlayInset = if (leftRailCollapsed) {
         collapsedRailWidth + 8.dp
     } else {
@@ -715,7 +712,12 @@ private fun WorkspaceShell(
                 OutlinedTextField(
                     value = projectNameDraft,
                     onValueChange = { projectNameDraft = it },
-                    label = { Text("Project Name", style = MaterialTheme.typography.labelSmall) },
+                    label = {
+                        Text(
+                            stringResource(R.string.project_name_label),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodySmall,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -758,11 +760,9 @@ private fun WorkspaceShell(
             if (showNewProjectConfirm) {
                 AlertDialog(
                     onDismissRequest = { showNewProjectConfirm = false },
-                    title = { Text("Start New Project?") },
+                    title = { Text(stringResource(R.string.start_new_project_title)) },
                     text = {
-                        Text(
-                            "Save current project and keep it, or continue without saving and delete it."
-                        )
+                        Text(stringResource(R.string.start_new_project_message))
                     },
                     confirmButton = {
                         TextButton(
@@ -771,7 +771,7 @@ private fun WorkspaceShell(
                                 launchNewProject(true)
                             }
                         ) {
-                            Text("Save & New")
+                            Text(stringResource(R.string.save_and_new))
                         }
                     },
                     dismissButton = {
@@ -782,10 +782,10 @@ private fun WorkspaceShell(
                                     launchNewProject(false)
                                 }
                             ) {
-                                Text("Delete & New")
+                                Text(stringResource(R.string.delete_and_new))
                             }
                             TextButton(onClick = { showNewProjectConfirm = false }) {
-                                Text("Cancel")
+                                Text(stringResource(R.string.cancel))
                             }
                         }
                     }
@@ -818,7 +818,7 @@ private fun WorkspaceShell(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .fillMaxHeight(leftRailHeightFraction)
+                .fillMaxHeight()
                 .windowInsetsPadding(
                     WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom)
                 ),
@@ -828,6 +828,8 @@ private fun WorkspaceShell(
                 currentTab = selectedTab,
                 collapsed = leftRailCollapsed,
                 compact = railCompact,
+                collapsedRailWidth = collapsedRailWidth,
+                expandedRailWidth = expandedRailWidth,
                 onSelectTab = navigateToTab,
                 showSavedProjects = showSavedProjects,
                 onCreateNewProject = {
@@ -948,6 +950,8 @@ private fun WorkspaceLeftRail(
     currentTab: DetailTab,
     collapsed: Boolean,
     compact: Boolean,
+    collapsedRailWidth: androidx.compose.ui.unit.Dp,
+    expandedRailWidth: androidx.compose.ui.unit.Dp,
     onSelectTab: (DetailTab) -> Unit,
     showSavedProjects: Boolean,
     onCreateNewProject: () -> Unit,
@@ -956,8 +960,6 @@ private fun WorkspaceLeftRail(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val collapsedWidth = if (compact) 22.dp else 24.dp
-    val expandedWidth = if (compact) 44.dp else 48.dp
     val primaryTabs = DetailTab.entries.filterNot { tab ->
         tab == DetailTab.QUANTITIES ||
             tab == DetailTab.ADDONS ||
@@ -969,7 +971,7 @@ private fun WorkspaceLeftRail(
     if (collapsed) {
         Box(
             modifier = modifier
-                .width(collapsedWidth)
+                .width(collapsedRailWidth)
                 .padding(bottom = 8.dp),
             contentAlignment = Alignment.BottomStart
         ) {
@@ -980,7 +982,7 @@ private fun WorkspaceLeftRail(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Expand navigation rail",
+                    contentDescription = stringResource(R.string.expand_navigation_rail),
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
                 )
             }
@@ -988,7 +990,7 @@ private fun WorkspaceLeftRail(
         return
     }
     NavigationRail(
-        modifier = modifier.width(expandedWidth),
+        modifier = modifier.width(expandedRailWidth),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
     ) {
         Box(modifier = Modifier.fillMaxHeight()) {
@@ -1005,18 +1007,18 @@ private fun WorkspaceLeftRail(
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Collapse navigation rail",
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                    )
-                }
                 Icon(
-                    imageVector = Icons.Filled.Architecture,
-                    contentDescription = "TradeSketch",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(6.dp)
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = stringResource(R.string.collapse_navigation_rail),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
                 )
+            }
+            Icon(
+                imageVector = Icons.Filled.Architecture,
+                contentDescription = stringResource(R.string.app_name),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(6.dp)
+            )
                 WorkspaceRailActionItem(
                     label = "New+",
                     icon = Icons.Filled.Add,
@@ -1171,9 +1173,9 @@ private fun SavedProjectsPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Saved Projects", style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.saved_projects), style = MaterialTheme.typography.titleSmall)
                 Button(onClick = onDismiss, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
-                    Text("Close")
+                    Text(stringResource(R.string.close))
                 }
             }
             if (projects.isEmpty()) {
@@ -1215,11 +1217,14 @@ private fun SavedProjectsPanel(
                                 )
                                 IconButton(
                                     onClick = { pendingDeleteProjectId = project.id },
-                                    modifier = Modifier.height(40.dp).width(40.dp)
+                                    modifier = Modifier.height(48.dp).width(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Delete,
-                                        contentDescription = "Delete project ${project.name}"
+                                        contentDescription = stringResource(
+                                            R.string.delete_project_content_description,
+                                            project.name
+                                        )
                                     )
                                 }
                             }
@@ -1233,8 +1238,8 @@ private fun SavedProjectsPanel(
     if (pendingProject != null) {
         AlertDialog(
             onDismissRequest = { pendingDeleteProjectId = null },
-            title = { Text("Delete project?") },
-            text = { Text("Delete \"${pendingProject.name}\" permanently?") },
+            title = { Text(stringResource(R.string.delete_project_title)) },
+            text = { Text(stringResource(R.string.delete_project_message, pendingProject.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1242,12 +1247,12 @@ private fun SavedProjectsPanel(
                         pendingDeleteProjectId = null
                     }
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteProjectId = null }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -1277,17 +1282,17 @@ private fun ProjectScopedTab(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "No project selected",
+                        text = stringResource(R.string.no_project_selected_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "Create a starter project to continue in the blueprint-first workspace.",
+                        text = stringResource(R.string.no_project_selected_message),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Button(onClick = onCreateStarterProject) {
-                        Text("Create Starter Project")
+                        Text(stringResource(R.string.create_starter_project))
                     }
                 }
             }

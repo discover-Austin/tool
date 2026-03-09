@@ -1,7 +1,10 @@
-TradeSketch Estimator 1.0.3
+TradeSketch Estimator 1.0.8
 
 What's new:
-- Blueprint-first workspace polish across drawing, takeoff, and export flows
-- Improved estimate scope switching for drywall, concrete, gravel/mulch, and paint
-- Export improvements for PDF, CSV, JSON, and share actions
-- Stability and performance fixes in release build path
+- Improved blueprint reliability: safer room detection preservation and stronger opening placement validation
+- Better multi-floor workflow with consistent floor controls in blueprint editing
+- Drywall ceiling calculations now honor room ceiling-enabled settings
+- Export quality hardening: safer CSV escaping and more collision-resistant file naming
+- Adaptive and accessibility refinements for navigation/blueprint controls
+- Additional regression tests for export formatting and blueprint math
+

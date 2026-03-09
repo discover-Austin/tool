@@ -4,6 +4,7 @@ import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.BlueprintOpening
 import com.tradesketch.estimator.domain.model.BlueprintParams
 import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
+import com.tradesketch.estimator.domain.model.CeilingSpec
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.PointMm
@@ -266,5 +267,52 @@ class BlueprintDocumentMathTest {
         val netPaintableTrace = paint.traces.first { it.metric == "paintable_wall_area" }
         // 10x9 wall = 90 sqft, opening 3x7 = 21 sqft
         assertEquals(69.0, netPaintableTrace.value, 0.05)
+    }
+
+    @Test
+    fun drywallCeilingTakeoff_skipsRoomsWithDisabledCeilings() {
+        val side = Millimeters.fromFeet(10.0).value
+        val enabledRoom = Room(
+            id = "room-enabled",
+            name = "Room Enabled",
+            polygon = listOf(
+                PointMm(0, 0),
+                PointMm(side, 0),
+                PointMm(side, side),
+                PointMm(0, side)
+            ),
+            ceiling = CeilingSpec(enabled = true)
+        )
+        val disabledRoom = Room(
+            id = "room-disabled",
+            name = "Room Disabled",
+            polygon = listOf(
+                PointMm(side + 1_000, 0),
+                PointMm((side * 2) + 1_000, 0),
+                PointMm((side * 2) + 1_000, side),
+                PointMm(side + 1_000, side)
+            ),
+            ceiling = CeilingSpec(enabled = false)
+        )
+        val document = BlueprintDocument(
+            projectId = "p1",
+            walls = emptyList(),
+            rooms = listOf(enabledRoom, disabledRoom)
+        )
+
+        val drywall = BlueprintTakeoffCalculator.drywallTakeoff(
+            document = document,
+            sheetAreaSqFt = 100.0,
+            wastePercent = 0.0,
+            screwsPerSheet = 0,
+            mudGallonsPer100SqFt = 0.0,
+            includeCeilings = true
+        )
+
+        val ceilingTraces = drywall.traces.filter { it.metric == "ceiling_area" }
+        val adjustedArea = drywall.traces.first { it.metric == "drywall_adjusted_area" }.value
+
+        assertEquals(1, ceilingTraces.size)
+        assertEquals(100.0, adjustedArea, 0.2)
     }
 }

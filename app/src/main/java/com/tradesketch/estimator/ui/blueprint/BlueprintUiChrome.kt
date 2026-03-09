@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -180,7 +181,7 @@ internal fun BlueprintBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .height(40.dp)
+                .height(56.dp)
                 .padding(horizontal = 4.dp, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -265,6 +266,7 @@ internal fun SlimIconToggle(
     contentDescription: String,
     selected: Boolean,
     onClick: () -> Unit,
+    minimumTouchTarget: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val container = if (selected) {
@@ -289,7 +291,15 @@ internal fun SlimIconToggle(
                 MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
             }
         ),
-        modifier = modifier.size(26.dp)
+        modifier = modifier
+            .size(26.dp)
+            .then(
+                if (minimumTouchTarget) {
+                    Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
@@ -310,6 +320,7 @@ internal fun SlimIconAction(
     onClick: () -> Unit,
     buttonSize: Dp = 26.dp,
     iconSize: Dp = 12.dp,
+    minimumTouchTarget: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val container = if (enabled) {
@@ -328,7 +339,15 @@ internal fun SlimIconAction(
         shape = RoundedCornerShape(8.dp),
         color = container,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-        modifier = modifier.size(buttonSize)
+        modifier = modifier
+            .size(buttonSize)
+            .then(
+                if (minimumTouchTarget) {
+                    Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                } else {
+                    Modifier
+                }
+            )
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
@@ -352,10 +371,10 @@ internal fun ScopeSelector(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
-        modifier = modifier.height(23.dp).widthIn(min = 64.dp)
+        modifier = modifier.widthIn(min = 96.dp).sizeIn(minHeight = 48.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -394,7 +413,7 @@ internal fun ClearAllButton(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.52f)),
-        modifier = modifier.height(32.dp)
+        modifier = modifier.heightIn(min = 48.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 9.dp),
@@ -551,7 +570,7 @@ internal fun FloorCompactBadge(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)),
-        modifier = modifier.height(20.dp)
+        modifier = modifier.heightIn(min = 48.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),

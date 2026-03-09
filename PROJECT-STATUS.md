@@ -1,69 +1,33 @@
-# TradeSketch Estimator - Project Status Summary
+# TradeSketch Estimator - Project Status
 
-Updated: February 21, 2026
+Updated: March 8, 2026
 
-This status reflects the current codebase and local release audit.
+See `RELEASE_STATUS.md` for authoritative release state.
 
-## Executive Summary
-
-TradeSketch Estimator is currently release-ready from a technical build/compliance baseline:
-
-- Signed AAB builds successfully
-- Unit tests pass (`app` + `core`)
-- Lint passes (`debug` + `release`)
-- Store listing/legal assets are present in `store-assets/`
-
-Primary remaining work before production rollout is manual Play Console execution and final device smoke verification on the upload commit.
-
-## Verified Technical State
+## Current Technical Baseline
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.3` (`versionCode = 5`)
+- Version: `1.0.8` (`versionCode = 10`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
-- Release output: `app/build/outputs/bundle/release/app-release.aab`
+- Release shrinking: enabled (`minify + resource shrink`)
 
-Automated checks completed successfully:
+## Completed Core Product Scope
 
-- `./gradlew.bat :app:testDebugUnitTest`
-- `./gradlew.bat :core:test`
-- `./gradlew.bat :app:lint`
-- `./gradlew.bat :app:lintRelease`
-- `./gradlew.bat :app:bundleRelease`
+- Offline-first project lifecycle and persistence
+- Blueprint editing with snapping, openings, rooms, floors, and undo/redo
+- Takeoff support: drywall, concrete, paint, gravel/mulch
+- Costing summary: materials, labor, markup, tax, total
+- Export paths: text, CSV, JSON, estimate PDF, blueprint PNG/PDF
 
-## Product Workflow (Current)
+## Release Confidence Inputs
 
-- Welcome screen
-- Project setup (project name + primary trade)
-- Blueprint-first workspace with tabs:
-  - Blueprint
-  - Materials
-  - Quantities
-  - Export
-  - Settings/About
-
-## Privacy and Policy Notes
-
-- No `INTERNET` permission declared in manifest
-- No analytics/crash SDK dependencies configured
-- `android:allowBackup` disabled for local-only data posture
-- Data safety and content rating answer files exist in `store-assets/listing/`
-
-## Release Pipeline Notes
-
-- `scripts/03-build-release.ps1` now requires valid signing config and verifies keystore credentials.
-- Fallback/test keystore auto-generation is disabled for Play-ready release flow.
+- Unit tests in `app` and `core`
+- Lint (`debug` + `release`)
+- Signed AAB generation pipeline via `scripts/03-build-release.ps1`
 
 ## Remaining Manual Gates
 
-- Upload latest AAB to Play Console production track
-- Verify parsed version and release notes in console
-- Run final smoke test on exact release commit/device target
-- Confirm screenshots/listing text match current UI before rollout
+- Final multi-device smoke run on release commit
+- Play Console upload validation (version parse, listing assets, policy responses)
 
-## Source Documents
 
-- Build flow: `documentation/BUILD-INSTRUCTIONS.md`
-- QA checklist: `documentation/TESTING-NOTES.md`
-- Submission checklist: `documentation/SUBMISSION-GUIDE.md`
-- Compliance list: `documentation/COMPLIANCE-CHECKLIST.md`
-- Full audit evidence: `documentation/ANDROID-AUDIT-2026-02-21.md`

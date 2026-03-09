@@ -3,6 +3,9 @@ package com.tradesketch.estimator.utils
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Formats data for export (CSV, PDF, Share, Copy).
@@ -21,12 +24,14 @@ object ExportFormatter {
         result: TakeoffResult
     ): String {
         val header = buildBusinessHeader(settings)
+        val estimateId = buildEstimateId(project)
         return buildString {
             appendLine(header.name)
             header.contactLines.forEach { appendLine(it) }
             appendLine("=" .repeat(50))
             appendLine()
             appendLine("Project: ${project.name}")
+            appendLine("Estimate ID: $estimateId")
             appendLine("Takeoff Type: $takeoffType")
             appendLine("Date: ${Formatters.formatDate(System.currentTimeMillis())}")
             appendLine()
@@ -73,48 +78,75 @@ object ExportFormatter {
         result: TakeoffResult
     ): String {
         val header = buildBusinessHeader(settings)
+        val estimateId = buildEstimateId(project)
         return buildString {
             appendLine("Company,Phone,Email,Address,License")
             appendLine(
-                "\"${header.name}\",\"${settings.businessPhone}\",\"${settings.businessEmail}\"," +
-                    "\"${settings.businessAddress}\",\"${settings.businessLicense}\""
+                listOf(
+                    header.name,
+                    settings.businessPhone,
+                    settings.businessEmail,
+                    settings.businessAddress,
+                    settings.businessLicense
+                ).joinToString(separator = ",") { cell -> csvCell(cell) }
             )
             appendLine()
-            appendLine("Project,Takeoff Type,Date")
-            appendLine("\"${project.name}\",\"$takeoffType\",\"${Formatters.formatDate(System.currentTimeMillis())}\"")
+            appendLine("Project,Estimate ID,Takeoff Type,Date")
+            appendLine(
+                listOf(
+                    project.name,
+                    estimateId,
+                    takeoffType,
+                    Formatters.formatDate(System.currentTimeMillis())
+                ).joinToString(separator = ",") { cell -> csvCell(cell) }
+            )
             appendLine()
             appendLine("Item,Quantity,Unit,Unit Cost,Extended Cost")
             result.items.forEach { item ->
                 val unitCost = item.unitCost?.let { Formatters.formatMoney(it) } ?: ""
                 val extCost = item.extendedCost?.let { Formatters.formatMoney(it) } ?: ""
-                appendLine("\"${item.name}\",${item.quantity},\"${item.unit}\",\"$unitCost\",\"$extCost\"")
+                appendLine(
+                    listOf(
+                        csvCell(item.name),
+                        item.quantity.toString(),
+                        csvCell(item.unit),
+                        csvCell(unitCost),
+                        csvCell(extCost)
+                    ).joinToString(separator = ",")
+                )
             }
             result.materialSubtotal?.let { subtotal ->
-                appendLine("Materials,,,,\"${Formatters.formatMoney(subtotal)}\"")
+                appendLine("${csvCell("Materials")},,,,${csvCell(Formatters.formatMoney(subtotal))}")
             }
             result.laborCost?.let { labor ->
-                appendLine("Labor,,,,\"${Formatters.formatMoney(labor)}\"")
+                appendLine("${csvCell("Labor")},,,,${csvCell(Formatters.formatMoney(labor))}")
             }
             result.markupCost?.let { markup ->
-                appendLine("Markup,,,,\"${Formatters.formatMoney(markup)}\"")
+                appendLine("${csvCell("Markup")},,,,${csvCell(Formatters.formatMoney(markup))}")
             }
             result.taxCost?.let { tax ->
-                appendLine("Tax,,,,\"${Formatters.formatMoney(tax)}\"")
+                appendLine("${csvCell("Tax")},,,,${csvCell(Formatters.formatMoney(tax))}")
             }
             result.totalCost?.let { total ->
                 appendLine()
-                appendLine("TOTAL,,,,\"${Formatters.formatMoney(total)}\"")
+                appendLine("${csvCell("TOTAL")},,,,${csvCell(Formatters.formatMoney(total))}")
             }
             appendLine()
             appendLine("Trace Metric,Value,Unit,Room ID,Wall ID,Opening ID")
             result.traces.forEach { trace ->
                 appendLine(
-                    "\"${trace.metric}\",${trace.value},\"${trace.unit}\"," +
-                        "\"${trace.roomId.orEmpty()}\",\"${trace.wallId.orEmpty()}\",\"${trace.openingId.orEmpty()}\""
+                    listOf(
+                        csvCell(trace.metric),
+                        trace.value.toString(),
+                        csvCell(trace.unit),
+                        csvCell(trace.roomId.orEmpty()),
+                        csvCell(trace.wallId.orEmpty()),
+                        csvCell(trace.openingId.orEmpty())
+                    ).joinToString(separator = ",")
                 )
             }
             appendLine()
-            appendLine("\"$DISCLAIMER\"")
+            appendLine(csvCell(DISCLAIMER))
         }
     }
 
@@ -125,6 +157,7 @@ object ExportFormatter {
         result: TakeoffResult
     ): String {
         val company = buildBusinessHeader(settings)
+        val estimateId = buildEstimateId(project)
         val itemsJson = result.items.joinToString(separator = ",\n") { item ->
             """
             {
@@ -154,6 +187,7 @@ object ExportFormatter {
             "id": "${escapeJson(project.id)}",
             "name": "${escapeJson(project.name)}"
           },
+          "estimateId": "${escapeJson(estimateId)}",
           "company": {
             "name": "${escapeJson(company.name)}",
             "phone": "${escapeJson(settings.businessPhone)}",
@@ -191,9 +225,11 @@ object ExportFormatter {
         result: TakeoffResult
     ): String {
         val header = buildBusinessHeader(settings)
+        val estimateId = buildEstimateId(project)
         return buildString {
             appendLine(header.name)
             appendLine("${project.name} - $takeoffType")
+            appendLine("Estimate ID: $estimateId")
             result.items.forEach { item ->
                 append("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
                 item.extendedCost?.let { ext ->
@@ -253,5 +289,30 @@ object ExportFormatter {
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
+    }
+
+    private fun csvCell(rawValue: String): String {
+        val escaped = sanitizeCsvForSpreadsheet(rawValue).replace("\"", "\"\"")
+        return "\"$escaped\""
+    }
+
+    private fun sanitizeCsvForSpreadsheet(rawValue: String): String {
+        val normalized = rawValue.replace("\r\n", "\n").replace('\r', '\n')
+        val trimmed = normalized.trimStart()
+        val isFormulaLike = trimmed.startsWith("=") ||
+            trimmed.startsWith("+") ||
+            trimmed.startsWith("-") ||
+            trimmed.startsWith("@")
+        return if (isFormulaLike) {
+            "'$normalized"
+        } else {
+            normalized
+        }
+    }
+
+    private fun buildEstimateId(project: Project): String {
+        val stamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(System.currentTimeMillis()))
+        val shortId = project.id.filter { char -> char.isLetterOrDigit() }.take(8).uppercase()
+        return "TS-$stamp-$shortId"
     }
 }

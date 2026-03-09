@@ -31,8 +31,8 @@ Done when:
 - `git status` never shows keystore files.
 - Ignore rules are explicit and safe.
 
-## Card 03 (S, 30-45 min): Lock release build strategy (intentional minify choice)
-Why: Release currently builds with `isMinifyEnabled=false` and `isShrinkResources=false`. This is documented now; decision should be explicit before production submission.
+## Card 03 (S, 30-45 min): Keep release build strategy intentionally documented
+Why: Release currently builds with `isMinifyEnabled=true` and `isShrinkResources=true`. Build scripts/docs must stay aligned so launch behavior remains explicit.
 Files:
 - `app/build.gradle.kts`
 - `scripts\03-build-release.ps1`

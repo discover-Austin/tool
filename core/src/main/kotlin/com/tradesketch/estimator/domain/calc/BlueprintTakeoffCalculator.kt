@@ -47,7 +47,10 @@ object BlueprintTakeoffCalculator {
         }
 
         val ceilingArea = if (includeCeilings) {
-            document.rooms.sumOf { room ->
+            document.rooms
+                .asSequence()
+                .filter { room -> room.ceiling.enabled }
+                .sumOf { room ->
                 val area = room.areaSqFt()
                 traces += TakeoffTrace(
                     metric = "ceiling_area",

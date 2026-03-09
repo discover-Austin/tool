@@ -1,79 +1,43 @@
 # Play Store Compliance Checklist
 
-## TradeSketch Estimator (Audit Date: February 21, 2026)
+Updated: March 8, 2026
 
-This file is the release-readiness checklist for current code in this repo.
+## Platform
 
----
-
-## 1) Platform and Policy Basics
-
-- [x] `applicationId`: `com.tradesketch.estimator`
+- [x] `applicationId = com.tradesketch.estimator`
 - [x] `minSdk = 26`
 - [x] `targetSdk = 35`
 - [x] `compileSdk = 35`
-- [x] No dangerous runtime permissions declared
-- [x] No `INTERNET` permission declared
-- [x] Offline-first usage model (no account required)
+- [x] Current release version is `versionCode = 10`, `versionName = "1.0.8"`
 
----
+## Privacy / Data Safety
 
-## 2) Privacy and Data Handling
+- [x] No `INTERNET` permission in manifest
+- [x] No analytics/crash SDK dependency configured
+- [x] Offline-first local data model
+- [x] Privacy policy file exists: `store-assets/legal/privacy-policy.html`
+- [x] Hosted privacy URL source tracked: `store-assets/PRIVACY_POLICY_URL.txt`
+- [x] Data safety answers file exists: `store-assets/listing/data-safety-answers.txt`
 
-- [x] Privacy policy file present: `store-assets/legal/privacy-policy.html`
-- [x] Hosted privacy URL recorded: `store-assets/PRIVACY_POLICY_URL.txt`
-- [x] `android:allowBackup` disabled in manifest
-- [x] No analytics/crash SDK dependencies in `app/build.gradle.kts`
-- [x] Data safety answer file prepared: `store-assets/listing/data-safety-answers.txt`
-- [x] Content rating answer file prepared: `store-assets/listing/content-rating-answers.txt`
+## Store Listing Assets
 
----
+- [x] Listing text files present in `store-assets/listing/`
+- [x] Feature graphic and icon present in `store-assets/graphics/`
+- [x] Screenshot set present in `store-assets/screenshots/`
 
-## 3) Store Listing Assets
+## Build / Quality Gates
 
-- [x] Title: `store-assets/listing/title.txt`
-- [x] Short description: `store-assets/listing/short-description.txt`
-- [x] Full description: `store-assets/listing/full-description.txt`
-- [x] What's new: `store-assets/listing/whats-new.txt`
-- [x] Category: `store-assets/listing/category.txt`
-- [x] App icon: `store-assets/graphics/ic_launcher_512.png`
-- [x] Feature graphic: `store-assets/graphics/feature_graphic_1024x500.png`
-- [x] Screenshot set present: `store-assets/screenshots/*.png`
+- [x] `:app:testDebugUnitTest`
+- [x] `:core:test`
+- [x] `:app:lint`
+- [x] `:app:lintRelease`
+- [x] `:app:bundleRelease`
 
----
+## Manual Pre-Rollout Checks
 
-## 4) Build and Signing
+- [ ] Validate smoke flow on the exact upload commit
+- [ ] Confirm Play Console parses `versionCode 10` and `versionName 1.0.8`
+- [ ] Confirm screenshots/listing text match current UI
+- [ ] Confirm privacy policy URL is publicly reachable
 
-- [x] Keystore workflow script available: `scripts/02-generate-keystore.ps1`
-- [x] Release script available: `scripts/03-build-release.ps1`
-- [x] Release script fails fast when signing config is missing/invalid
-- [x] Current signed AAB generated: `app/build/outputs/bundle/release/app-release.aab`
-- [x] Current version in build config: `versionCode = 5`, `versionName = "1.0.3"`
 
----
-
-## 5) Validation Status (Current Audit)
-
-- [x] `:app:testDebugUnitTest` passed
-- [x] `:core:test` passed
-- [x] `:app:lint` passed
-- [x] `:app:lintRelease` passed
-- [x] `:app:bundleRelease` passed
-
----
-
-## 6) Manual Submission Gates (Do Before Rollout)
-
-- [ ] Final smoke run on the same commit as uploaded AAB
-- [ ] Verify Play Console parsed version matches expected release
-- [ ] Confirm screenshots and listing text match current UI/behavior
-- [ ] Confirm production privacy URL resolves publicly
-- [ ] Upload-tested in Play Console production track
-
----
-
-## 7) Source of Truth
-
-For exact audited build outputs and fingerprints, see:
-
-- `documentation/ANDROID-AUDIT-2026-02-21.md`
