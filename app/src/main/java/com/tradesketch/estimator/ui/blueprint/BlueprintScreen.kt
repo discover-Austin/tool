@@ -341,14 +341,6 @@ fun BlueprintScreen(
         activeOpeningPanel == OpeningPanelType.STAIR_DOWN ||
         tool == BlueprintDraftTool.PLACE_STAIR_UP ||
         tool == BlueprintDraftTool.PLACE_STAIR_DOWN
-    LaunchedEffect(stairWorkflowActive) {
-        if (!stairWorkflowActive && selectedFloor != FLOOR_GROUND_LEVEL) {
-            selectedFloor = FLOOR_GROUND_LEVEL
-        }
-        if (!stairWorkflowActive) {
-            floorSwitcherBounds = null
-        }
-    }
     val movingDoc = movingWallPreview?.let { movingWall ->
         doc.copy(
             walls = doc.walls.map { wall ->
@@ -391,7 +383,7 @@ fun BlueprintScreen(
         if (showParams) paramsPanelBounds?.let(::add)
         if (activeOpeningPanel != null) openingPanelBounds?.let(::add)
         if (selectedWall != null || selectedOpening != null) selectionPanelBounds?.let(::add)
-        if (stairWorkflowActive) floorSwitcherBounds?.let(::add)
+        floorSwitcherBounds?.let(::add)
         if (showGridScaleEditor) gridScaleEditorBounds?.let(::add)
         if (showRailHelp) railHelpBounds?.let(::add)
         wallRotateButtonBounds?.let(::add)
@@ -1440,7 +1432,7 @@ fun BlueprintScreen(
                 .align(Alignment.TopStart)
                 .padding(start = 4.dp, top = 6.dp)
         )
-        if (stairWorkflowActive && !dualJoysticksEnabled) {
+        if (!dualJoysticksEnabled) {
             FloorLevelSwitcher(
                 level = selectedFloor,
                 onSelect = { floor ->
@@ -1887,16 +1879,14 @@ fun BlueprintScreen(
                                 gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
                             }
                         )
-                        if (stairWorkflowActive) {
-                            FloorCompactBadge(
-                                level = selectedFloor,
-                                onLowerFloor = { selectedFloor -= 1 },
-                                onUpperFloor = { selectedFloor += 1 },
-                                modifier = Modifier.onGloballyPositioned {
-                                    floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
-                                }
-                            )
-                        }
+                        FloorCompactBadge(
+                            level = selectedFloor,
+                            onLowerFloor = { selectedFloor -= 1 },
+                            onUpperFloor = { selectedFloor += 1 },
+                            modifier = Modifier.onGloballyPositioned {
+                                floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
+                            }
+                        )
                     }
                 },
                 modifier = Modifier

@@ -32,8 +32,9 @@ object ExportStorage {
         extension: String
     ): String {
         val cleanName = sanitizeProjectName(projectName)
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        return "${cleanName}_${suffix}_$stamp.$extension"
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
+        val entropy = (System.nanoTime() and 0xFFFL).toString(16).padStart(3, '0')
+        return "${cleanName}_${suffix}_${stamp}_$entropy.$extension"
     }
 
     fun createShareIntent(

@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">TradeSketch Estimator</string>
+    <string name="project_name_label">Project Name</string>
+    <string name="start_new_project_title">Start New Project?</string>
+    <string name="start_new_project_message">Save current project and keep it, or continue without saving and delete it.</string>
+    <string name="save_and_new">Save &amp; New</string>
+    <string name="delete_and_new">Delete &amp; New</string>
+    <string name="cancel">Cancel</string>
+    <string name="expand_navigation_rail">Expand navigation rail</string>
+    <string name="collapse_navigation_rail">Collapse navigation rail</string>
+    <string name="saved_projects">Saved Projects</string>
+    <string name="close">Close</string>
+    <string name="delete_project_content_description">Delete project %1$s</string>
+    <string name="delete_project_title">Delete project?</string>
+    <string name="delete_project_message">Delete \"%1$s\" permanently?</string>
+    <string name="delete">Delete</string>
+    <string name="no_project_selected_title">No project selected</string>
+    <string name="no_project_selected_message">Create a starter project to continue in the blueprint-first workspace.</string>
+    <string name="create_starter_project">Create Starter Project</string>
+</resources>
+

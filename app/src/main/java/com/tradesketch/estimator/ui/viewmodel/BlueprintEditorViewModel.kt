@@ -41,7 +41,9 @@ class BlueprintEditorViewModel @Inject constructor(
     companion object {
         private const val WALL_SCOPE_TAG_PREFIX = "trade_scope:"
         private const val FLOOR_TAG_PREFIX = "floor:"
-        private const val FLOOR_LOWER_TAG = "floor:lower"
+        private const val FLOOR_DEFAULT_TAG = "${FLOOR_TAG_PREFIX}0"
+        private const val FLOOR_LEGACY_LOWER_TAG = "${FLOOR_TAG_PREFIX}lower"
+        private const val FLOOR_LEGACY_UPPER_TAG = "${FLOOR_TAG_PREFIX}upper"
     }
 
     private var currentProjectId: String? = savedStateHandle["projectId"]
@@ -142,8 +144,14 @@ class BlueprintEditorViewModel @Inject constructor(
     }
 
     fun addOpening(opening: BlueprintOpening) {
+        val document = _uiState.value.document ?: return
+        val sanitized = opening.normalized()
+        val placementError = openingPlacementError(document = document, opening = sanitized)
+        if (placementError != null) {
+            _uiState.update { it.copy(error = placementError) }
+            return
+        }
         updateDocument(label = "Add Opening") { document ->
-            val sanitized = opening.normalized()
             document.copy(
                 openings = (document.openings + sanitized).distinctBy { it.id }
             ).withUndoMeta(undoDepth = undoStack.size + 1)
@@ -455,6 +463,10 @@ class BlueprintEditorViewModel @Inject constructor(
         val updated = transform(current)
         if (updated == current) return
 
+        // Any successful document mutation invalidates redo history, even if undo tracking is disabled.
+        if (redoStack.isNotEmpty()) {
+            redoStack.clear()
+        }
         if (trackUndo) {
             undoStack.addLast(
                 BlueprintDocumentCommand(
@@ -466,7 +478,6 @@ class BlueprintEditorViewModel @Inject constructor(
             if (undoStack.size > 100) {
                 undoStack.removeFirst()
             }
-            redoStack.clear()
         }
 
         _uiState.update {
@@ -524,20 +535,41 @@ class BlueprintEditorViewModel @Inject constructor(
         walls: List<WallSegment>,
         existingRooms: List<Room>
     ): List<Room> {
-        if (walls.isEmpty()) return emptyList()
+        if (walls.isEmpty()) {
+            // Preserve manually defined rooms (slabs/beds/custom spaces) when no wall loops are present.
+            return existingRooms
+                .filterNot { it.isAutoDetectedRoom() }
+                .map { room -> room.copy(tags = room.tags.withFloorTag(room.floorTag())) }
+        }
         val existingByFloor = existingRooms.groupBy { room -> room.floorTag() }
-        return walls
-            .groupBy { wall -> wall.floorTag() }
-            .flatMap { (floorTag, floorWalls) ->
+        val wallsByFloor = walls.groupBy { wall -> wall.floorTag() }
+        val allFloorTags = (existingByFloor.keys + wallsByFloor.keys).toSortedSet()
+        return allFloorTags
+            .flatMap { floorTag ->
+                val floorWalls = wallsByFloor[floorTag].orEmpty()
+                val floorExisting = existingByFloor[floorTag].orEmpty()
+                val preservedManualRooms = floorExisting
+                    .filterNot { room -> room.isAutoDetectedRoom() }
+                    .map { room -> room.copy(tags = room.tags.withFloorTag(floorTag)) }
+                if (floorWalls.isEmpty()) {
+                    return@flatMap preservedManualRooms
+                }
                 val detected = RoomLoopDetector.detectRooms(floorWalls)
                 if (detected.isEmpty()) {
-                    emptyList()
+                    preservedManualRooms
                 } else {
-                    val floorExisting = existingByFloor[floorTag].orEmpty()
-                    mergeRoomNames(existing = floorExisting, detected = detected)
-                        .map { room ->
-                            room.copy(tags = room.tags.withFloorTag(floorTag))
+                    val detectedWithMetadata = mergeRoomNames(existing = floorExisting, detected = detected)
+                        .map { detectedRoom ->
+                            val existingMatch = floorExisting.firstOrNull { known ->
+                                known.isAutoDetectedRoom() && signature(known) == signature(detectedRoom)
+                            }
+                            detectedRoom.copy(
+                                tags = (existingMatch?.tags ?: detectedRoom.tags).withFloorTag(floorTag),
+                                ceiling = existingMatch?.ceiling ?: detectedRoom.ceiling,
+                                overrides = existingMatch?.overrides ?: detectedRoom.overrides
+                            )
                         }
+                    preservedManualRooms + detectedWithMetadata
                 }
             }
     }
@@ -549,16 +581,63 @@ class BlueprintEditorViewModel @Inject constructor(
     }
 
     private fun WallSegment.floorTag(): String {
-        return tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) } ?: FLOOR_LOWER_TAG
+        return canonicalFloorTag(tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) })
     }
 
     private fun Room.floorTag(): String {
-        return tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) } ?: FLOOR_LOWER_TAG
+        return canonicalFloorTag(tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) })
     }
 
     private fun Set<String>.withFloorTag(floorTag: String): Set<String> {
         return filterNot { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
-            .toSet() + floorTag
+            .toSet() + canonicalFloorTag(floorTag)
+    }
+
+    private fun canonicalFloorTag(rawTag: String?): String {
+        val normalized = rawTag?.trim() ?: return FLOOR_DEFAULT_TAG
+        if (!normalized.startsWith(FLOOR_TAG_PREFIX)) return FLOOR_DEFAULT_TAG
+        if (normalized.equals(FLOOR_LEGACY_LOWER_TAG, ignoreCase = true)) return FLOOR_DEFAULT_TAG
+        if (normalized.equals(FLOOR_LEGACY_UPPER_TAG, ignoreCase = true)) return "${FLOOR_TAG_PREFIX}1"
+        val numeric = normalized.removePrefix(FLOOR_TAG_PREFIX).toIntOrNull() ?: return FLOOR_DEFAULT_TAG
+        return "${FLOOR_TAG_PREFIX}$numeric"
+    }
+
+    private fun Room.isAutoDetectedRoom(): Boolean {
+        return wallSegmentIds.isNotEmpty() ||
+            wallLoopRef.isNotEmpty() ||
+            id.startsWith("room-auto-")
+    }
+
+    private fun openingPlacementError(
+        document: BlueprintDocument,
+        opening: BlueprintOpening
+    ): String? {
+        val wall = document.walls.firstOrNull { wall -> wall.id == opening.wallId }
+            ?: return "Cannot place opening because the wall no longer exists."
+        val wallLengthMm = wall.lengthMillimeters().coerceAtLeast(1L)
+        if (opening.widthMm >= wallLengthMm) {
+            return "Opening width must be smaller than the wall length."
+        }
+        if (opening.heightMm + opening.sillMm > wall.heightMm) {
+            return "Opening height and sill exceed the wall height."
+        }
+        val halfT = (opening.widthMm.toDouble() / wallLengthMm.toDouble()) / 2.0
+        val minT = opening.t - halfT
+        val maxT = opening.t + halfT
+        if (minT < 0.02 || maxT > 0.98) {
+            return "Opening must stay clear of wall endpoints."
+        }
+        val overlapsExisting = document.openings.any { existing ->
+            if (existing.wallId != opening.wallId || existing.id == opening.id) return@any false
+            val existingHalfT = (existing.widthMm.toDouble() / wallLengthMm.toDouble()) / 2.0
+            val existingMinT = existing.t - existingHalfT
+            val existingMaxT = existing.t + existingHalfT
+            minT < existingMaxT && maxT > existingMinT
+        }
+        if (overlapsExisting) {
+            return "Opening overlaps an existing opening on this wall."
+        }
+        return null
     }
 
     private fun BlueprintDocument.withUndoMeta(
