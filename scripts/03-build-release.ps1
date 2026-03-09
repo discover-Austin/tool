@@ -102,7 +102,7 @@ Write-Host ""
 
 Push-Location $projectRoot
 try {
-    & $gradlew :app:testDebugUnitTest --no-daemon 2>&1 | ForEach-Object {
+    & $gradlew :app:testDebugUnitTest :core:test --no-daemon 2>&1 | ForEach-Object {
         if ($_ -match "FAIL|ERROR|Exception") {
             Write-Host "  $_" -ForegroundColor Red
         } elseif ($_ -match "PASS|SUCCESS|BUILD SUCCESSFUL") {
@@ -115,7 +115,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "  TESTS FAILED. Fix the failing tests before building a release." -ForegroundColor Red
-        Write-Host "  Test report: app\build\reports\tests\testDebugUnitTest\index.html" -ForegroundColor Red
+        Write-Host "  Test reports: app\build\reports\tests\testDebugUnitTest\index.html and core\build\reports\tests\test\index.html" -ForegroundColor Red
         exit 1
     }
     Write-Host "  PASS: All tests passed." -ForegroundColor Green

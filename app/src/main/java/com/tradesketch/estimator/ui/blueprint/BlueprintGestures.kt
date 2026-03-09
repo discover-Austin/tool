@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -671,7 +672,9 @@ private fun TouchToolButton(
                     MaterialTheme.colorScheme.outline.copy(alpha = 0.42f)
                 }
             ),
-            modifier = Modifier.size(buttonSize)
+            modifier = Modifier
+                .size(buttonSize)
+                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),

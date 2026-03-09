@@ -120,7 +120,9 @@ object EstimateExportManager {
         val margin = 72f
         val contentWidth = pageWidth - (margin * 2f)
         val pageBottom = pageHeight - margin
-        val timestamp = Formatters.formatDate(System.currentTimeMillis())
+        val generatedAt = System.currentTimeMillis()
+        val timestamp = Formatters.formatDate(generatedAt)
+        val estimateId = buildEstimateId(projectName = projectName, generatedAtMillis = generatedAt)
         val companyName = settings.businessName.trim().ifBlank { "TradeSketch Estimator" }
         val contactLines = buildList {
             settings.businessPhone.trim().takeIf { it.isNotBlank() }?.let { add("Phone: $it") }
@@ -200,6 +202,8 @@ object EstimateExportManager {
         canvas.drawText("ESTIMATE", margin, y, headingPaint)
         y += 34f
         canvas.drawText("Project: $projectName", margin, y, bodyPaint)
+        y += 24f
+        canvas.drawText("Estimate ID: $estimateId", margin, y, bodyPaint)
         y += 24f
         canvas.drawText("Estimate Type: $takeoffType", margin, y, bodyPaint)
         y += 24f
@@ -425,6 +429,20 @@ object EstimateExportManager {
             lines += current
         }
         return lines.ifEmpty { listOf(text) }
+    }
+
+    private fun buildEstimateId(
+        projectName: String,
+        generatedAtMillis: Long
+    ): String {
+        val stamp = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+            .format(java.util.Date(generatedAtMillis))
+        val shortName = projectName
+            .filter { char -> char.isLetterOrDigit() }
+            .take(8)
+            .uppercase()
+            .ifBlank { "PROJECT" }
+        return "TS-$stamp-$shortName"
     }
 
 }

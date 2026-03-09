@@ -1,44 +1,28 @@
 # TradeSketch Estimator
 
-Offline, blueprint-first material takeoffs for skilled trades.
+Offline-first estimator and blueprint maker for drywall, concrete, paint, and gravel/mulch workflows.
 
-## Current Release Snapshot (Audited: February 21, 2026)
+## Current Release Snapshot
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.3` (`versionCode = 5`)
-- SDK levels: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
-- Output artifact: `app/build/outputs/bundle/release/app-release.aab`
+- Version: `1.0.8` (`versionCode = 10`)
+- SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
+- Authoritative release status: `RELEASE_STATUS.md`
 
-## Product Flow (Current UI)
+## Product Flow
 
-1. Welcome screen (`WelcomeScreenPro`)
-2. Project setup (name + primary trade)
-3. Workspace with rail tabs:
+1. Welcome + project ritual
+2. Workspace tabs:
    - Blueprint
    - Materials
-   - Quantities
    - Export
-   - Settings/About
+   - Settings
+3. Export/share:
+   - Estimate PDF
+   - Blueprint PNG/PDF
+   - CSV and JSON
 
-Key capabilities:
-
-- Blueprint drafting with wall, door, window, and stair placement
-- Multi-floor planning with Ground, upper floors, and basement levels
-- Trade-specific takeoffs: drywall, concrete, gravel/mulch, paint
-- Quantity and pricing parameter controls
-- Export/share as PDF, CSV, JSON, or text intent
-- Local project persistence with DataStore
-
-## Privacy and Policy Posture
-
-- No `INTERNET` permission in manifest
-- No analytics or crash-reporting SDKs
-- No account/login requirement
-- `android:allowBackup="false"` to keep project data local-only by default
-
-## Build and Validation
-
-Windows (PowerShell):
+## Build Commands (Windows PowerShell)
 
 ```powershell
 ./gradlew.bat :app:testDebugUnitTest
@@ -48,34 +32,24 @@ Windows (PowerShell):
 ./gradlew.bat :app:bundleRelease
 ```
 
-Scripted release path:
+Release script:
 
 ```powershell
-./scripts/01-check-prerequisites.ps1
-./scripts/02-generate-keystore.ps1
 ./scripts/03-build-release.ps1
 ```
 
-## Signing Configuration
+## Privacy Posture
 
-Release signing values are resolved from environment variables first, then `local.properties`:
+- No `INTERNET` permission in manifest
+- No analytics/crash-reporting SDKs
+- Offline-first local storage model
 
-- `KEYSTORE_FILE`
-- `KEYSTORE_PASSWORD`
-- `KEY_ALIAS`
-- `KEY_PASSWORD`
+## Release Docs
 
-`./scripts/03-build-release.ps1` now fails fast if signing values are missing or invalid. It does not auto-generate fallback keys for Play builds.
-
-## Play-Store Docs
-
-- Launch runbook: `PLAY-STORE-LAUNCH-GUIDE.md`
+- Launch guide: `PLAY-STORE-LAUNCH-GUIDE.md`
 - Submission guide: `documentation/SUBMISSION-GUIDE.md`
 - Compliance checklist: `documentation/COMPLIANCE-CHECKLIST.md`
-- Testing checklist: `documentation/TESTING-NOTES.md`
-- Build details: `documentation/BUILD-INSTRUCTIONS.md`
-- Audit report: `documentation/ANDROID-AUDIT-2026-02-21.md`
+- Build instructions: `documentation/BUILD-INSTRUCTIONS.md`
+- Authoritative status: `RELEASE_STATUS.md`
 
-## Disclaimer
 
-TradeSketch provides estimate-only material quantities. Always verify site conditions, local code requirements, and supplier pricing before purchase or build execution.
