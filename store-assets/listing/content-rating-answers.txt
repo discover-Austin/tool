@@ -1,6 +1,6 @@
 CONTENT RATING QUESTIONNAIRE ANSWERS
 
-App: TradeSketch Estimator v1.0.1
+App: TradeSketch Estimator v1.0.8
 Category: Productivity / Tools
 
 ================================================================================
@@ -99,3 +99,4 @@ quantities. It contains:
 
 The app is purely functional and educational, suitable for professional 
 contractors and DIY users of all ages.
+

@@ -112,21 +112,21 @@ adb pull /sdcard/screenshot.png 01_projects.png
 
 **Required Screens:**
 
-1. **01_projects.png** - Projects list
-   - Show template cards (Bedroom, Garage, Driveway, Yard Bed)
-   - Empty state or 1-2 recent projects
-   - Clean, uncluttered
+1. **01_projects.png** - Workspace + saved projects
+   - Left rail expanded (New+, Saved, Blueprint, Materials, Export, Settings/About)
+   - Saved projects panel open
+   - Project context visible
 
-2. **02_spaces.png** - Model/workspace tab
-   - List of spaces with dimensions
-   - "Add Space" button visible
-   - Shows space types (Wall, Slab, etc.)
+2. **02_spaces.png** - Blueprint overview
+   - Blueprint canvas with geometry visible
+   - Floor and scale overlays visible
+   - Clear active-project context
 
-3. **03_editor.png** - Editing a space
-   - Dimension input fields
-   - Openings section (doors/windows)
-   - Live area preview
-   - Save/Cancel buttons
+3. **03_editor.png** - Blueprint editing controls
+   - Bottom tool rail visible
+   - Doors/Windows/Params panel open
+   - Live quantity overlay visible
+   - Demonstrates active editing state
 
 4. **04_drywall.png** - Drywall results
    - Preset selector showing "Drywall" selected
@@ -142,8 +142,8 @@ adb pull /sdcard/screenshot.png 01_projects.png
    - Optional bag equivalent
 
 6. **06_export.png** - Export screen
-   - Copy, Share, CSV, PDF buttons
-   - Preview of summary text
+   - Share/save actions for Estimate PDF, Blueprint PNG/PDF, CSV, JSON
+   - Preview deck visible
    - Disclaimer visible
 
 **Screenshot Enhancement (Optional):**

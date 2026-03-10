@@ -37,6 +37,19 @@ import kotlin.math.min
 import kotlin.math.roundToLong
 
 object BlueprintExportManager {
+    fun buildBlueprintPdfBytes(
+        projectName: String,
+        document: BlueprintDocument,
+        includeGrid: Boolean = true
+    ): ByteArray {
+        if (!document.hasGeometry()) return ByteArray(0)
+        return renderBlueprintPdfBytes(
+            projectName = projectName,
+            document = document,
+            includeGrid = includeGrid
+        )
+    }
+
     suspend fun saveBlueprintToDownloads(
         context: Context,
         projectName: String,

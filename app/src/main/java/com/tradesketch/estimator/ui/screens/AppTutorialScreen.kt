@@ -9,13 +9,19 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.Assessment
@@ -59,17 +65,29 @@ fun AppTutorialScreen(
             .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            val cardMaxHeight = (maxHeight - 8.dp).coerceAtLeast(320.dp)
+            val compactFooter = maxWidth < 420.dp
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .widthIn(max = 700.dp)
+                    .heightIn(max = cardMaxHeight),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .imePadding()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -162,33 +180,67 @@ fun AppTutorialScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "You can replay this any time in Settings/About.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (stepIndex > 0) {
-                            OutlinedButton(
-                                onClick = { stepIndex -= 1 }
+                    if (compactFooter) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "You can replay this any time in Settings/About.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Back")
+                                if (stepIndex > 0) {
+                                    OutlinedButton(
+                                        onClick = { stepIndex -= 1 }
+                                    ) {
+                                        Text("Back")
+                                    }
+                                }
+                                Button(
+                                    onClick = {
+                                        if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
+                                    }
+                                ) {
+                                    Text(if (stepIndex == steps.lastIndex) "Start Estimating" else "Next")
+                                }
                             }
                         }
-                        Button(
-                            onClick = {
-                                if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
-                            }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (stepIndex == steps.lastIndex) "Start Estimating" else "Next")
+                            Text(
+                                text = "You can replay this any time in Settings/About.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (stepIndex > 0) {
+                                    OutlinedButton(
+                                        onClick = { stepIndex -= 1 }
+                                    ) {
+                                        Text("Back")
+                                    }
+                                }
+                                Button(
+                                    onClick = {
+                                        if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
+                                    }
+                                ) {
+                                    Text(if (stepIndex == steps.lastIndex) "Start Estimating" else "Next")
+                                }
+                            }
                         }
                     }
                 }

@@ -1,7 +1,7 @@
 DATA SAFETY FORM ANSWERS FOR GOOGLE PLAY CONSOLE
 
-Last Updated: February 12, 2026
-App: TradeSketch Estimator v1.0.1
+Last Updated: March 9, 2026
+App: TradeSketch Estimator v1.0.8
 
 ================================================================================
 SECTION 1: DATA COLLECTION AND SECURITY
@@ -112,8 +112,8 @@ Android's DataStore. No data is transmitted to servers, and no third-party
 services are integrated.
 
 The only permission requested is Storage Access Framework (SAF) for user-
-initiated file exports (PDF/CSV), which gives users explicit control over 
-where files are saved.
+initiated file exports (PDF/CSV/JSON/PNG), which gives users explicit control
+over where files are saved.
 
 No analytics, crash reporting, advertising, or tracking of any kind is 
 implemented.

@@ -1,6 +1,6 @@
 # Google Play Submission Guide
 
-Updated: March 8, 2026
+Updated: March 9, 2026
 
 Use together with `RELEASE_STATUS.md`.
 
@@ -44,5 +44,6 @@ Configure one of:
 3. Apply release notes from `store-assets/listing/whats-new.txt`.
 4. Complete listing, privacy, data safety, and content rating sections.
 5. Run final rollout checklist and start rollout.
+
 
 

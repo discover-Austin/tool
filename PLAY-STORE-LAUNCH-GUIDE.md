@@ -1,6 +1,6 @@
 # TradeSketch Estimator - Play Store Launch Guide
 
-Last updated: March 8, 2026
+Last updated: March 9, 2026
 
 Use this on release day with `RELEASE_STATUS.md` as source of truth.
 
@@ -55,7 +55,8 @@ Required values via env vars or `local.properties`:
 3. Confirm parsed version is `versionCode 10` / `versionName 1.0.8`.
 4. Upload listing assets from `store-assets/`.
 5. Paste release notes from `store-assets/listing/whats-new.txt`.
-6. Verify Data Safety and Privacy Policy URL before rollout.
+6. Verify screenshots are freshly captured from the current UI build.
+7. Verify Data Safety and Privacy Policy URL before rollout.
 
 ## 6) Keep In Sync
 

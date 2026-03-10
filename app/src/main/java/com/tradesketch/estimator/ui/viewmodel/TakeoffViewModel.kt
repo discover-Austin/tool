@@ -59,8 +59,6 @@ class TakeoffViewModel @Inject constructor(
                 if (project != null) {
                     val session = project.takeoffSession
                     val hasPersistedSession = session != ProjectTakeoffSession()
-                    val alreadyInitializedForProject =
-                        !_uiState.value.isLoading && _uiState.value.project?.id == project.id
                     val sessionSelectedType = session.selectedScope.toTakeoffType()
                     _uiState.update {
                         it.copy(
@@ -72,59 +70,43 @@ class TakeoffViewModel @Inject constructor(
                             } else {
                                 defaultTakeoffTypeForTrade(settings.primaryTrade) ?: TakeoffType.DRYWALL
                             },
-                            selectedPlaybook = if (alreadyInitializedForProject) {
-                                it.selectedPlaybook
-                            } else if (hasPersistedSession) {
+                            selectedPlaybook = if (hasPersistedSession) {
                                 runCatching { TakeoffPlaybook.valueOf(session.selectedPlaybook) }
                                     .getOrDefault(TakeoffPlaybook.BALANCED)
                             } else {
                                 TakeoffPlaybook.BALANCED
                             },
-                            inputMode = if (alreadyInitializedForProject) {
-                                it.inputMode
-                            } else if (hasPersistedSession) {
+                            inputMode = if (hasPersistedSession) {
                                 session.inputMode
                             } else {
                                 TakeoffInputMode.BLUEPRINT
                             },
-                            manualParams = if (alreadyInitializedForProject) {
-                                it.manualParams
-                            } else if (hasPersistedSession) {
+                            manualParams = if (hasPersistedSession) {
                                 session.manual.toUiParams()
                             } else {
                                 ManualTakeoffParams()
                             },
-                            drywallParams = if (alreadyInitializedForProject) {
-                                it.drywallParams
-                            } else if (hasPersistedSession) {
+                            drywallParams = if (hasPersistedSession) {
                                 session.drywall.toUiParams()
                             } else {
                                 settings.defaultDrywallParams()
                             },
-                            concreteParams = if (alreadyInitializedForProject) {
-                                it.concreteParams
-                            } else if (hasPersistedSession) {
+                            concreteParams = if (hasPersistedSession) {
                                 session.concrete.toUiParams()
                             } else {
                                 settings.defaultConcreteParams()
                             },
-                            gravelParams = if (alreadyInitializedForProject) {
-                                it.gravelParams
-                            } else if (hasPersistedSession) {
+                            gravelParams = if (hasPersistedSession) {
                                 session.gravel.toUiParams()
                             } else {
                                 settings.defaultGravelParams()
                             },
-                            paintParams = if (alreadyInitializedForProject) {
-                                it.paintParams
-                            } else if (hasPersistedSession) {
+                            paintParams = if (hasPersistedSession) {
                                 session.paint.toUiParams()
                             } else {
                                 settings.defaultPaintParams()
                             },
-                            pricingParams = if (alreadyInitializedForProject) {
-                                it.pricingParams
-                            } else if (hasPersistedSession) {
+                            pricingParams = if (hasPersistedSession) {
                                 session.pricing.toUiParams()
                             } else {
                                 settings.defaultPricingParams()

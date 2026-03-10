@@ -315,4 +315,73 @@ class BlueprintDocumentMathTest {
         assertEquals(1, ceilingTraces.size)
         assertEquals(100.0, adjustedArea, 0.2)
     }
+
+    @Test
+    fun openingAreaByWallId_ignoresStairOpenings() {
+        val wall = WallSegment(
+            id = "wall-1",
+            start = PointMm(0, 0),
+            end = PointMm(Millimeters.fromFeet(10.0).value, 0),
+            height = Millimeters.fromFeet(9.0)
+        )
+        val door = BlueprintOpening(
+            id = "door-1",
+            wallId = wall.id,
+            t = 0.35,
+            widthMm = Millimeters.fromFeet(3.0).value,
+            heightMm = Millimeters.fromFeet(7.0).value,
+            sillMm = 0L,
+            type = OpeningType.DOOR
+        )
+        val stair = BlueprintOpening(
+            id = "stair-1",
+            wallId = wall.id,
+            t = 0.7,
+            widthMm = Millimeters.fromFeet(4.0).value,
+            heightMm = Millimeters.fromFeet(10.0).value,
+            sillMm = 0L,
+            type = OpeningType.STAIR_UP
+        )
+        val document = BlueprintDocument(
+            projectId = "p1",
+            walls = listOf(wall),
+            openings = listOf(door, stair)
+        )
+
+        val openingArea = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(document)
+
+        assertEquals(21.0, openingArea[wall.id] ?: 0.0, 0.05)
+    }
+
+    @Test
+    fun gravelTargetRooms_prefersTaggedCoverageRooms() {
+        val taggedRoom = Room(
+            id = "room-tagged",
+            tags = setOf("gravel"),
+            polygon = listOf(
+                PointMm(0, 0),
+                PointMm(1000, 0),
+                PointMm(1000, 1000),
+                PointMm(0, 1000)
+            )
+        )
+        val untaggedRoom = Room(
+            id = "room-untagged",
+            polygon = listOf(
+                PointMm(1500, 0),
+                PointMm(2500, 0),
+                PointMm(2500, 1000),
+                PointMm(1500, 1000)
+            )
+        )
+        val document = BlueprintDocument(
+            projectId = "p1",
+            rooms = listOf(taggedRoom, untaggedRoom)
+        )
+
+        val targetRooms = BlueprintTakeoffCalculator.gravelTargetRooms(document)
+
+        assertEquals(1, targetRooms.size)
+        assertEquals("room-tagged", targetRooms.first().id)
+    }
 }
