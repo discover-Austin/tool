@@ -22,9 +22,11 @@ import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.utils.EstimateExportManager
 import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.BlueprintExportManager
+import com.tradesketch.estimator.utils.EstimateIdentity
 import java.io.ByteArrayOutputStream
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,14 +78,8 @@ class ExportViewModel @Inject constructor(
                 projectId = projectId
             ).collect { (project, settings) ->
                 if (project == null) {
-                    _uiState.update {
-                        it.copy(
-                            project = null,
-                            previewBlueprint = null,
-                            isLoading = false,
-                            error = "Project not found"
-                        )
-                    }
+                    clearComputedOutput(error = "Project not found")
+                    _uiState.update { it.copy(project = null, settings = settings, isLoading = false) }
                     return@collect
                 }
                 val selectedType = _uiState.value.selectedType
@@ -140,20 +136,56 @@ class ExportViewModel @Inject constructor(
                 inputs = inputs
             )
         } catch (e: Exception) {
-            _uiState.update { it.copy(error = "Failed to calculate export: ${e.message}") }
+            if (e is CancellationException) throw e
+            clearComputedOutput(error = "Failed to calculate export: ${e.message}")
             return
         }
 
         val label = selectedType.displayLabel
+        val generatedAtMillis = System.currentTimeMillis()
+        val estimateId = EstimateIdentity.buildEstimateId(
+            project = project,
+            generatedAtMillis = generatedAtMillis
+        )
         _uiState.update {
             it.copy(
                 result = result,
                 previewBlueprint = previewBlueprint,
                 takeoffType = label,
-                textContent = ExportFormatter.formatAsText(project, settings, label, result),
-                summaryContent = ExportFormatter.formatAsSummary(project, settings, label, result),
-                csvContent = ExportFormatter.formatAsCSV(project, settings, label, result),
-                jsonContent = ExportFormatter.formatAsJson(project, settings, label, result),
+                estimateId = estimateId,
+                generatedAtMillis = generatedAtMillis,
+                textContent = ExportFormatter.formatAsText(
+                    project = project,
+                    settings = settings,
+                    takeoffType = label,
+                    result = result,
+                    generatedAtMillis = generatedAtMillis,
+                    estimateId = estimateId
+                ),
+                summaryContent = ExportFormatter.formatAsSummary(
+                    project = project,
+                    settings = settings,
+                    takeoffType = label,
+                    result = result,
+                    generatedAtMillis = generatedAtMillis,
+                    estimateId = estimateId
+                ),
+                csvContent = ExportFormatter.formatAsCSV(
+                    project = project,
+                    settings = settings,
+                    takeoffType = label,
+                    result = result,
+                    generatedAtMillis = generatedAtMillis,
+                    estimateId = estimateId
+                ),
+                jsonContent = ExportFormatter.formatAsJson(
+                    project = project,
+                    settings = settings,
+                    takeoffType = label,
+                    result = result,
+                    generatedAtMillis = generatedAtMillis,
+                    estimateId = estimateId
+                ),
                 error = null
             )
         }
@@ -220,18 +252,23 @@ class ExportViewModel @Inject constructor(
         val project = state.project ?: return null
         val result = state.result ?: return null
         val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val generatedAtMillis = state.generatedAtMillis ?: System.currentTimeMillis()
         val blueprint = state.previewBlueprint
             ?: projectBlueprintForType(project = project, type = selectedType)
         return runCatching {
             EstimateExportManager.createEstimatePdfShareIntent(
                 context = context,
+                projectId = project.id,
                 projectName = project.name,
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
+                generatedAtMillis = generatedAtMillis,
+                estimateId = state.estimateId.ifBlank { null },
                 blueprintDocument = blueprint
             )
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
             _uiState.update { it.copy(error = "Could not prepare estimate PDF: ${error.message}") }
             null
         }
@@ -246,15 +283,19 @@ class ExportViewModel @Inject constructor(
         val project = state.project ?: return null
         val result = state.result ?: return null
         val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val generatedAtMillis = state.generatedAtMillis ?: System.currentTimeMillis()
         val blueprint = state.previewBlueprint
             ?: projectBlueprintForType(project = project, type = selectedType)
         return runCatching {
             EstimateExportManager.saveEstimatePdfToDownloads(
                 context = context,
+                projectId = project.id,
                 projectName = project.name,
                 takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                 settings = state.settings,
                 result = result,
+                generatedAtMillis = generatedAtMillis,
+                estimateId = state.estimateId.ifBlank { null },
                 blueprintDocument = blueprint
             )
         }.onSuccess { uri ->
@@ -262,6 +303,7 @@ class ExportViewModel @Inject constructor(
                 _uiState.update { it.copy(lastAction = "Estimate PDF downloaded") }
             }
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
             _uiState.update { it.copy(error = "Could not save estimate PDF: ${error.message}") }
             null
         }
@@ -274,19 +316,24 @@ class ExportViewModel @Inject constructor(
         val project = state.project ?: return null
         val result = state.result ?: return null
         val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val generatedAtMillis = state.generatedAtMillis ?: System.currentTimeMillis()
         val blueprint = state.previewBlueprint
             ?: projectBlueprintForType(project = project, type = selectedType)
         return runCatching {
             withContext(Dispatchers.Default) {
                 EstimateExportManager.buildEstimatePdfBytes(
+                    projectId = project.id,
                     projectName = project.name,
                     takeoffType = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
                     settings = state.settings,
                     result = result,
+                    generatedAtMillis = generatedAtMillis,
+                    estimateId = state.estimateId.ifBlank { null },
                     blueprintDocument = blueprint
                 )
             }
         }.onFailure { error ->
+            if (error is CancellationException) throw error
             _uiState.update { it.copy(error = "Could not build PDF bytes: ${error.message}") }
         }.getOrNull()
     }
@@ -310,7 +357,72 @@ class ExportViewModel @Inject constructor(
                 }
             }
         }.onFailure { error ->
+            if (error is CancellationException) throw error
             _uiState.update { it.copy(error = "Could not build blueprint PNG: ${error.message}") }
+        }.getOrNull()
+    }
+
+    suspend fun createBlueprintPdfShareIntent(): Intent? {
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val blueprint = state.previewBlueprint
+            ?: projectBlueprintForType(project = project, type = selectedType)
+        return runCatching {
+            BlueprintExportManager.createBlueprintPdfShareIntent(
+                context = context,
+                projectName = project.name,
+                document = blueprint,
+                includeGrid = state.blueprintExportShowGrid
+            )
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            _uiState.update { it.copy(error = "Could not prepare blueprint PDF: ${error.message}") }
+            null
+        }
+    }
+
+    suspend fun saveBlueprintPdfToDownloads(): Uri? {
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val blueprint = state.previewBlueprint
+            ?: projectBlueprintForType(project = project, type = selectedType)
+        return runCatching {
+            BlueprintExportManager.saveBlueprintPdfToDownloads(
+                context = context,
+                projectName = project.name,
+                document = blueprint,
+                includeGrid = state.blueprintExportShowGrid
+            )
+        }.onSuccess { uri ->
+            if (uri != null) {
+                _uiState.update { it.copy(lastAction = "Blueprint PDF downloaded") }
+            }
+        }.getOrElse { error ->
+            if (error is CancellationException) throw error
+            _uiState.update { it.copy(error = "Could not save blueprint PDF: ${error.message}") }
+            null
+        }
+    }
+
+    suspend fun buildBlueprintPdfBytes(): ByteArray? {
+        val state = _uiState.value
+        val project = state.project ?: return null
+        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+        val blueprint = state.previewBlueprint
+            ?: projectBlueprintForType(project = project, type = selectedType)
+        return runCatching {
+            withContext(Dispatchers.Default) {
+                BlueprintExportManager.buildBlueprintPdfBytes(
+                    projectName = project.name,
+                    document = blueprint,
+                    includeGrid = state.blueprintExportShowGrid
+                )
+            }
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            _uiState.update { it.copy(error = "Could not build blueprint PDF: ${error.message}") }
         }.getOrNull()
     }
 
@@ -327,6 +439,24 @@ class ExportViewModel @Inject constructor(
     }
 
     fun jsonContent(): String = _uiState.value.jsonContent
+
+    private fun clearComputedOutput(error: String?) {
+        _uiState.update {
+            it.copy(
+                result = null,
+                previewBlueprint = null,
+                takeoffType = "",
+                estimateId = "",
+                generatedAtMillis = null,
+                textContent = "",
+                summaryContent = "",
+                csvContent = "",
+                jsonContent = "",
+                lastAction = null,
+                error = error
+            )
+        }
+    }
 
     private fun copyToClipboard(
         label: String,
@@ -354,6 +484,8 @@ data class ExportUiState(
     val settings: Settings = Settings.DEFAULT,
     val selectedType: TakeoffType? = null,
     val takeoffType: String = "",
+    val estimateId: String = "",
+    val generatedAtMillis: Long? = null,
     val result: TakeoffResult? = null,
     val previewBlueprint: BlueprintDocument? = null,
     val textContent: String = "",

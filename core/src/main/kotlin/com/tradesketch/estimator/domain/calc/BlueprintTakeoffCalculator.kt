@@ -3,6 +3,8 @@ package com.tradesketch.estimator.domain.calc
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.CostingInputs
 import com.tradesketch.estimator.domain.model.Millimeters
+import com.tradesketch.estimator.domain.model.OpeningType
+import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffTrace
@@ -124,9 +126,7 @@ object BlueprintTakeoffCalculator {
         costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val traces = mutableListOf<TakeoffTrace>()
-        val targetRooms = document.rooms.filter { room ->
-            room.tags.any { tag -> tag == "gravel" || tag == "mulch" || tag == "bed" }
-        }.ifEmpty { document.rooms }
+        val targetRooms = gravelTargetRooms(document)
 
         val areaSqFt = targetRooms.sumOf { room ->
             val area = room.areaSqFt()
@@ -194,8 +194,20 @@ object BlueprintTakeoffCalculator {
         }
     }
 
+    fun gravelTargetRooms(document: BlueprintDocument): List<Room> {
+        return document.rooms
+            .filter { room ->
+                room.tags.any { tag -> tag == "gravel" || tag == "mulch" || tag == "bed" }
+            }
+            .ifEmpty { document.rooms }
+    }
+
     fun openingAreaByWallIdSqFt(document: BlueprintDocument): Map<String, Double> {
         return document.openings
+            .asSequence()
+            .filter { opening ->
+                opening.type == OpeningType.DOOR || opening.type == OpeningType.WINDOW
+            }
             .groupBy { it.wallId }
             .mapValues { (_, openings) ->
                 openings.sumOf { opening ->

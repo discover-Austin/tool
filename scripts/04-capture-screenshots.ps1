@@ -101,55 +101,75 @@ Write-Host "[Step 3] Launching TradeSketch Estimator..." -ForegroundColor Yellow
 Start-Sleep -Seconds 2
 Write-Host "  App launched." -ForegroundColor Green
 
+function Assert-TradeSketchForeground {
+    param(
+        [string]$Reason
+    )
+    $windowDump = & $adb shell dumpsys window windows 2>&1
+    $focusLine = $windowDump |
+        Select-String -Pattern "mCurrentFocus|mFocusedApp" |
+        Select-Object -First 1
+    $focusText = if ($focusLine) { $focusLine.ToString() } else { "" }
+    if ($focusText -notmatch "com\.tradesketch\.estimator") {
+        Write-Host ""
+        Write-Host "  WARNING: TradeSketch does not appear to be in the foreground." -ForegroundColor Yellow
+        Write-Host "  Focus line: $focusText" -ForegroundColor DarkGray
+        Write-Host "  Expected package: com.tradesketch.estimator" -ForegroundColor White
+        Write-Host "  Reason: $Reason" -ForegroundColor White
+        $continue = Read-Host "  Continue anyway? (y/N)"
+        if ($continue -notin @("y", "Y")) {
+            throw "Screenshot capture aborted because TradeSketch was not foreground."
+        }
+    }
+}
+
 # ── CAPTURE SCREENSHOTS ──────────────────────────────────────────────────────
 
 $screenshots = @(
     @{
         File = "01_projects.png"
-        Screen = "PROJECTS LIST (home screen)"
+        Screen = "WORKSPACE WITH SAVED PROJECTS"
         Instructions = @(
-            "You should see the Projects list screen right now."
-            "Make sure the template cards are visible (Bedroom, Garage, Driveway, Yard Bed)."
-            "If the screen looks empty, that's fine - templates should still show."
+            "Open the workspace and expand the left rail."
+            "Tap Saved so the Saved Projects panel is visible."
+            "Ensure New+, Saved, Blueprint, Materials, Export, and Settings/About are visible."
         )
     },
     @{
         File = "02_spaces.png"
-        Screen = "PROJECT DETAIL - SPACES LIST"
+        Screen = "BLUEPRINT OVERVIEW"
         Instructions = @(
-            "Tap on a template (e.g. 'Bedroom') to create a project from it."
-            "You should see the project detail screen showing the list of spaces"
-            "with their dimensions (walls, ceiling, etc.)."
+            "Switch to Blueprint tab for an active project."
+            "Show walls/rooms/openings with the top overlays visible."
+            "Keep floor and grid scale controls visible."
         )
     },
     @{
         File = "03_editor.png"
-        Screen = "SPACE EDITOR"
+        Screen = "BLUEPRINT EDITING CONTROLS"
         Instructions = @(
-            "Tap on any space to open the editor."
-            "You should see dimension input fields (length, width, height)."
-            "The openings section (doors/windows) should be visible."
-            "A live area calculation should appear."
+            "Open one editing panel (Doors, Windows, or Params)."
+            "Keep the bottom tool rail and live quantity overlay visible."
+            "Show this as an in-progress editing screen, not an empty canvas."
         )
     },
     @{
         File = "04_drywall.png"
         Screen = "DRYWALL TAKEOFF RESULTS"
         Instructions = @(
-            "Go back to the project detail, then tap the Takeoff tab."
-            "Select the 'Drywall' preset."
-            "You should see results: sheets, screws, joint compound."
-            "Parameters like waste% and sheet size should be visible."
+            "Open Materials tab."
+            "Select Drywall."
+            "Show quantity summary, warnings (if present), and line items."
+            "Keep parameter cards and totals visible."
         )
     },
     @{
         File = "05_concrete.png"
         Screen = "CONCRETE TAKEOFF RESULTS"
         Instructions = @(
-            "Switch the preset to 'Concrete'."
-            "You should see cubic yards calculated."
-            "If you used a bedroom template, go back and create a 'Garage'"
-            "template project first, then view its concrete takeoff."
+            "Switch type to Concrete in Materials."
+            "Show cubic yards result and pricing summary."
+            "Keep assumptions/inputs visible for trust and clarity."
         )
     },
     @{
@@ -157,9 +177,9 @@ $screenshots = @(
         Screen = "EXPORT OPTIONS"
         Instructions = @(
             "Navigate to the Export screen."
-            "You should see buttons for: Copy, Share, CSV, PDF."
-            "A preview of the estimate summary text should be visible."
-            "The disclaimer at the bottom should be visible."
+            "Show Share/Save actions for Estimate PDF, Blueprint PNG/PDF, CSV, and JSON."
+            "Include the preview deck and action card in the shot."
+            "Keep the professional disclaimer visible."
         )
     }
 )
@@ -184,6 +204,7 @@ foreach ($i in 0..($screenshots.Count - 1)) {
     }
     Write-Host ""
     Read-Host "  Press ENTER when the screen is ready"
+    Assert-TradeSketchForeground -Reason "Capturing $($shot.File)"
 
     Write-Host "  Capturing..." -ForegroundColor DarkGray
     $devicePath = "/sdcard/tradesketch_screenshot.png"

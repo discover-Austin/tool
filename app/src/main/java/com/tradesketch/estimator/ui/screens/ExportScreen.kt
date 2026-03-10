@@ -105,6 +105,9 @@ fun ExportScreen(
     var isPreparingEstimatePdf by remember(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(false)
     }
+    var isPreparingBlueprintPdf by remember(projectId, uiState.selectedType?.name ?: "none") {
+        mutableStateOf(false)
+    }
     var selectedPreviewPage by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(EstimatePreviewPage.COST)
     }
@@ -197,6 +200,31 @@ fun ExportScreen(
                 Toast.makeText(context, "Blueprint PNG exported.", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(context, "Could not export blueprint PNG.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val blueprintPdfSafLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            val bytes = viewModel.buildBlueprintPdfBytes()
+            if (bytes == null || bytes.isEmpty()) {
+                Toast.makeText(context, "Could not prepare blueprint PDF.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open blueprint PDF output stream")
+                    output.use { stream ->
+                        stream.write(bytes)
+                    }
+                }
+            }.onSuccess {
+                Toast.makeText(context, "Blueprint PDF exported.", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "Could not export blueprint PDF.", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -313,6 +341,9 @@ fun ExportScreen(
         }
 
         uiState.result?.let { result ->
+            val hasBlueprintGeometry = uiState.previewBlueprint?.let { blueprint ->
+                blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty()
+            } == true
             ProfessionalPreviewDeck(
                 takeoffType = uiState.takeoffType.ifBlank {
                     uiState.selectedType?.displayLabel ?: "Estimate"
@@ -390,6 +421,44 @@ fun ExportScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Estimate PDF")
                     }
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.confirm()
+                            isPreparingBlueprintPdf = true
+                            coroutineScope.launch {
+                                try {
+                                    val intent = viewModel.createBlueprintPdfShareIntent()
+                                    if (intent == null) {
+                                        Toast.makeText(
+                                            context,
+                                            "No blueprint geometry available for PDF export.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        launchExportIntent(
+                                            context = context,
+                                            intent = intent,
+                                            noTargetMessage = "No app available to share this blueprint PDF."
+                                        )
+                                    }
+                                } finally {
+                                    isPreparingBlueprintPdf = false
+                                }
+                            }
+                        },
+                        enabled = !isPreparingBlueprintPdf && hasBlueprintGeometry,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (isPreparingBlueprintPdf) {
+                                "Preparing Blueprint PDF..."
+                            } else {
+                                "Share Blueprint PDF"
+                            }
+                        )
+                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                     Text(
@@ -427,6 +496,44 @@ fun ExportScreen(
                     }
                     SecondaryActionButton(
                         onClick = {
+                            haptics.confirm()
+                            isPreparingBlueprintPdf = true
+                            coroutineScope.launch {
+                                try {
+                                    val uri = viewModel.saveBlueprintPdfToDownloads()
+                                    if (uri == null) {
+                                        Toast.makeText(
+                                            context,
+                                            "No blueprint geometry available for PDF export.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Blueprint PDF saved to TradeSketch folder.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } finally {
+                                    isPreparingBlueprintPdf = false
+                                }
+                            }
+                        },
+                        enabled = !isPreparingBlueprintPdf && hasBlueprintGeometry,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (isPreparingBlueprintPdf) {
+                                "Preparing Blueprint PDF..."
+                            } else {
+                                "Download Blueprint PDF"
+                            }
+                        )
+                    }
+                    SecondaryActionButton(
+                        onClick = {
                             val name = uiState.project?.name ?: "project"
                             runCatching {
                                 pdfSafLauncher.launch(
@@ -450,6 +557,43 @@ fun ExportScreen(
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Save PDF As...")
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            runCatching {
+                                blueprintPdfSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = if (uiState.blueprintExportShowGrid) {
+                                            "blueprint-grid"
+                                        } else {
+                                            "blueprint-no-grid"
+                                        },
+                                        extension = "pdf"
+                                    )
+                                )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = hasBlueprintGeometry,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (uiState.blueprintExportShowGrid) {
+                                "Save Blueprint PDF As... (Grid)"
+                            } else {
+                                "Save Blueprint PDF As... (No Grid)"
+                            }
+                        )
                     }
                     Text(
                         text = "Blueprint PNG Grid",
@@ -503,6 +647,7 @@ fun ExportScreen(
                                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                             }
                         },
+                        enabled = hasBlueprintGeometry,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
@@ -513,6 +658,13 @@ fun ExportScreen(
                             } else {
                                 "Save Blueprint PNG As... (No Grid)"
                             }
+                        )
+                    }
+                    if (!hasBlueprintGeometry) {
+                        Text(
+                            text = "Blueprint exports require at least one wall, room, or opening.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 

@@ -1,6 +1,6 @@
 # Play Store Compliance Checklist
 
-Updated: March 8, 2026
+Updated: March 9, 2026
 
 ## Platform
 

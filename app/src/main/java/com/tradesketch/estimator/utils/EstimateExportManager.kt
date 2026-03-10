@@ -19,27 +19,36 @@ import java.io.FileOutputStream
 
 object EstimateExportManager {
     fun buildEstimatePdfBytes(
+        projectId: String,
         projectName: String,
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String? = null,
         blueprintDocument: BlueprintDocument? = null
     ): ByteArray {
         return renderEstimatePdfBytes(
+            projectId = projectId,
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
             result = result,
+            generatedAtMillis = generatedAtMillis,
+            estimateId = estimateId,
             blueprintDocument = blueprintDocument
         )
     }
 
     suspend fun saveEstimatePdfToDownloads(
         context: Context,
+        projectId: String,
         projectName: String,
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String? = null,
         blueprintDocument: BlueprintDocument? = null
     ): Uri? = withContext(Dispatchers.IO) {
         val fileName = ExportStorage.buildFileName(
@@ -48,10 +57,13 @@ object EstimateExportManager {
             extension = "pdf"
         )
         val pdfBytes = renderEstimatePdfBytes(
+            projectId = projectId,
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
             result = result,
+            generatedAtMillis = generatedAtMillis,
+            estimateId = estimateId,
             blueprintDocument = blueprintDocument
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -72,10 +84,13 @@ object EstimateExportManager {
 
     suspend fun createEstimatePdfShareIntent(
         context: Context,
+        projectId: String,
         projectName: String,
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String? = null,
         blueprintDocument: BlueprintDocument? = null
     ): Intent? = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "estimate-share").apply { mkdirs() }
@@ -88,10 +103,13 @@ object EstimateExportManager {
             )
         )
         val pdfBytes = renderEstimatePdfBytes(
+            projectId = projectId,
             projectName = projectName,
             takeoffType = takeoffType,
             settings = settings,
             result = result,
+            generatedAtMillis = generatedAtMillis,
+            estimateId = estimateId,
             blueprintDocument = blueprintDocument
         )
         FileOutputStream(shareFile).use { output ->
@@ -108,10 +126,13 @@ object EstimateExportManager {
     }
 
     private fun renderEstimatePdfBytes(
+        projectId: String,
         projectName: String,
         takeoffType: String,
         settings: Settings,
         result: TakeoffResult,
+        generatedAtMillis: Long,
+        estimateId: String?,
         blueprintDocument: BlueprintDocument? = null
     ): ByteArray {
         val document = PdfDocument()
@@ -120,9 +141,11 @@ object EstimateExportManager {
         val margin = 72f
         val contentWidth = pageWidth - (margin * 2f)
         val pageBottom = pageHeight - margin
-        val generatedAt = System.currentTimeMillis()
-        val timestamp = Formatters.formatDate(generatedAt)
-        val estimateId = buildEstimateId(projectName = projectName, generatedAtMillis = generatedAt)
+        val timestamp = Formatters.formatDate(generatedAtMillis)
+        val resolvedEstimateId = estimateId ?: EstimateIdentity.buildEstimateId(
+            projectId = projectId,
+            generatedAtMillis = generatedAtMillis
+        )
         val companyName = settings.businessName.trim().ifBlank { "TradeSketch Estimator" }
         val contactLines = buildList {
             settings.businessPhone.trim().takeIf { it.isNotBlank() }?.let { add("Phone: $it") }
@@ -203,7 +226,7 @@ object EstimateExportManager {
         y += 34f
         canvas.drawText("Project: $projectName", margin, y, bodyPaint)
         y += 24f
-        canvas.drawText("Estimate ID: $estimateId", margin, y, bodyPaint)
+        canvas.drawText("Estimate ID: $resolvedEstimateId", margin, y, bodyPaint)
         y += 24f
         canvas.drawText("Estimate Type: $takeoffType", margin, y, bodyPaint)
         y += 24f
@@ -429,20 +452,6 @@ object EstimateExportManager {
             lines += current
         }
         return lines.ifEmpty { listOf(text) }
-    }
-
-    private fun buildEstimateId(
-        projectName: String,
-        generatedAtMillis: Long
-    ): String {
-        val stamp = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
-            .format(java.util.Date(generatedAtMillis))
-        val shortName = projectName
-            .filter { char -> char.isLetterOrDigit() }
-            .take(8)
-            .uppercase()
-            .ifBlank { "PROJECT" }
-        return "TS-$stamp-$shortName"
     }
 
 }

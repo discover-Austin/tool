@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,8 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tradesketch.estimator.R
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 
 @Composable
@@ -33,6 +36,7 @@ fun ProjectRitualScreen2_EstimateType(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -42,17 +46,17 @@ fun ProjectRitualScreen2_EstimateType(
             tint = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = "Project Setup 2 of 2",
+            text = stringResource(R.string.project_setup_step_2),
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = "What are you estimating?",
+            text = stringResource(R.string.what_are_you_estimating),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = "Choose the main estimate type for this project. You can change it later.",
+            text = stringResource(R.string.choose_main_estimate_type),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -104,7 +108,7 @@ fun ProjectRitualScreen2_EstimateType(
             enabled = selectedTrade != null,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Open Project")
+            Text(stringResource(R.string.open_project))
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,

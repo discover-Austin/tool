@@ -41,7 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.Millimeters
+import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
@@ -1177,8 +1179,10 @@ private fun scopeSummaryForType(
         }
 
         TakeoffType.GRAVEL_MULCH -> {
-            val roomCount = blueprint.rooms.size
-            val area = blueprint.rooms.sumOf { it.areaSqFt() }
+            val targetRooms = BlueprintTakeoffCalculator.gravelTargetRooms(blueprint)
+            val roomCount = targetRooms.size
+            val area = targetRooms.sumOf { it.areaSqFt() }
+            val usedTaggedRooms = targetRooms.size != blueprint.rooms.size
             ScopeSummary(
                 spaceCount = roomCount,
                 sourceCount = roomCount,
@@ -1186,7 +1190,11 @@ private fun scopeSummaryForType(
                 measuredQuantity = area,
                 unit = "sq ft",
                 quantityLabel = "Ground coverage",
-                guidance = "All room surfaces are treated as coverage area."
+                guidance = if (usedTaggedRooms) {
+                    "Only rooms tagged gravel, mulch, or bed are used for coverage."
+                } else {
+                    "All room surfaces are treated as coverage area."
+                }
             )
         }
 
@@ -1241,6 +1249,28 @@ private fun takeoffWarnings(
             val hasCeilings = uiState.project?.authoritativeBlueprint()?.rooms?.any { it.ceiling.enabled } == true
             if (hasCeilings && !uiState.drywallParams.includeCeilings) {
                 warnings += "Room ceilings exist but are excluded from drywall totals."
+            }
+        }
+    }
+    if (uiState.inputMode == TakeoffInputMode.BLUEPRINT) {
+        val blueprint = uiState.project?.authoritativeBlueprint()
+        if (blueprint != null) {
+            val floorTags = buildSet {
+                blueprint.walls.forEach { wall ->
+                    wall.tags.firstOrNull { tag -> tag.startsWith("floor:") }?.let(::add)
+                }
+                blueprint.rooms.forEach { room ->
+                    room.tags.firstOrNull { tag -> tag.startsWith("floor:") }?.let(::add)
+                }
+            }
+            if (floorTags.size > 1) {
+                warnings += "Blueprint takeoff currently includes geometry from all floors."
+            }
+            val hasStairOpenings = blueprint.openings.any { opening ->
+                opening.type == OpeningType.STAIR_UP || opening.type == OpeningType.STAIR_DOWN
+            }
+            if (hasStairOpenings && (selectedType == TakeoffType.DRYWALL || selectedType == TakeoffType.PAINT)) {
+                warnings += "Stair openings are not deducted from drywall/paint wall area."
             }
         }
     }

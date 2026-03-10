@@ -106,6 +106,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -163,6 +164,8 @@ fun BlueprintScreen(
     val uiState by viewModel.uiState.collectAsState()
     val settingsUiState by settingsViewModel.uiState.collectAsState()
     val appSettings = settingsUiState.settings
+    val configuration = LocalConfiguration.current
+    val compactHeightWindow = configuration.screenHeightDp < 700
 
     var tool by remember { mutableStateOf(BlueprintDraftTool.DRAW_WALL) }
     var drawingStart by remember { mutableStateOf<PointMm?>(null) }
@@ -229,6 +232,8 @@ fun BlueprintScreen(
     var selectionPanelBounds by remember { mutableStateOf<Rect?>(null) }
     var floorSwitcherBounds by remember { mutableStateOf<Rect?>(null) }
     var clearAllButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var topStartStackBounds by remember { mutableStateOf<Rect?>(null) }
+    var topEndStackBounds by remember { mutableStateOf<Rect?>(null) }
     var gridScaleEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var railHelpBounds by remember { mutableStateOf<Rect?>(null) }
     var wallRotateButtonBounds by remember { mutableStateOf<Rect?>(null) }
@@ -336,6 +341,9 @@ fun BlueprintScreen(
     }
 
     val doc = uiState.document ?: return
+    val overlayTopPadding = if (compactHeightWindow) 8.dp else 12.dp
+    val topOverlaySpacing = if (compactHeightWindow) 4.dp else 6.dp
+    val topStackMaxHeight = if (compactHeightWindow) 220.dp else 320.dp
     val stairWorkflowActive = doc.openings.any { it.type.isStair() } ||
         activeOpeningPanel == OpeningPanelType.STAIR_UP ||
         activeOpeningPanel == OpeningPanelType.STAIR_DOWN ||
@@ -1167,6 +1175,21 @@ fun BlueprintScreen(
     val joystickRailPadding = if (dualJoysticksEnabled) 56.dp else 0.dp
     val panelBottomPadding = DEFAULT_PANEL_BOTTOM_PADDING + joystickRailPadding
     val helpBottomPadding = panelBottomPadding + 14.dp
+    val density = LocalDensity.current
+    val topStackMeasuredHeight = with(density) {
+        maxOf(
+            topStartStackBounds?.height ?: 0f,
+            topEndStackBounds?.height ?: 0f
+        ).toDp()
+    }
+    val useBottomDockedFloorSwitcher = !dualJoysticksEnabled && (
+        compactHeightWindow ||
+            configuration.screenWidthDp < 420 ||
+            activeOpeningPanel != null ||
+            topStackMeasuredHeight > 150.dp
+        )
+    val floorSwitcherTopPadding = overlayTopPadding + topStackMeasuredHeight + topOverlaySpacing
+    val floorSwitcherBottomPadding = helpBottomPadding + if (compactHeightWindow) 8.dp else 12.dp
     val controlStateLabel: String? = when {
         movingWallPreview != null -> "Picked Up"
         tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> "Draw"
@@ -1422,16 +1445,266 @@ fun BlueprintScreen(
             onTapWorld = handleTapWorld
         )
 
-        LiveOverlay(
-            liveScopeQuantity = liveScopeQuantity,
-            squareFeet = squareFeet,
-            linearFeet = linearFeet,
-            selectedFloor = selectedFloor,
-            useMetric = appSettings.useMetric,
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 4.dp, top = 6.dp)
-        )
+                .padding(start = 4.dp, top = overlayTopPadding)
+                .widthIn(max = 194.dp)
+                .heightIn(max = topStackMaxHeight)
+                .verticalScroll(rememberScrollState())
+                .onGloballyPositioned {
+                    topStartStackBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+            verticalArrangement = Arrangement.spacedBy(topOverlaySpacing)
+        ) {
+            LiveOverlay(
+                liveScopeQuantity = liveScopeQuantity,
+                squareFeet = squareFeet,
+                linearFeet = linearFeet,
+                selectedFloor = selectedFloor,
+                useMetric = appSettings.useMetric
+            )
+            if (selectedWall != null || selectedOpening != null) {
+                SelectionPanel(
+                    selectedWall = selectedWall,
+                    selectedOpening = selectedOpening,
+                    useMetric = appSettings.useMetric,
+                    onDeselect = {
+                        viewModel.selectWall(null)
+                        viewModel.selectOpening(null)
+                    },
+                    modifier = Modifier.onGloballyPositioned {
+                        selectionPanelBounds = Rect(it.positionInRoot(), it.size.toSize())
+                    }
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 8.dp, top = overlayTopPadding)
+                .widthIn(max = if (compactHeightWindow) 214.dp else 238.dp)
+                .heightIn(max = topStackMaxHeight)
+                .verticalScroll(rememberScrollState())
+                .onGloballyPositioned {
+                    topEndStackBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(topOverlaySpacing)
+        ) {
+            ClearAllButton(
+                onClick = { showClearAllConfirm = true },
+                modifier = Modifier.onGloballyPositioned {
+                    clearAllButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+                }
+            )
+
+            if (!dualJoysticksEnabled) {
+                GridScaleBadge(
+                    label = gridScaleLabel,
+                    onClick = {
+                        showGridScaleEditor = !showGridScaleEditor
+                        if (showGridScaleEditor) {
+                            val currentStepFeet = snapSettings.gridStepFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
+                            gridScaleInput = if (appSettings.useMetric) {
+                                val centimeters = Millimeters.fromFeet(currentStepFeet).value / 10.0
+                                "${formatScaleCentimetersValue(centimeters)}cm"
+                            } else {
+                                formatFeetInchesPrime(currentStepFeet)
+                            }
+                            syncGridScaleAssistInputs(currentStepFeet)
+                        }
+                    },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .onGloballyPositioned {
+                            gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
+                        }
+                )
+            } else {
+                CursorCoordinateOverlay(
+                    worldPoint = joystickCursorWorldPoint,
+                    showRotate = movingWallPreview != null,
+                    onRotate = rotatePickedUpWallClockwise,
+                    useMetric = appSettings.useMetric,
+                    compact = true,
+                    rotateButtonModifier = Modifier.onGloballyPositioned {
+                        wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+                    }
+                )
+            }
+
+            if (activeOpeningPanel != null) {
+                OpeningAddonsPanel(
+                    panelType = activeOpeningPanel ?: OpeningPanelType.DOORS,
+                    selectedPreset = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> selectedDoorPreset
+                        OpeningPanelType.WINDOWS -> selectedWindowPreset
+                        OpeningPanelType.STAIR_UP -> selectedStairUpPreset
+                        OpeningPanelType.STAIR_DOWN -> selectedStairDownPreset
+                        null -> selectedDoorPreset
+                    },
+                    presets = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> doorPresets
+                        OpeningPanelType.WINDOWS -> windowPresets
+                        OpeningPanelType.STAIR_UP -> stairUpPresets
+                        OpeningPanelType.STAIR_DOWN -> stairDownPresets
+                        null -> doorPresets
+                    },
+                    customWidthFeet = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> doorWidthFeet
+                        OpeningPanelType.WINDOWS -> windowWidthFeet
+                        OpeningPanelType.STAIR_UP -> stairUpWidthFeet
+                        OpeningPanelType.STAIR_DOWN -> stairDownWidthFeet
+                        null -> doorWidthFeet
+                    },
+                    customHeightFeet = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> doorHeightFeet
+                        OpeningPanelType.WINDOWS -> windowHeightFeet
+                        OpeningPanelType.STAIR_UP -> stairUpHeightFeet
+                        OpeningPanelType.STAIR_DOWN -> stairDownHeightFeet
+                        null -> doorHeightFeet
+                    },
+                    customSillFeet = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> doorSillFeet
+                        OpeningPanelType.WINDOWS -> windowSillFeet
+                        OpeningPanelType.STAIR_UP -> stairUpSillFeet
+                        OpeningPanelType.STAIR_DOWN -> stairDownSillFeet
+                        null -> doorSillFeet
+                    },
+                    showPresets = when (activeOpeningPanel) {
+                        OpeningPanelType.DOORS -> showDoorPresets
+                        OpeningPanelType.WINDOWS -> showWindowPresets
+                        OpeningPanelType.STAIR_UP -> showStairUpPresets
+                        OpeningPanelType.STAIR_DOWN -> showStairDownPresets
+                        null -> showDoorPresets
+                    },
+                    onTogglePresets = {
+                        when (activeOpeningPanel) {
+                            OpeningPanelType.DOORS -> showDoorPresets = !showDoorPresets
+                            OpeningPanelType.WINDOWS -> showWindowPresets = !showWindowPresets
+                            OpeningPanelType.STAIR_UP -> showStairUpPresets = !showStairUpPresets
+                            OpeningPanelType.STAIR_DOWN -> showStairDownPresets = !showStairDownPresets
+                            null -> Unit
+                        }
+                    },
+                    onSelectPreset = { preset ->
+                        when (preset.type) {
+                            OpeningType.DOOR -> {
+                                selectedDoorPreset = preset
+                                doorWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
+                                doorHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
+                                doorSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
+                            }
+
+                            OpeningType.WINDOW -> {
+                                selectedWindowPreset = preset
+                                windowWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
+                                windowHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
+                                windowSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
+                            }
+
+                            OpeningType.STAIR_UP -> {
+                                selectedStairUpPreset = preset
+                                stairUpWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
+                                stairUpHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
+                                stairUpSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
+                            }
+
+                            OpeningType.STAIR_DOWN -> {
+                                selectedStairDownPreset = preset
+                                stairDownWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
+                                stairDownHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
+                                stairDownSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
+                            }
+                        }
+                        tool = preset.type.toDraftTool()
+                    },
+                    onCustomWidthChange = { value ->
+                        when (activeOpeningPanel) {
+                            OpeningPanelType.DOORS -> doorWidthFeet = value
+                            OpeningPanelType.WINDOWS -> windowWidthFeet = value
+                            OpeningPanelType.STAIR_UP -> stairUpWidthFeet = value
+                            OpeningPanelType.STAIR_DOWN -> stairDownWidthFeet = value
+                            null -> Unit
+                        }
+                    },
+                    onCustomHeightChange = { value ->
+                        when (activeOpeningPanel) {
+                            OpeningPanelType.DOORS -> doorHeightFeet = value
+                            OpeningPanelType.WINDOWS -> windowHeightFeet = value
+                            OpeningPanelType.STAIR_UP -> stairUpHeightFeet = value
+                            OpeningPanelType.STAIR_DOWN -> stairDownHeightFeet = value
+                            null -> Unit
+                        }
+                    },
+                    onCustomSillChange = { value ->
+                        when (activeOpeningPanel) {
+                            OpeningPanelType.DOORS -> doorSillFeet = value
+                            OpeningPanelType.WINDOWS -> windowSillFeet = value
+                            OpeningPanelType.STAIR_UP -> stairUpSillFeet = value
+                            OpeningPanelType.STAIR_DOWN -> stairDownSillFeet = value
+                            null -> Unit
+                        }
+                    },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .onGloballyPositioned {
+                            openingPanelBounds = Rect(it.positionInRoot(), it.size.toSize())
+                        }
+                )
+            }
+
+            if (!dualJoysticksEnabled) {
+                GridScaleEditorPanel(
+                    expanded = showGridScaleEditor,
+                    useMetric = appSettings.useMetric,
+                    value = gridScaleInput,
+                    onValueChange = {
+                        gridScaleInput = it
+                        parsePrimeLengthToFeet(it)?.let(syncGridScaleAssistInputs)
+                    },
+                    feetValue = gridScaleFeetInput,
+                    inchesValue = gridScaleInchesInput,
+                    centimetersValue = gridScaleCentimetersInput,
+                    onFeetValueChange = { value ->
+                        gridScaleFeetInput = value.filter { it.isDigit() }.take(3)
+                        applyImperialAssistInputsToGridScaleInput()
+                    },
+                    onInchesValueChange = { value ->
+                        gridScaleInchesInput = value.filter { it.isDigit() }.take(3)
+                        applyImperialAssistInputsToGridScaleInput()
+                    },
+                    onCentimetersValueChange = { value ->
+                        gridScaleCentimetersInput = value.filter { it.isDigit() || it == '.' }.take(8)
+                        applyMetricAssistInputToGridScaleInput()
+                    },
+                    onNudgeInches = nudgeGridScaleInches,
+                    onNudgeCentimeters = nudgeGridScaleCentimeters,
+                    onDismiss = { showGridScaleEditor = false },
+                    onApply = {
+                        val parsedFeet = parsePrimeLengthToFeet(gridScaleInput)
+                        if (parsedFeet != null) {
+                            val clampedFeet = parsedFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
+                            snapSettings = snapSettings.copy(
+                                gridEnabled = true,
+                                gridStepFeet = clampedFeet
+                            )
+                            syncGridScaleAssistInputs(clampedFeet)
+                            settingsViewModel.updateBlueprintSnapDefaults(gridEnabled = true)
+                            showGridScaleEditor = false
+                        }
+                    },
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .onGloballyPositioned {
+                            gridScaleEditorBounds = Rect(it.positionInRoot(), it.size.toSize())
+                        }
+                )
+            }
+        }
+
         if (!dualJoysticksEnabled) {
             FloorLevelSwitcher(
                 level = selectedFloor,
@@ -1440,23 +1713,26 @@ fun BlueprintScreen(
                 },
                 compact = true,
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 62.dp)
+                    .then(
+                        if (useBottomDockedFloorSwitcher) {
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(
+                                    start = 8.dp + leftControlsInset,
+                                    bottom = floorSwitcherBottomPadding
+                                )
+                                .navigationBarsPadding()
+                        } else {
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = floorSwitcherTopPadding)
+                        }
+                    )
                     .onGloballyPositioned {
                         floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
                     }
             )
         }
-
-        ClearAllButton(
-            onClick = { showClearAllConfirm = true },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 12.dp, top = 12.dp)
-                .onGloballyPositioned {
-                    clearAllButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
-                }
-        )
 
         ParamsPanel(
             expanded = showParams,
@@ -1495,129 +1771,6 @@ fun BlueprintScreen(
                     paramsPanelBounds = Rect(it.positionInRoot(), it.size.toSize())
                 }
         )
-
-        if (activeOpeningPanel != null) {
-            OpeningAddonsPanel(
-                panelType = activeOpeningPanel ?: OpeningPanelType.DOORS,
-                selectedPreset = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> selectedDoorPreset
-                    OpeningPanelType.WINDOWS -> selectedWindowPreset
-                    OpeningPanelType.STAIR_UP -> selectedStairUpPreset
-                    OpeningPanelType.STAIR_DOWN -> selectedStairDownPreset
-                    null -> selectedDoorPreset
-                },
-                presets = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> doorPresets
-                    OpeningPanelType.WINDOWS -> windowPresets
-                    OpeningPanelType.STAIR_UP -> stairUpPresets
-                    OpeningPanelType.STAIR_DOWN -> stairDownPresets
-                    null -> doorPresets
-                },
-                customWidthFeet = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> doorWidthFeet
-                    OpeningPanelType.WINDOWS -> windowWidthFeet
-                    OpeningPanelType.STAIR_UP -> stairUpWidthFeet
-                    OpeningPanelType.STAIR_DOWN -> stairDownWidthFeet
-                    null -> doorWidthFeet
-                },
-                customHeightFeet = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> doorHeightFeet
-                    OpeningPanelType.WINDOWS -> windowHeightFeet
-                    OpeningPanelType.STAIR_UP -> stairUpHeightFeet
-                    OpeningPanelType.STAIR_DOWN -> stairDownHeightFeet
-                    null -> doorHeightFeet
-                },
-                customSillFeet = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> doorSillFeet
-                    OpeningPanelType.WINDOWS -> windowSillFeet
-                    OpeningPanelType.STAIR_UP -> stairUpSillFeet
-                    OpeningPanelType.STAIR_DOWN -> stairDownSillFeet
-                    null -> doorSillFeet
-                },
-                showPresets = when (activeOpeningPanel) {
-                    OpeningPanelType.DOORS -> showDoorPresets
-                    OpeningPanelType.WINDOWS -> showWindowPresets
-                    OpeningPanelType.STAIR_UP -> showStairUpPresets
-                    OpeningPanelType.STAIR_DOWN -> showStairDownPresets
-                    null -> showDoorPresets
-                },
-                onTogglePresets = {
-                    when (activeOpeningPanel) {
-                        OpeningPanelType.DOORS -> showDoorPresets = !showDoorPresets
-                        OpeningPanelType.WINDOWS -> showWindowPresets = !showWindowPresets
-                        OpeningPanelType.STAIR_UP -> showStairUpPresets = !showStairUpPresets
-                        OpeningPanelType.STAIR_DOWN -> showStairDownPresets = !showStairDownPresets
-                        null -> Unit
-                    }
-                },
-                onSelectPreset = { preset ->
-                    when (preset.type) {
-                        OpeningType.DOOR -> {
-                            selectedDoorPreset = preset
-                            doorWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
-                            doorHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
-                            doorSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
-                        }
-
-                        OpeningType.WINDOW -> {
-                            selectedWindowPreset = preset
-                            windowWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
-                            windowHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
-                            windowSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
-                        }
-
-                        OpeningType.STAIR_UP -> {
-                            selectedStairUpPreset = preset
-                            stairUpWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
-                            stairUpHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
-                            stairUpSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
-                        }
-
-                        OpeningType.STAIR_DOWN -> {
-                            selectedStairDownPreset = preset
-                            stairDownWidthFeet = "%.2f".format(Millimeters(preset.widthMm).toFeet())
-                            stairDownHeightFeet = "%.2f".format(Millimeters(preset.heightMm).toFeet())
-                            stairDownSillFeet = "%.2f".format(Millimeters(preset.sillMm).toFeet())
-                        }
-                    }
-                    tool = preset.type.toDraftTool()
-                },
-                onCustomWidthChange = { value ->
-                    when (activeOpeningPanel) {
-                        OpeningPanelType.DOORS -> doorWidthFeet = value
-                        OpeningPanelType.WINDOWS -> windowWidthFeet = value
-                        OpeningPanelType.STAIR_UP -> stairUpWidthFeet = value
-                        OpeningPanelType.STAIR_DOWN -> stairDownWidthFeet = value
-                        null -> Unit
-                    }
-                },
-                onCustomHeightChange = { value ->
-                    when (activeOpeningPanel) {
-                        OpeningPanelType.DOORS -> doorHeightFeet = value
-                        OpeningPanelType.WINDOWS -> windowHeightFeet = value
-                        OpeningPanelType.STAIR_UP -> stairUpHeightFeet = value
-                        OpeningPanelType.STAIR_DOWN -> stairDownHeightFeet = value
-                        null -> Unit
-                    }
-                },
-                onCustomSillChange = { value ->
-                    when (activeOpeningPanel) {
-                        OpeningPanelType.DOORS -> doorSillFeet = value
-                        OpeningPanelType.WINDOWS -> windowSillFeet = value
-                        OpeningPanelType.STAIR_UP -> stairUpSillFeet = value
-                        OpeningPanelType.STAIR_DOWN -> stairDownSillFeet = value
-                        null -> Unit
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 0.dp, top = 104.dp)
-                    .navigationBarsPadding()
-                    .onGloballyPositioned {
-                        openingPanelBounds = Rect(it.positionInRoot(), it.size.toSize())
-                    }
-            )
-        }
 
         if (showClearAllConfirm) {
             AlertDialog(
@@ -1681,25 +1834,6 @@ fun BlueprintScreen(
                         Text("Skip")
                     }
                 }
-            )
-        }
-
-        // Selection Panel - show when an item is selected
-        if (selectedWall != null || selectedOpening != null) {
-            SelectionPanel(
-                selectedWall = selectedWall,
-                selectedOpening = selectedOpening,
-                useMetric = appSettings.useMetric,
-                onDeselect = {
-                    viewModel.selectWall(null)
-                    viewModel.selectOpening(null)
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 12.dp, top = 186.dp)
-                    .onGloballyPositioned {
-                        selectionPanelBounds = Rect(it.positionInRoot(), it.size.toSize())
-                    }
             )
         }
 
@@ -2003,19 +2137,6 @@ fun BlueprintScreen(
                     .zIndex(6f)
             )
         }
-        val toggleGridScaleEditor = {
-            showGridScaleEditor = !showGridScaleEditor
-            if (showGridScaleEditor) {
-                val currentStepFeet = snapSettings.gridStepFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
-                gridScaleInput = if (appSettings.useMetric) {
-                    val centimeters = Millimeters.fromFeet(currentStepFeet).value / 10.0
-                    "${formatScaleCentimetersValue(centimeters)}cm"
-                } else {
-                    formatFeetInchesPrime(currentStepFeet)
-                }
-                syncGridScaleAssistInputs(currentStepFeet)
-            }
-        }
         if (!dualJoysticksEnabled) {
             CursorCoordinateOverlay(
                 worldPoint = joystickCursorWorldPoint,
@@ -2033,90 +2154,57 @@ fun BlueprintScreen(
                     )
                     .navigationBarsPadding()
             )
-            GridScaleBadge(
-                label = gridScaleLabel,
-                onClick = toggleGridScaleEditor,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 12.dp, top = 56.dp)
-                    .navigationBarsPadding()
-                    .onGloballyPositioned {
-                        gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
-                    }
-            )
-        } else {
-            CursorCoordinateOverlay(
-                worldPoint = joystickCursorWorldPoint,
-                showRotate = movingWallPreview != null,
-                onRotate = rotatePickedUpWallClockwise,
-                useMetric = appSettings.useMetric,
-                compact = true,
-                rotateButtonModifier = Modifier.onGloballyPositioned {
-                    wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 8.dp, top = 52.dp)
-                    .navigationBarsPadding()
-            )
         }
 
-        GridScaleEditorPanel(
-            expanded = showGridScaleEditor,
-            useMetric = appSettings.useMetric,
-            value = gridScaleInput,
-            onValueChange = {
-                gridScaleInput = it
-                parsePrimeLengthToFeet(it)?.let(syncGridScaleAssistInputs)
-            },
-            feetValue = gridScaleFeetInput,
-            inchesValue = gridScaleInchesInput,
-            centimetersValue = gridScaleCentimetersInput,
-            onFeetValueChange = { value ->
-                gridScaleFeetInput = value.filter { it.isDigit() }.take(3)
-                applyImperialAssistInputsToGridScaleInput()
-            },
-            onInchesValueChange = { value ->
-                gridScaleInchesInput = value.filter { it.isDigit() }.take(3)
-                applyImperialAssistInputsToGridScaleInput()
-            },
-            onCentimetersValueChange = { value ->
-                gridScaleCentimetersInput = value.filter { it.isDigit() || it == '.' }.take(8)
-                applyMetricAssistInputToGridScaleInput()
-            },
-            onNudgeInches = nudgeGridScaleInches,
-            onNudgeCentimeters = nudgeGridScaleCentimeters,
-            onDismiss = { showGridScaleEditor = false },
-            onApply = {
-                val parsedFeet = parsePrimeLengthToFeet(gridScaleInput)
-                if (parsedFeet != null) {
-                    val clampedFeet = parsedFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
-                    snapSettings = snapSettings.copy(
-                        gridEnabled = true,
-                        gridStepFeet = clampedFeet
-                    )
-                    syncGridScaleAssistInputs(clampedFeet)
-                    settingsViewModel.updateBlueprintSnapDefaults(gridEnabled = true)
-                    showGridScaleEditor = false
-                }
-            },
-            modifier = Modifier
-                .then(
-                    if (dualJoysticksEnabled) {
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = joystickRailPadding + 122.dp)
-                    } else {
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(end = 12.dp, top = 90.dp)
+        if (dualJoysticksEnabled) {
+            GridScaleEditorPanel(
+                expanded = showGridScaleEditor,
+                useMetric = appSettings.useMetric,
+                value = gridScaleInput,
+                onValueChange = {
+                    gridScaleInput = it
+                    parsePrimeLengthToFeet(it)?.let(syncGridScaleAssistInputs)
+                },
+                feetValue = gridScaleFeetInput,
+                inchesValue = gridScaleInchesInput,
+                centimetersValue = gridScaleCentimetersInput,
+                onFeetValueChange = { value ->
+                    gridScaleFeetInput = value.filter { it.isDigit() }.take(3)
+                    applyImperialAssistInputsToGridScaleInput()
+                },
+                onInchesValueChange = { value ->
+                    gridScaleInchesInput = value.filter { it.isDigit() }.take(3)
+                    applyImperialAssistInputsToGridScaleInput()
+                },
+                onCentimetersValueChange = { value ->
+                    gridScaleCentimetersInput = value.filter { it.isDigit() || it == '.' }.take(8)
+                    applyMetricAssistInputToGridScaleInput()
+                },
+                onNudgeInches = nudgeGridScaleInches,
+                onNudgeCentimeters = nudgeGridScaleCentimeters,
+                onDismiss = { showGridScaleEditor = false },
+                onApply = {
+                    val parsedFeet = parsePrimeLengthToFeet(gridScaleInput)
+                    if (parsedFeet != null) {
+                        val clampedFeet = parsedFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
+                        snapSettings = snapSettings.copy(
+                            gridEnabled = true,
+                            gridStepFeet = clampedFeet
+                        )
+                        syncGridScaleAssistInputs(clampedFeet)
+                        settingsViewModel.updateBlueprintSnapDefaults(gridEnabled = true)
+                        showGridScaleEditor = false
                     }
-                )
-                .navigationBarsPadding()
-                .onGloballyPositioned {
-                    gridScaleEditorBounds = Rect(it.positionInRoot(), it.size.toSize())
-                }
-        )
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = joystickRailPadding + 122.dp)
+                    .navigationBarsPadding()
+                    .onGloballyPositioned {
+                        gridScaleEditorBounds = Rect(it.positionInRoot(), it.size.toSize())
+                    }
+            )
+        }
 
         RailHelpPanel(
             expanded = showRailHelp,

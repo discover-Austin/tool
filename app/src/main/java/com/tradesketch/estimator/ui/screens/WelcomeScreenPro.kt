@@ -19,8 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tradesketch.estimator.R
 
 @Composable
 fun WelcomeScreenPro(
@@ -50,12 +52,12 @@ fun WelcomeScreenPro(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "TradeSketch Pro Blueprint",
+                    text = stringResource(R.string.welcome_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Draw precise 2D geometry first. Materials, quantities, add-ons, review, and export all derive from the blueprint.",
+                    text = stringResource(R.string.welcome_message),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -64,7 +66,7 @@ fun WelcomeScreenPro(
                     onClick = onBegin,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Begin")
+                    Text(stringResource(R.string.begin))
                     Spacer(modifier = Modifier.weight(1f))
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
