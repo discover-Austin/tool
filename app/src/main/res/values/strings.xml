@@ -1,5 +1,34 @@
 <resources>
     <string name="app_name">TradeSketch Estimator</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="back">Back</string>
+    <string name="back_to_name">Back to Name</string>
+    <string name="finalizing_project_ritual">Finalizing project ritual</string>
+    <string name="interactive_tour">Interactive Tour</string>
+    <string name="skip">Skip</string>
+    <string name="next">Next</string>
+    <string name="finish_tour">Finish Tour</string>
+    <string name="tour_step_progress">Step %1$d of %2$d · %3$s</string>
+    <string name="tour_tip">Tip: %1$s</string>
+    <string name="rail_new_plus">New+</string>
+    <string name="rail_saved">Saved</string>
+    <string name="new_project_toast">New Project</string>
+    <string name="saved_projects_toast">Saved Projects</string>
+    <string name="rail_plan_short">Plan</string>
+    <string name="rail_materials_short">Mats</string>
+    <string name="rail_settings_short">Settings</string>
+    <string name="project_setup_step_1">Project Setup 1 of 2</string>
+    <string name="project_setup_step_2">Project Setup 2 of 2</string>
+    <string name="name_this_project">Name this project</string>
+    <string name="enter_project_name_to_continue">Enter a project name to continue.</string>
+    <string name="project_name_lower">Project name</string>
+    <string name="continue_button">Continue</string>
+    <string name="what_are_you_estimating">What are you estimating?</string>
+    <string name="choose_main_estimate_type">Choose the main estimate type for this project. You can change it later.</string>
+    <string name="open_project">Open Project</string>
+    <string name="welcome_title">TradeSketch Pro Blueprint</string>
+    <string name="welcome_message">Draw precise 2D geometry first. Materials, quantities, add-ons, review, and export all derive from the blueprint.</string>
+    <string name="begin">Begin</string>
     <string name="project_name_label">Project Name</string>
     <string name="start_new_project_title">Start New Project?</string>
     <string name="start_new_project_message">Save current project and keep it, or continue without saving and delete it.</string>
@@ -9,6 +38,7 @@
     <string name="expand_navigation_rail">Expand navigation rail</string>
     <string name="collapse_navigation_rail">Collapse navigation rail</string>
     <string name="saved_projects">Saved Projects</string>
+    <string name="no_saved_projects">No projects saved yet.</string>
     <string name="close">Close</string>
     <string name="delete_project_content_description">Delete project %1$s</string>
     <string name="delete_project_title">Delete project?</string>
@@ -18,4 +48,3 @@
     <string name="no_project_selected_message">Create a starter project to continue in the blueprint-first workspace.</string>
     <string name="create_starter_project">Create Starter Project</string>
 </resources>
-

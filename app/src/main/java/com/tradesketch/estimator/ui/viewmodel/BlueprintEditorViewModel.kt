@@ -135,10 +135,17 @@ class BlueprintEditorViewModel @Inject constructor(
                 walls = walls,
                 existingRooms = document.rooms
             )
+            val openingsOnKnownWalls = document.openings.filter { opening ->
+                walls.any { wall -> wall.id == opening.wallId }
+            }
+            val sanitizedOpenings = sanitizeOpeningsForWalls(
+                walls = walls,
+                openings = openingsOnKnownWalls
+            )
             document.copy(
                 walls = walls,
                 rooms = rooms,
-                openings = document.openings.filter { opening -> walls.any { it.id == opening.wallId } }
+                openings = sanitizedOpenings
             ).withUndoMeta(undoDepth = undoStack.size + 1)
         }
     }
@@ -174,12 +181,18 @@ class BlueprintEditorViewModel @Inject constructor(
 
     fun updateWallHeight(heightMm: Long) {
         val sanitizedHeight = heightMm.coerceAtLeast(1L)
-        updateDocument(label = "Update Wall Height", trackUndo = false) { document ->
+        updateDocument(label = "Update Wall Height") { document ->
+            val updatedWalls = document.walls.map { wall ->
+                wall.copy(height = Millimeters(sanitizedHeight))
+            }
+            val sanitizedOpenings = sanitizeOpeningsForWalls(
+                walls = updatedWalls,
+                openings = document.openings
+            )
             document.copy(
                 params = document.params.copy(wallHeightMm = sanitizedHeight),
-                walls = document.walls.map { wall ->
-                    wall.copy(height = Millimeters(sanitizedHeight))
-                }
+                walls = updatedWalls,
+                openings = sanitizedOpenings
             )
         }
     }
@@ -377,9 +390,14 @@ class BlueprintEditorViewModel @Inject constructor(
                 walls = updatedWalls,
                 existingRooms = document.rooms
             )
+            val sanitizedOpenings = sanitizeOpeningsForWalls(
+                walls = updatedWalls,
+                openings = document.openings
+            )
             document.copy(
                 walls = updatedWalls,
-                rooms = rooms
+                rooms = rooms,
+                openings = sanitizedOpenings
             ).withUndoMeta(undoDepth = undoStack.size + 1)
         }
     }
@@ -485,9 +503,21 @@ class BlueprintEditorViewModel @Inject constructor(
                 blueprintDocument = updated,
                 updatedAt = System.currentTimeMillis()
             )
+            val nextSelectedWallId = it.selectedWallId?.takeIf { selectedId ->
+                updated.walls.any { wall -> wall.id == selectedId }
+            }
+            val nextSelectedOpeningId = it.selectedOpeningId?.takeIf { selectedId ->
+                updated.openings.any { opening -> opening.id == selectedId }
+            }
+            val nextSelectedRoomId = it.selectedRoomId?.takeIf { selectedId ->
+                updated.rooms.any { room -> room.id == selectedId }
+            }
             it.copy(
                 project = updatedProject,
                 document = updated,
+                selectedWallId = nextSelectedWallId,
+                selectedOpeningId = nextSelectedOpeningId,
+                selectedRoomId = nextSelectedRoomId,
                 canUndo = undoStack.isNotEmpty(),
                 canRedo = redoStack.isNotEmpty()
             )
@@ -638,6 +668,27 @@ class BlueprintEditorViewModel @Inject constructor(
             return "Opening overlaps an existing opening on this wall."
         }
         return null
+    }
+
+    private fun sanitizeOpeningsForWalls(
+        walls: List<WallSegment>,
+        openings: List<BlueprintOpening>
+    ): List<BlueprintOpening> {
+        if (openings.isEmpty()) return emptyList()
+        val baseline = BlueprintDocument(
+            projectId = _uiState.value.project?.id ?: "",
+            walls = walls,
+            openings = emptyList()
+        )
+        val accepted = mutableListOf<BlueprintOpening>()
+        openings.forEach { opening ->
+            val normalized = opening.normalized()
+            val candidate = baseline.copy(openings = accepted.toList())
+            if (openingPlacementError(document = candidate, opening = normalized) == null) {
+                accepted += normalized
+            }
+        }
+        return accepted
     }
 
     private fun BlueprintDocument.withUndoMeta(

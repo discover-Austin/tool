@@ -13,10 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-private val CompactActionMinHeight = 38.dp
+private val CompactActionMinHeight = 48.dp
 private val CompactActionContentPadding = PaddingValues(
     horizontal = 12.dp,
-    vertical = 8.dp
+    vertical = 10.dp
 )
 
 @Composable
@@ -78,7 +78,7 @@ fun QuietActionButton(
 ) {
     TextButton(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = 34.dp),
+        modifier = modifier.defaultMinSize(minHeight = CompactActionMinHeight),
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.textButtonColors(

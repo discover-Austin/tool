@@ -519,7 +519,7 @@ internal fun GridScaleBadge(
     val itemSpacing = if (compact) 3.dp else 6.dp
     val badgeLabel = if (compact) "Scale $label" else "1 block = $label"
     val textStyle = if (compact) {
-        MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp)
+        MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp)
     } else {
         MaterialTheme.typography.labelSmall
     }
@@ -579,7 +579,7 @@ internal fun FloorCompactBadge(
         ) {
             Text(
                 text = "Floor: ${level.label()}",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1
@@ -1282,7 +1282,7 @@ internal fun AddonPresetCard(
                         OpeningType.STAIR_UP -> "Stair opening up"
                         OpeningType.STAIR_DOWN -> "Stair opening down"
                     },
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1301,7 +1301,7 @@ internal fun SelectionPanel(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 150.dp),
+        modifier = modifier.widthIn(max = 190.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f)
         ),
@@ -1323,7 +1323,7 @@ internal fun SelectionPanel(
                 )
                 TextButton(
                     onClick = onDeselect,
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
                     Text("Clear", style = MaterialTheme.typography.labelSmall)
                 }
@@ -1391,7 +1391,7 @@ internal fun LiveOverlay(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 146.dp),
+        modifier = modifier.widthIn(max = 186.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
         border = BorderStroke(1.dp, Color(0x628CC8FF))
     ) {
@@ -1402,7 +1402,7 @@ internal fun LiveOverlay(
             Text(
                 text = "${selectedFloor.compactLabel()} | Live Qty",
                 color = Color(0xFFB8DBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -1410,7 +1410,7 @@ internal fun LiveOverlay(
             Text(
                 text = liveScopeQuantity.tradeLabel,
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -1418,7 +1418,7 @@ internal fun LiveOverlay(
             Text(
                 text = liveScopeQuantity.value,
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.5.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Clip
@@ -1430,7 +1430,7 @@ internal fun LiveOverlay(
                     "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft"
                 },
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -1442,7 +1442,7 @@ internal fun LiveOverlay(
                     "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft"
                 },
                 color = Color(0xFFF6FBFF),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -1468,8 +1468,8 @@ internal fun CursorCoordinateOverlay(
     val horizontalPadding = if (compact) 5.dp else 8.dp
     val verticalPadding = if (compact) 3.dp else 5.dp
     val rowSpacing = if (compact) 4.dp else 7.dp
-    val textSize = if (compact) 7.5.sp else 10.sp
-    val labelSize = if (compact) 7.sp else 10.sp
+    val textSize = if (compact) 9.sp else 10.sp
+    val labelSize = if (compact) 8.5.sp else 10.sp
     val valueSlotWidth = when {
         compact && useMetric -> 42.dp
         compact -> 54.dp

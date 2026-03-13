@@ -30,7 +30,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -382,7 +384,7 @@ private fun ProjectRitualFlow(
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Button(onClick = onDismissError) {
-                        Text("Dismiss")
+                        Text(stringResource(R.string.dismiss))
                     }
                 }
             }
@@ -401,11 +403,17 @@ private fun ProjectRitualFlow(
                 },
                 enabled = !isSaving
             ) {
-                Text(if (step == 1) "Back" else "Back to Name")
+                Text(
+                    if (step == 1) {
+                        stringResource(R.string.back)
+                    } else {
+                        stringResource(R.string.back_to_name)
+                    }
+                )
             }
             if (isSaving) {
                 CircularProgressIndicator(modifier = Modifier.height(28.dp))
-                Text("Finalizing project ritual...")
+                Text(stringResource(R.string.finalizing_project_ritual))
             }
         }
     }
@@ -775,7 +783,7 @@ private fun WorkspaceShell(
                         }
                     },
                     dismissButton = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             TextButton(
                                 onClick = {
                                     showNewProjectConfirm = false
@@ -874,14 +882,21 @@ private fun WorkspaceTourOverlay(
     onNext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val compactHeightWindow = LocalConfiguration.current.screenHeightDp < 700
+    val maxCardHeight = if (compactHeightWindow) 320.dp else 520.dp
     Card(
-        modifier = modifier.fillMaxWidth().widthIn(max = 560.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 560.dp)
+            .heightIn(max = maxCardHeight),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .padding(12.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -890,12 +905,12 @@ private fun WorkspaceTourOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Interactive Tour",
+                    text = stringResource(R.string.interactive_tour),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 TextButton(onClick = onSkip) {
-                    Text("Skip")
+                    Text(stringResource(R.string.skip))
                 }
             }
             LinearProgressIndicator(
@@ -903,7 +918,12 @@ private fun WorkspaceTourOverlay(
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "Step ${stepIndex + 1} of $totalSteps · ${step.title}",
+                text = stringResource(
+                    R.string.tour_step_progress,
+                    stepIndex + 1,
+                    totalSteps,
+                    step.title
+                ),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -922,7 +942,7 @@ private fun WorkspaceTourOverlay(
                 }
             }
             Text(
-                text = "Tip: ${step.tip}",
+                text = stringResource(R.string.tour_tip, step.tip),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -935,10 +955,16 @@ private fun WorkspaceTourOverlay(
                     onClick = onBack,
                     enabled = stepIndex > 0
                 ) {
-                    Text("Back")
+                    Text(stringResource(R.string.back))
                 }
                 Button(onClick = onNext) {
-                    Text(if (stepIndex == totalSteps - 1) "Finish Tour" else "Next")
+                    Text(
+                        if (stepIndex == totalSteps - 1) {
+                            stringResource(R.string.finish_tour)
+                        } else {
+                            stringResource(R.string.next)
+                        }
+                    )
                 }
             }
         }
@@ -978,7 +1004,8 @@ private fun WorkspaceLeftRail(
             Surface(
                 onClick = onToggleCollapsed,
                 shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1005,7 +1032,8 @@ private fun WorkspaceLeftRail(
                 Surface(
                     onClick = onToggleCollapsed,
                     shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
@@ -1020,21 +1048,29 @@ private fun WorkspaceLeftRail(
                 modifier = Modifier.padding(6.dp)
             )
                 WorkspaceRailActionItem(
-                    label = "New+",
+                    label = stringResource(R.string.rail_new_plus),
                     icon = Icons.Filled.Add,
                     selected = false,
                     onClick = onCreateNewProject,
                     onLongPress = {
-                        Toast.makeText(context, "New Project", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.new_project_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
                 WorkspaceRailActionItem(
-                    label = "Saved",
+                    label = stringResource(R.string.rail_saved),
                     icon = Icons.Filled.Description,
                     selected = showSavedProjects,
                     onClick = onToggleSavedProjects,
                     onLongPress = {
-                        Toast.makeText(context, "Saved Projects", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.saved_projects_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 )
                 WorkspaceRailItem(
@@ -1139,10 +1175,11 @@ private fun WorkspaceRailItem(
     )
 }
 
+@Composable
 private fun DetailTab.railLabel(): String = when (this) {
-    DetailTab.BLUEPRINT -> "Plan"
-    DetailTab.MATERIALS -> "Mats"
-    DetailTab.SETTINGS_ABOUT -> "Settings"
+    DetailTab.BLUEPRINT -> stringResource(R.string.rail_plan_short)
+    DetailTab.MATERIALS -> stringResource(R.string.rail_materials_short)
+    DetailTab.SETTINGS_ABOUT -> stringResource(R.string.rail_settings_short)
     else -> label
 }
 
@@ -1180,7 +1217,7 @@ private fun SavedProjectsPanel(
             }
             if (projects.isEmpty()) {
                 Text(
-                    "No projects saved yet.",
+                    stringResource(R.string.no_saved_projects),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

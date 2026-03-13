@@ -1,7 +1,7 @@
 # Testing Notes
 
 ## TradeSketch Estimator
-Updated: March 8, 2026
+Updated: March 9, 2026
 
 This checklist targets the current blueprint-first UI.
 
@@ -44,7 +44,7 @@ Expected: no startup/runtime fatal exceptions on normal flows.
 ## 3) Core Manual QA Checklist (Current Flow)
 
 ### First-Run and Project Setup
-- [ ] Welcome screen renders and Continue works.
+- [ ] Welcome screen renders and Begin works.
 - [ ] Project setup step 1 validates project name entry.
 - [ ] Project setup step 2 trade selection completes and opens workspace.
 
@@ -106,3 +106,4 @@ Before production rollout:
 
 - If a crash occurs, capture full stack trace and fix root cause.
 - Refresh screenshots after major UI changes using `scripts/04-capture-screenshots.ps1`.
+

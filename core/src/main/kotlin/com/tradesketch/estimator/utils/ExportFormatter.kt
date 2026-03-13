@@ -3,9 +3,6 @@ package com.tradesketch.estimator.utils
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Formats data for export (CSV, PDF, Share, Copy).
@@ -21,10 +18,12 @@ object ExportFormatter {
         project: Project,
         settings: Settings,
         takeoffType: String,
-        result: TakeoffResult
+        result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String = EstimateIdentity.buildEstimateId(project, generatedAtMillis)
     ): String {
         val header = buildBusinessHeader(settings)
-        val estimateId = buildEstimateId(project)
+        val timestamp = Formatters.formatDate(generatedAtMillis)
         return buildString {
             appendLine(header.name)
             header.contactLines.forEach { appendLine(it) }
@@ -33,7 +32,7 @@ object ExportFormatter {
             appendLine("Project: ${project.name}")
             appendLine("Estimate ID: $estimateId")
             appendLine("Takeoff Type: $takeoffType")
-            appendLine("Date: ${Formatters.formatDate(System.currentTimeMillis())}")
+            appendLine("Date: $timestamp")
             appendLine()
             appendLine("QUANTITIES")
             appendLine("-" .repeat(50))
@@ -75,10 +74,12 @@ object ExportFormatter {
         project: Project,
         settings: Settings,
         takeoffType: String,
-        result: TakeoffResult
+        result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String = EstimateIdentity.buildEstimateId(project, generatedAtMillis)
     ): String {
         val header = buildBusinessHeader(settings)
-        val estimateId = buildEstimateId(project)
+        val timestamp = Formatters.formatDate(generatedAtMillis)
         return buildString {
             appendLine("Company,Phone,Email,Address,License")
             appendLine(
@@ -97,7 +98,7 @@ object ExportFormatter {
                     project.name,
                     estimateId,
                     takeoffType,
-                    Formatters.formatDate(System.currentTimeMillis())
+                    timestamp
                 ).joinToString(separator = ",") { cell -> csvCell(cell) }
             )
             appendLine()
@@ -154,10 +155,12 @@ object ExportFormatter {
         project: Project,
         settings: Settings,
         takeoffType: String,
-        result: TakeoffResult
+        result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String = EstimateIdentity.buildEstimateId(project, generatedAtMillis)
     ): String {
         val company = buildBusinessHeader(settings)
-        val estimateId = buildEstimateId(project)
+        val timestamp = Formatters.formatDate(generatedAtMillis)
         val itemsJson = result.items.joinToString(separator = ",\n") { item ->
             """
             {
@@ -196,7 +199,7 @@ object ExportFormatter {
             "license": "${escapeJson(settings.businessLicense)}"
           },
           "takeoffType": "${escapeJson(takeoffType)}",
-          "generatedAt": "${escapeJson(Formatters.formatDate(System.currentTimeMillis()))}",
+          "generatedAt": "${escapeJson(timestamp)}",
           "items": [
             $itemsJson
           ],
@@ -222,10 +225,11 @@ object ExportFormatter {
         project: Project,
         settings: Settings,
         takeoffType: String,
-        result: TakeoffResult
+        result: TakeoffResult,
+        generatedAtMillis: Long = System.currentTimeMillis(),
+        estimateId: String = EstimateIdentity.buildEstimateId(project, generatedAtMillis)
     ): String {
         val header = buildBusinessHeader(settings)
-        val estimateId = buildEstimateId(project)
         return buildString {
             appendLine(header.name)
             appendLine("${project.name} - $takeoffType")
@@ -310,9 +314,4 @@ object ExportFormatter {
         }
     }
 
-    private fun buildEstimateId(project: Project): String {
-        val stamp = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(System.currentTimeMillis()))
-        val shortId = project.id.filter { char -> char.isLetterOrDigit() }.take(8).uppercase()
-        return "TS-$stamp-$shortId"
-    }
 }
