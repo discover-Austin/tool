@@ -142,9 +142,9 @@ fun TakeoffScreen(
         item {
             AnimatedEntry(delayMs = staggeredDelay(70)) {
                 TitledSectionCard(
-                    title = if (isMaterialsMode) "Estimate Type" else "Quantity Scope",
+                    title = if (isMaterialsMode) "Trade" else "Quantity Scope",
                     subtitle = if (isManualMode) {
-                        "Pick the estimate type directly when entering measurements manually."
+                        "Pick the trade directly when entering measurements manually."
                     } else if (isMaterialsMode) {
                         "Set in Blueprint so this tab always stays in sync."
                     } else {

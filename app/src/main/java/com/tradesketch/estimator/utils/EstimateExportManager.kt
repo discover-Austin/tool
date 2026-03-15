@@ -242,7 +242,7 @@ internal object EstimateExportManager {
             y += 24f
             canvas.drawText("Estimate ID: $resolvedEstimateId", margin, y, bodyPaint)
             y += 24f
-            canvas.drawText("Estimate Type: $takeoffType", margin, y, bodyPaint)
+            canvas.drawText("Trade: $takeoffType", margin, y, bodyPaint)
             y += 24f
             canvas.drawText("Prepared: $timestamp", margin, y, bodyPaint)
             y += 28f

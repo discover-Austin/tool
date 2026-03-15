@@ -102,9 +102,9 @@ fun AppTutorialScreen(
                         verticalAlignment = Alignment.Top
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TutorialTag(label = "FIELD GUIDE")
+                            TutorialTag(label = "GET STARTED")
                             Text(
-                                text = "Quick Tutorial",
+                                text = "Interactive Tour",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -114,7 +114,7 @@ fun AppTutorialScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Learn the flow once, then move through projects with less guesswork.",
+                                text = "Learn the basics once, then start your first project with confidence.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -235,7 +235,7 @@ fun AppTutorialScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "You can replay this any time in Settings/About.",
+                                text = "You can replay this any time in Settings.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -265,7 +265,7 @@ fun AppTutorialScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "You can replay this any time in Settings/About.",
+                                text = "You can replay this any time in Settings.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -358,15 +358,15 @@ private data class TutorialStep(
 
 private fun tutorialSteps(): List<TutorialStep> = listOf(
     TutorialStep(
-        title = "Workspace Rail",
-        summary = "The left rail controls project flow and global navigation.",
+        title = "Navigation",
+        summary = "The left rail keeps project controls and workspace tabs in one place.",
         controls = listOf(
-            "Use New+ to create a fresh project.",
-            "Use Saved to switch between jobs or remove old ones.",
-            "Tap Blueprint, Materials, Export, or Settings/About to change workspace.",
-            "Use the arrow at top of rail to collapse or expand it."
+            "Use New Project to start a fresh estimate.",
+            "Use Projects to switch jobs or remove old ones.",
+            "Tap Blueprint, Materials, Export, or Settings to change workspace.",
+            "Use the arrow at the top of the rail to collapse or expand it."
         ),
-        tip = "When learning, stay in Blueprint first, then move to Materials and Export.",
+        tip = "Start in Blueprint, then continue to Materials and Export when the drawing is ready.",
         icon = Icons.Filled.Description
     ),
     TutorialStep(
@@ -394,8 +394,8 @@ private fun tutorialSteps(): List<TutorialStep> = listOf(
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
-        title = "Dual Joystick Mastery",
-        summary = "Use right stick for cursor and left stick for camera pan, then tap from either side for action flow.",
+        title = "Joystick Controls",
+        summary = "Use the right stick for the cursor and the left stick to pan the drawing.",
         controls = listOf(
             "Right stick moves the cursor. Small movement gives precision; full movement crosses the canvas quickly.",
             "Left stick pans the blueprint without changing zoom.",
@@ -403,7 +403,7 @@ private fun tutorialSteps(): List<TutorialStep> = listOf(
             "Left-stick tap and stick-press are alternate actions (cancel active draw/pick-up, quick-select, or clear nearby wall).",
             "Practice: right-stick to a corner, right-tap start, move, right-tap place, left-tap reset."
         ),
-        tip = "Fine-tune in Settings/About: lower joystick sensitivity and raise deadzone for tighter control.",
+        tip = "Fine-tune in Settings: lower joystick sensitivity and raise dead zone for tighter control.",
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
@@ -434,7 +434,7 @@ private fun tutorialSteps(): List<TutorialStep> = listOf(
         controls = listOf(
             "Configure snap behavior, joystick settings, and touch preferences.",
             "Set unit, pricing, and business profile defaults.",
-            "Use Replay Tutorial any time from Settings/About."
+            "Use Replay Tutorial any time from Settings."
         ),
         tip = "Shared defaults improve consistency across teammates and devices.",
         icon = Icons.Filled.Settings
