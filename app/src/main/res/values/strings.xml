@@ -9,10 +9,10 @@
     <string name="finish_tour">Finish Tour</string>
     <string name="tour_step_progress">Step %1$d of %2$d · %3$s</string>
     <string name="tour_tip">Tip: %1$s</string>
-    <string name="rail_new_plus">New Project</string>
-    <string name="rail_saved">Projects</string>
+    <string name="rail_new_plus">New</string>
+    <string name="rail_saved">Open</string>
     <string name="new_project_toast">New Project</string>
-    <string name="saved_projects_toast">Projects</string>
+    <string name="saved_projects_toast">Open Projects</string>
     <string name="rail_plan_short">Blueprint</string>
     <string name="rail_materials_short">Materials</string>
     <string name="rail_settings_short">Settings</string>

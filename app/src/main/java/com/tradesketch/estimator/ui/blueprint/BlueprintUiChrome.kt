@@ -405,25 +405,25 @@ internal fun ClearAllButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.26f)),
-        modifier = modifier.heightIn(min = 48.dp)
+        modifier = modifier.heightIn(min = 40.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Clear all blueprint items",
                 tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(13.dp)
+                modifier = Modifier.size(12.dp)
             )
             Text(
                 text = "Clear All",
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = MaterialTheme.colorScheme.error
             )
         }
@@ -1391,8 +1391,13 @@ internal fun LiveOverlay(
     useMetric: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val floorNumberLabel = if (selectedFloor >= 0) {
+        "Floor ${selectedFloor + 1}"
+    } else {
+        "Floor $selectedFloor"
+    }
     Card(
-        modifier = modifier.widthIn(max = 186.dp),
+        modifier = modifier.widthIn(max = 172.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.58f))
     ) {
@@ -1401,18 +1406,10 @@ internal fun LiveOverlay(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = "${selectedFloor.compactLabel()} | Live Qty",
+                text = floorNumberLabel,
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
-            Text(
-                text = liveScopeQuantity.tradeLabel,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
