@@ -37,4 +37,16 @@ class ExportStorageTest {
         assertTrue(second.endsWith(".pdf"))
         assertTrue(first != second, "Two immediate exports should not collide on filename.")
     }
+
+    @Test
+    fun exportDestination_messages_areExplicitAboutLocation() {
+        assertEquals(
+            "Saved estimate.pdf to Downloads/TradeSketch.",
+            ExportDestination.PUBLIC_DOWNLOADS.saveSuccessMessage("estimate.pdf")
+        )
+        assertEquals(
+            "Saved estimate.pdf to TradeSketch app storage. Use Save As to place it in a public folder.",
+            ExportDestination.APP_STORAGE.saveSuccessMessage("estimate.pdf")
+        )
+    }
 }

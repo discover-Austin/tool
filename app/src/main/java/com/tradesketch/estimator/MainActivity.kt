@@ -14,7 +14,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -60,6 +62,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -70,7 +73,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,14 +81,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalConfiguration
@@ -153,12 +160,20 @@ private enum class RootStage {
     WORKSPACE
 }
 
+private val WorkspaceRailShell = Color(0xFFF4F8FD)
+private val WorkspaceRailSurface = Color(0xFFFFFFFF)
+private val WorkspaceRailAccent = Color(0xFF2F6E9E)
+private val WorkspaceRailAccentBright = Color(0xFF4F89BB)
+private val WorkspaceRailAccentBorder = Color(0xFFC5D7E7)
+private val WorkspaceRailTextPrimary = Color(0xFF243240)
+private val WorkspaceRailTextOnAccent = Color(0xFFFFFFFF)
+
 @Composable
 private fun TradeSketchRoot() {
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val onboardingViewModel: OnboardingViewModel = hiltViewModel()
-    val settingsUiState by settingsViewModel.uiState.collectAsState()
-    val onboardingUiState by onboardingViewModel.uiState.collectAsState()
+    val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val onboardingUiState by onboardingViewModel.uiState.collectAsStateWithLifecycle()
 
     if (settingsUiState.isLoading) {
         Box(
@@ -429,7 +444,7 @@ private fun WorkspaceShell(
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = hiltViewModel()
 ) {
-    val projectsUiState by projectsViewModel.uiState.collectAsState()
+    val projectsUiState by projectsViewModel.uiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(DetailTab.BLUEPRINT) }
     var selectedProjectId by rememberSaveable { mutableStateOf<String?>(initialProjectId) }
     var showSavedProjects by rememberSaveable { mutableStateOf(false) }
@@ -451,64 +466,106 @@ private fun WorkspaceShell(
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
-                title = "Blueprint Canvas",
-                message = "This is where geometry is created. Every quantity downstream depends on this drawing.",
+                title = "Canvas Navigation",
+                message = "Start by learning how to frame the area before placing any walls.",
                 controls = listOf(
-                    "Tap walls/openings in Select mode to inspect or edit them.",
-                    "In Draw mode, tap a start point, then tap an end point to place a wall.",
-                    "Pinch to zoom, and pan with two fingers to move around the canvas.",
-                    "Use the Project Name field at the top to rename the active job."
+                    "Touch: pinch to zoom and pan with two fingers.",
+                    "Joystick: right stick moves the cursor and left stick pans the canvas.",
+                    "Use the Project Name field at the top to rename the active job.",
+                    "Zoom in until corners are easy to hit before you start drawing."
                 ),
-                tip = "When in doubt, zoom in before placing openings for cleaner alignment.",
+                tip = "A clean view makes every later tap easier.",
+                targetTab = DetailTab.BLUEPRINT,
+                drillTitle = "Warm-Up",
+                drill = listOf(
+                    "Pan until one outside corner is centered.",
+                    "Pinch in and out once so you know your working zoom."
+                )
+            ),
+            WorkspaceTourStep(
+                title = "Draw Walls",
+                message = "Wall drawing is a simple start-point and finish-point rhythm.",
+                controls = listOf(
+                    "Switch to Draw before placing linework.",
+                    "Tap once to start a wall, move to the next corner, then tap again to finish it.",
+                    "Chain continues from the last placed corner for fast runs.",
+                    "Split lets the next segment break away instead of continuing the chain."
+                ),
+                tip = "Place one clean segment at a time until the shape feels natural.",
+                targetTab = DetailTab.BLUEPRINT,
+                drillTitle = "Touch Drill",
+                drill = listOf(
+                    "Tap Draw.",
+                    "Tap a corner to start a wall.",
+                    "Tap the next corner to place the segment."
+                )
+            ),
+            WorkspaceTourStep(
+                title = "Box Rooms",
+                message = "Box mode is the fastest way to block in rectangular spaces.",
+                controls = listOf(
+                    "Tap Box, then tap the first corner of the room.",
+                    "Move diagonally to size the room and tap again to finish the rectangle.",
+                    "Use the side dials before the final tap when you need exact angle or length.",
+                    "Undo or Cancel is faster than fighting a bad box."
+                ),
+                tip = "Rough in simple rooms with Box first, then refine edges later.",
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
-                title = "Bottom Rail Tools",
-                message = "The bottom blueprint rail is your fast tool belt for drawing and editing.",
+                title = "Select, Edit, Delete",
+                message = "Use Select mode whenever you need to inspect, adjust, or remove existing geometry.",
                 controls = listOf(
-                    "Trash deletes the currently selected wall or opening.",
-                    "Select chooses existing geometry; Draw creates new wall segments.",
-                    "Box creates room rectangles: tap once to start, move, then tap again to finish.",
-                    "Chain continues from the last corner; Split detaches the next wall segment."
+                    "Tap a wall or opening to select it.",
+                    "Trash deletes only the current selection.",
+                    "Use Cancel or a right-tap to clear an unfinished action or accidental pick.",
+                    "Zoom closer before editing short walls or tight opening layouts."
                 ),
-                tip = "Use Select before deleting so you always know exactly what will be removed.",
+                tip = "Select before Delete so the target is always obvious.",
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
-                title = "Openings, Floors, Params",
-                message = "Specialized controls let you place openings, switch floors, and tune takeoff behavior.",
+                title = "Openings and Snap",
+                message = "Place doors, windows, and stairs after the wall layout is stable.",
                 controls = listOf(
-                    "Door, Window, Stair Up, and Stair Down buttons open preset placement panels.",
-                    "Drag an opening preview onto an existing wall segment to place it.",
+                    "Door, Window, Stair Up, and Stair Down open preset placement panels.",
+                    "Place the preview onto an existing wall segment to create the opening.",
+                    "Params controls snap behavior and other blueprint tuning.",
+                    "If placement feels sticky or too loose, adjust snap and try again."
+                ),
+                tip = "Walls first, openings second keeps the canvas easier to edit.",
+                targetTab = DetailTab.BLUEPRINT
+            ),
+            WorkspaceTourStep(
+                title = "Touch and Joystick",
+                message = "Both input styles drive the same tools, so use whichever keeps you accurate.",
+                controls = listOf(
+                    "Touch is best for quick zooming, panning, and direct taps.",
+                    "Joystick is best when you want a steady cursor without covering the canvas.",
+                    "Left-tap is the primary action at the cursor; right-tap is cancel or reset.",
+                    "Swap freely between touch and joystick while the same tool stays active."
+                ),
+                tip = "Many users frame the view with touch, then use joystick for precise wall placement.",
+                targetTab = DetailTab.BLUEPRINT,
+                drillTitle = "Quick-Start Drill",
+                drill = listOf(
+                    "Move the cursor to a corner.",
+                    "Left-tap start wall.",
+                    "Move the cursor to the next corner.",
+                    "Left-tap place wall.",
+                    "Right-tap reset."
+                )
+            ),
+            WorkspaceTourStep(
+                title = "Floors and Params",
+                message = "Use the blueprint side controls to manage level context and tuning.",
+                controls = listOf(
                     "Floor controls move between Ground, upper levels, and basements.",
-                    "Params opens snapping and trade parameter controls; ? opens the rail help guide."
+                    "Params opens snap and trade parameter controls.",
+                    "The ? button reopens the rail help when you want a reminder.",
+                    "Undo/Redo and Zoom stay available on the upper control rail."
                 ),
-                tip = "If placement feels sticky or too loose, adjust snap settings in Params.",
-                targetTab = DetailTab.BLUEPRINT
-            ),
-            WorkspaceTourStep(
-                title = "Dual Joystick Mastery",
-                message = "Dual joysticks let you draw and edit continuously without lifting your thumbs.",
-                controls = listOf(
-                    "Right stick moves the cursor: slight push for precision, full push for fast travel.",
-                    "Left stick pans the canvas while keeping your current zoom level.",
-                    "Left-stick tap sends the primary tap at cursor: start/end walls, place openings, confirm actions.",
-                    "Right-stick tap sends alternate action: cancel current draw/pick-up, or quick-select/clear nearby wall.",
-                    "30-second drill: move cursor to corner, left-tap start wall, move cursor, left-tap place wall, right-tap to cancel/reset."
-                ),
-                tip = "If control feels twitchy, lower joystick sensitivity and raise deadzone in Settings > Blueprint.",
-                targetTab = DetailTab.BLUEPRINT
-            ),
-            WorkspaceTourStep(
-                title = "Precision Controls",
-                message = "Use advanced controls when you need exact alignment, rotation, and sizing.",
-                controls = listOf(
-                    "Side angle dial rotates the active line, box, or picked-up wall.",
-                    "Side length dial changes line length or expands/shrinks active box geometry.",
-                    "Undo/Redo and Zoom controls are always available on the upper control rail.",
-                    "Cancel in touch quick tools exits the active action and clears transient states."
-                ),
-                tip = "For box workflows, use the dials before final tap to lock exact orientation and size.",
+                tip = "Check floor and snap before drawing if something feels off.",
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
@@ -651,11 +708,11 @@ private fun WorkspaceShell(
     val railExpandedForLargeWindow = configuration.screenWidthDp >= 840
     val collapsedRailWidth = if (railCompact) 32.dp else 36.dp
     val expandedRailWidth = if (railExpandedForLargeWindow) 84.dp else 72.dp
-    val leftBlueprintOverlayInset = if (leftRailCollapsed) {
-        collapsedRailWidth + 8.dp
-    } else {
-        expandedRailWidth + 13.dp
-    }
+    val leftBlueprintOverlayInset = 0.dp
+    val dockRailForBlueprint = selectedTab == DetailTab.BLUEPRINT
+    val blueprintRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
+    val blueprintCollapsedRailTopPadding = if (configuration.screenHeightDp < 760) 56.dp else 68.dp
+    val blueprintRailBottomPadding = if (configuration.screenHeightDp < 760) 156.dp else 172.dp
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxSize()
@@ -825,17 +882,27 @@ private fun WorkspaceShell(
 
         Row(
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.TopStart)
                 .fillMaxHeight()
+                .padding(
+                    start = 4.dp,
+                    top = if (dockRailForBlueprint) {
+                        if (leftRailCollapsed) blueprintCollapsedRailTopPadding else blueprintRailTopPadding
+                    } else {
+                        0.dp
+                    },
+                    bottom = if (dockRailForBlueprint && !leftRailCollapsed) blueprintRailBottomPadding else 0.dp
+                )
                 .windowInsetsPadding(
                     WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom)
                 ),
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.Top
         ) {
             WorkspaceLeftRail(
                 currentTab = selectedTab,
                 collapsed = leftRailCollapsed,
                 compact = railCompact,
+                blueprintDocked = dockRailForBlueprint,
                 collapsedRailWidth = collapsedRailWidth,
                 expandedRailWidth = expandedRailWidth,
                 onSelectTab = navigateToTab,
@@ -854,10 +921,10 @@ private fun WorkspaceShell(
                 onToggleCollapsed = toggleLeftRail,
                 modifier = Modifier.fillMaxHeight()
             )
-            if (!leftRailCollapsed) {
+            if (!leftRailCollapsed && !dockRailForBlueprint) {
                 VerticalDivider(
                     modifier = Modifier.fillMaxHeight(),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    color = WorkspaceRailAccentBorder.copy(alpha = 0.55f)
                 )
             }
         }
@@ -869,7 +936,9 @@ private data class WorkspaceTourStep(
     val message: String,
     val controls: List<String>,
     val tip: String,
-    val targetTab: DetailTab
+    val targetTab: DetailTab,
+    val drillTitle: String? = null,
+    val drill: List<String> = emptyList()
 )
 
 @Composable
@@ -941,6 +1010,36 @@ private fun WorkspaceTourOverlay(
                     )
                 }
             }
+            if (step.drill.isNotEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = step.drillTitle ?: "Quick Drill",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        step.drill.forEachIndexed { index, instruction ->
+                            Text(
+                                text = "${index + 1}. $instruction",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
             Text(
                 text = stringResource(R.string.tour_tip, step.tip),
                 style = MaterialTheme.typography.labelSmall,
@@ -976,6 +1075,7 @@ private fun WorkspaceLeftRail(
     currentTab: DetailTab,
     collapsed: Boolean,
     compact: Boolean,
+    blueprintDocked: Boolean,
     collapsedRailWidth: androidx.compose.ui.unit.Dp,
     expandedRailWidth: androidx.compose.ui.unit.Dp,
     onSelectTab: (DetailTab) -> Unit,
@@ -995,21 +1095,33 @@ private fun WorkspaceLeftRail(
     val blueprintTab = primaryTabs.firstOrNull { it == DetailTab.BLUEPRINT } ?: DetailTab.BLUEPRINT
     val secondaryTabs = primaryTabs.filterNot { it == DetailTab.BLUEPRINT }
     if (collapsed) {
+        val collapsedArrowTopPadding = when {
+            blueprintDocked && compact -> 12.dp
+            blueprintDocked -> 18.dp
+            else -> 0.dp
+        }
         Box(
             modifier = modifier
                 .width(collapsedRailWidth)
-                .padding(bottom = 8.dp),
-            contentAlignment = Alignment.BottomStart
+                .padding(
+                    top = if (blueprintDocked) collapsedArrowTopPadding else 8.dp,
+                    bottom = 8.dp
+                ),
+            contentAlignment = if (blueprintDocked) Alignment.TopStart else Alignment.CenterStart
         ) {
             Surface(
                 onClick = onToggleCollapsed,
                 shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                color = WorkspaceRailSurface.copy(alpha = 0.96f),
+                border = BorderStroke(1.dp, WorkspaceRailAccentBorder.copy(alpha = 0.92f)),
+                modifier = Modifier
+                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .padding(start = 2.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = stringResource(R.string.expand_navigation_rail),
+                    tint = WorkspaceRailAccentBright,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
                 )
             }
@@ -1017,36 +1129,45 @@ private fun WorkspaceLeftRail(
         return
     }
     NavigationRail(
-        modifier = modifier.width(expandedRailWidth),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+        modifier = modifier
+            .width(expandedRailWidth)
+            .padding(vertical = 8.dp),
+        containerColor = Color.Transparent
     ) {
-        Box(modifier = Modifier.fillMaxHeight()) {
+        Surface(
+            modifier = Modifier.fillMaxHeight(),
+            shape = MaterialTheme.shapes.large,
+            color = WorkspaceRailShell.copy(alpha = 0.98f),
+            border = BorderStroke(
+                width = 1.dp,
+                color = WorkspaceRailAccentBorder.copy(alpha = 0.82f)
+            ),
+            tonalElevation = 2.dp,
+            shadowElevation = 4.dp
+        ) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp)
+                    .fillMaxHeight()
+                    .padding(horizontal = 5.dp, vertical = 8.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                WorkspaceRailBrand()
                 Surface(
                     onClick = onToggleCollapsed,
                     shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                    color = WorkspaceRailSurface.copy(alpha = 0.98f),
+                    border = BorderStroke(1.dp, WorkspaceRailAccentBorder.copy(alpha = 0.92f)),
                     modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = stringResource(R.string.collapse_navigation_rail),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                )
-            }
-            Icon(
-                imageVector = Icons.Filled.Architecture,
-                contentDescription = stringResource(R.string.app_name),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(6.dp)
-            )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = stringResource(R.string.collapse_navigation_rail),
+                        tint = WorkspaceRailAccentBright,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
                 WorkspaceRailActionItem(
                     label = stringResource(R.string.rail_new_plus),
                     icon = Icons.Filled.Add,
@@ -1112,31 +1233,57 @@ private fun WorkspaceRailActionItem(
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
+    val containerColor = if (selected) WorkspaceRailAccentBright else WorkspaceRailSurface
+    val contentColor = if (selected) WorkspaceRailTextOnAccent else WorkspaceRailTextPrimary
+    val borderColor = if (selected) Color(0xFFD8E7F5) else WorkspaceRailAccentBorder
     NavigationRailItem(
         selected = selected,
         onClick = onClick,
-        modifier = Modifier.pointerInput(label) {
-            detectTapGestures(
-                onLongPress = {
-                    onLongPress()
-                }
+        modifier = Modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+            }
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(containerColor)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = MaterialTheme.shapes.medium
             )
-        },
+            .pointerInput(label) {
+                detectTapGestures(
+                    onLongPress = {
+                        onLongPress()
+                    }
+                )
+            },
         icon = {
             Icon(
                 imageVector = icon,
-                contentDescription = label
+                contentDescription = label,
+                tint = contentColor
             )
         },
         label = {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = contentColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         },
-        alwaysShowLabel = true
+        alwaysShowLabel = true,
+        colors = NavigationRailItemDefaults.colors(
+            selectedIconColor = contentColor,
+            selectedTextColor = contentColor,
+            indicatorColor = Color.Transparent,
+            unselectedIconColor = contentColor,
+            unselectedTextColor = contentColor
+        )
     )
 }
 
@@ -1147,32 +1294,89 @@ private fun WorkspaceRailItem(
     onSelectTab: (DetailTab) -> Unit,
     onLongPress: () -> Unit
 ) {
+    val isSelected = currentTab == tab
+    val containerColor = if (isSelected) WorkspaceRailAccentBright else WorkspaceRailSurface
+    val contentColor = if (isSelected) WorkspaceRailTextOnAccent else WorkspaceRailTextPrimary
+    val borderColor = if (isSelected) Color(0xFFD8E7F5) else WorkspaceRailAccentBorder
     NavigationRailItem(
-        selected = currentTab == tab,
+        selected = isSelected,
         onClick = { onSelectTab(tab) },
-        modifier = Modifier.pointerInput(tab) {
-            detectTapGestures(
-                onLongPress = {
-                    onLongPress()
-                }
+        modifier = Modifier
+            .semantics(mergeDescendants = true) {
+                contentDescription = tab.label
+            }
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(containerColor)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = MaterialTheme.shapes.medium
             )
-        },
+            .pointerInput(tab) {
+                detectTapGestures(
+                    onLongPress = {
+                        onLongPress()
+                    }
+                )
+            },
         icon = {
             Icon(
                 imageVector = tab.icon,
-                contentDescription = tab.label
+                contentDescription = tab.label,
+                tint = contentColor
             )
         },
         label = {
             Text(
                 text = tab.railLabel(),
                 style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                color = contentColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         },
-        alwaysShowLabel = true
+        alwaysShowLabel = true,
+        colors = NavigationRailItemDefaults.colors(
+            selectedIconColor = contentColor,
+            selectedTextColor = contentColor,
+            indicatorColor = Color.Transparent,
+            unselectedIconColor = contentColor,
+            unselectedTextColor = contentColor
+        )
     )
+}
+
+@Composable
+private fun WorkspaceRailBrand() {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = WorkspaceRailSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = WorkspaceRailAccentBorder.copy(alpha = 0.88f)
+        )
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = WorkspaceRailAccent,
+                border = BorderStroke(1.dp, WorkspaceRailAccentBright)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Architecture,
+                    contentDescription = stringResource(R.string.app_name),
+                    tint = Color.White,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable
