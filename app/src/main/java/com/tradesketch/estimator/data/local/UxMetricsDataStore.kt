@@ -17,13 +17,17 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.uxMetricsDataStore: DataStore<Preferences> by preferencesDataStore(name = "ux_metrics")
+private val Context.uxMetricsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "ux_metrics",
+    corruptionHandler = preferencesCorruptionHandler()
+)
 
 @Singleton
 class UxMetricsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val gson = Gson()
+    private val preferencesFlow = context.uxMetricsDataStore.data.recoverPreferences()
 
     private companion object {
         private val FIRST_ESTIMATE_COUNT = intPreferencesKey("first_estimate_count")
@@ -33,7 +37,7 @@ class UxMetricsDataStore @Inject constructor(
         private val LAST_EVENT_AT = longPreferencesKey("last_event_at")
     }
 
-    val metrics: Flow<UxMetricsSnapshot> = context.uxMetricsDataStore.data.map { preferences ->
+    val metrics: Flow<UxMetricsSnapshot> = preferencesFlow.map { preferences ->
         UxMetricsSnapshot(
             firstEstimateCount = preferences[FIRST_ESTIMATE_COUNT] ?: 0,
             firstEstimateTotalMs = preferences[FIRST_ESTIMATE_TOTAL_MS] ?: 0L,

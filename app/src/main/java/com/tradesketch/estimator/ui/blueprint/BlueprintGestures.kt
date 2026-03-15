@@ -4,13 +4,8 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
 import android.view.MotionEvent
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -160,6 +155,7 @@ internal fun DualJoystickOverlay(
     rightVector: Offset,
     onLeftVectorChange: (Offset) -> Unit,
     onRightVectorChange: (Offset) -> Unit,
+    onLeftPressChange: ((Boolean) -> Unit)? = null,
     onRightPressChange: (Boolean) -> Unit,
     onLeftTap: () -> Unit,
     onRightTap: () -> Unit,
@@ -178,6 +174,7 @@ internal fun DualJoystickOverlay(
     BoxWithConstraints(modifier = modifier) {
         val compact = maxWidth < 420.dp
         val ultraCompact = maxWidth < 360.dp
+        val sidePadding = if (compact) 4.dp else 8.dp
         val joystickSize = when {
             ultraCompact -> 94.dp
             compact -> 104.dp
@@ -195,25 +192,29 @@ internal fun DualJoystickOverlay(
         val zoomIconSize = if (compact) 14.dp else 16.dp
         val historyButtonSize = if (compact) 30.dp else 34.dp
         val historyIconSize = if (compact) 13.dp else 15.dp
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = sidePadding)
         ) {
             JoystickPad(
-                insideLabel = "Pan / Left Tap",
+                insideLabel = "Pan / Alt",
                 vector = leftVector,
                 onVectorChange = onLeftVectorChange,
                 onTap = onLeftTap,
+                onPressChange = onLeftPressChange,
                 tapZoneScale = 0.90f,
                 tapMoveThresholdPx = if (compact) 30f else 34f,
                 centerTapRequired = false,
                 padSize = joystickSize,
                 knobSize = knobSize,
-                labelFontSize = labelFontSize
+                labelFontSize = labelFontSize,
+                modifier = Modifier.align(Alignment.BottomStart)
             )
             Column(
-                modifier = Modifier.padding(bottom = centerColumnBottom),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = centerColumnBottom),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
             ) {
@@ -268,7 +269,7 @@ internal fun DualJoystickOverlay(
                 }
             }
             JoystickPad(
-                insideLabel = "Cursor / Right Tap",
+                insideLabel = "Cursor / Select",
                 vector = rightVector,
                 onVectorChange = onRightVectorChange,
                 onTap = onRightTap,
@@ -278,7 +279,8 @@ internal fun DualJoystickOverlay(
                 centerTapRequired = false,
                 padSize = joystickSize,
                 knobSize = knobSize,
-                labelFontSize = labelFontSize
+                labelFontSize = labelFontSize,
+                modifier = Modifier.align(Alignment.BottomEnd)
             )
         }
     }
@@ -327,7 +329,7 @@ internal fun DrawLineEdgeDialsOverlay(
                 Text(
                     text = "Angle ±1°",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = captionFontSize),
-                    color = Color(0xE4EAF6FF)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Column(
@@ -348,7 +350,7 @@ internal fun DrawLineEdgeDialsOverlay(
                 Text(
                     text = "Length ±1in",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = captionFontSize),
-                    color = Color(0xE4EAF6FF)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -392,6 +394,13 @@ private fun EdgeTickDial(
             }
         }
     }
+    val dialShellColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+    val dialBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)
+    val dialTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    val dialAxisColor = MaterialTheme.colorScheme.onSurface
+    val dialMinorColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val dialMarkerColor = MaterialTheme.colorScheme.primary
+    val dialLabelColor = MaterialTheme.colorScheme.onSurface
     Surface(
         modifier = modifier.pointerInteropFilter { event ->
             when (event.actionMasked) {
@@ -469,8 +478,8 @@ private fun EdgeTickDial(
             }
         },
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xA22A4063),
-        border = BorderStroke(1.2.dp, Color(0xC38AC3F3))
+        color = dialShellColor,
+        border = BorderStroke(1.2.dp, dialBorderColor)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -483,13 +492,13 @@ private fun EdgeTickDial(
                 val tickSpacing = pxPerTick.coerceAtLeast(1f)
 
                 drawRoundRect(
-                    color = Color(0x2A9ED2FF),
+                    color = dialTrackColor,
                     topLeft = Offset(1f, lineTop),
                     size = androidx.compose.ui.geometry.Size(size.width - 2f, lineBottom - lineTop),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(x = 6f, y = 6f)
                 )
                 drawLine(
-                    color = Color(0xD3DFF2FF),
+                    color = dialAxisColor,
                     start = Offset(centerX, lineTop),
                     end = Offset(centerX, lineBottom),
                     strokeWidth = 1.9f
@@ -500,7 +509,7 @@ private fun EdgeTickDial(
                     val major = stepIndex % 5 == 0
                     val halfLen = if (major) size.width * 0.42f else size.width * 0.28f
                     drawLine(
-                        color = if (major) Color(0xE6F2FCFF) else Color(0xBAE1F7FF),
+                        color = if (major) dialAxisColor else dialMinorColor,
                         start = Offset(centerX - halfLen, y),
                         end = Offset(centerX + halfLen, y),
                         strokeWidth = if (major) 1.6f else 1.1f
@@ -513,7 +522,7 @@ private fun EdgeTickDial(
                     val major = stepIndex % 5 == 0
                     val halfLen = if (major) size.width * 0.42f else size.width * 0.28f
                     drawLine(
-                        color = if (major) Color(0xE6F2FCFF) else Color(0xBAE1F7FF),
+                        color = if (major) dialAxisColor else dialMinorColor,
                         start = Offset(centerX - halfLen, y),
                         end = Offset(centerX + halfLen, y),
                         strokeWidth = if (major) 1.6f else 1.1f
@@ -521,13 +530,13 @@ private fun EdgeTickDial(
                     y += tickSpacing
                 }
                 drawLine(
-                    color = Color(0xFFF5FCFF),
+                    color = dialMarkerColor,
                     start = Offset(2f, centerY),
                     end = Offset(size.width - 2f, centerY),
                     strokeWidth = 2.1f
                 )
                 drawCircle(
-                    color = Color(0xFFF8FCFF),
+                    color = dialAxisColor,
                     radius = 2.9f,
                     center = Offset(centerX, centerY)
                 )
@@ -535,7 +544,7 @@ private fun EdgeTickDial(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                color = Color(0xECF2FAFF),
+                color = dialLabelColor,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 5.dp)
@@ -696,9 +705,9 @@ private fun TouchToolButton(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
             color = if (selected) {
-                Color(0xFFF3F8FF)
+                MaterialTheme.colorScheme.onSurface
             } else {
-                Color(0xC9BDD5EC)
+                MaterialTheme.colorScheme.onSurfaceVariant
             }
         )
     }
@@ -756,6 +765,9 @@ internal fun JoystickPad(
     DisposableEffect(onPressChange) {
         onDispose { resetPointerState() }
     }
+    val joystickAxisGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+    val joystickAxisLine = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+    val joystickLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -875,18 +887,18 @@ internal fun JoystickPad(
                     val c = Offset(size.width / 2f, size.height / 2f)
                     val axisInset = size.minDimension * 0.08f
                     drawCircle(
-                        color = Color(0x225A86B5),
+                        color = joystickAxisGlow,
                         radius = size.minDimension * 0.34f,
                         center = c
                     )
                     drawLine(
-                        color = Color(0x2C5A86B5),
+                        color = joystickAxisLine,
                         start = Offset(c.x, axisInset),
                         end = Offset(c.x, size.height - axisInset),
                         strokeWidth = 1f
                     )
                     drawLine(
-                        color = Color(0x2C5A86B5),
+                        color = joystickAxisLine,
                         start = Offset(axisInset, c.y),
                         end = Offset(size.width - axisInset, c.y),
                         strokeWidth = 1f
@@ -895,7 +907,7 @@ internal fun JoystickPad(
                 Text(
                     text = insideLabel,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                    color = Color(0xFFC5D8EC).copy(alpha = 0.52f),
+                    color = joystickLabelColor,
                     modifier = Modifier.align(Alignment.Center)
                 )
                 Surface(

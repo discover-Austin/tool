@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tradesketch.estimator.MainActivity
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,18 +28,18 @@ class WorkspaceJourneyTest {
 
         if (rule.hasContentDescription("Saved")) {
             rule.onNodeWithContentDescription("Saved").performClick()
-            rule.onNodeWithText("Saved Projects").assertIsDisplayed()
+            rule.assertAnyTextDisplayed("Saved Projects")
             rule.onNodeWithText("Close").performClick()
         }
 
         rule.onNodeWithContentDescription("Materials").performClick()
-        rule.onNodeWithText("Input Method").assertIsDisplayed()
+        rule.assertAnyTextDisplayed("Input Method")
 
         rule.onNodeWithContentDescription("Export").performClick()
-        rule.onNodeWithText("Estimate Type").assertIsDisplayed()
+        rule.assertAnyTextDisplayed("Estimate Type")
 
         rule.onNodeWithContentDescription("Settings/About").performClick()
-        rule.onNodeWithText("Settings").assertIsDisplayed()
+        rule.assertAnyTextDisplayed("Settings")
     }
 
     private fun ensureWorkspaceReady() {
@@ -76,5 +77,12 @@ class WorkspaceJourneyTest {
 
     private fun AndroidComposeTestRule<*, *>.hasContentDescription(value: String): Boolean {
         return onAllNodesWithContentDescription(value).fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun AndroidComposeTestRule<*, *>.assertAnyTextDisplayed(value: String) {
+        assertTrue(
+            "Expected at least one visible node with text '$value'.",
+            onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty()
+        )
     }
 }

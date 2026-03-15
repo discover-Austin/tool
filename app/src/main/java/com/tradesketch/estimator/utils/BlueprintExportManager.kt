@@ -10,7 +10,6 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
-import android.net.Uri
 import android.os.Build
 import com.tradesketch.estimator.domain.calc.BlueprintSnapMath
 import com.tradesketch.estimator.domain.model.BlueprintDocument
@@ -20,14 +19,14 @@ import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.WallSegment
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -36,7 +35,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToLong
 
-object BlueprintExportManager {
+internal object BlueprintExportManager {
     fun buildBlueprintPdfBytes(
         projectName: String,
         document: BlueprintDocument,
@@ -55,8 +54,10 @@ object BlueprintExportManager {
         projectName: String,
         document: BlueprintDocument,
         includeGrid: Boolean = true
-    ): Uri? = withContext(Dispatchers.IO) {
-        if (!document.hasGeometry()) return@withContext null
+    ): ExportResult<SavedExport> = withContext(Dispatchers.IO) {
+        if (!document.hasGeometry()) {
+            return@withContext ExportResult.Failure("Add at least one wall, room, or opening before exporting a blueprint.")
+        }
         val bitmap = renderBlueprintBitmap(
             projectName = projectName,
             document = document,
@@ -67,18 +68,22 @@ object BlueprintExportManager {
             suffix = "blueprint",
             extension = "png"
         )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ExportStorage.saveBitmapToPublicDownloads(
-                context = context,
-                bitmap = bitmap,
-                fileName = fileName
-            )
-        } else {
-            ExportStorage.saveBitmapToAppDownloads(
-                context = context,
-                bitmap = bitmap,
-                fileName = fileName
-            )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ExportStorage.saveBitmapToPublicDownloads(
+                    context = context,
+                    bitmap = bitmap,
+                    fileName = fileName
+                )
+            } else {
+                ExportStorage.saveBitmapToAppDownloads(
+                    context = context,
+                    bitmap = bitmap,
+                    fileName = fileName
+                )
+            }
+        } finally {
+            bitmap.recycle()
         }
     }
 
@@ -87,32 +92,51 @@ object BlueprintExportManager {
         projectName: String,
         document: BlueprintDocument,
         includeGrid: Boolean = true
-    ): Intent? = withContext(Dispatchers.IO) {
-        if (!document.hasGeometry()) return@withContext null
-        val bitmap = renderBlueprintBitmap(
-            projectName = projectName,
-            document = document,
-            includeGrid = includeGrid
-        )
-        val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
-        val shareFile = File(
-            cacheDir,
-            ExportStorage.buildFileName(
-                projectName = projectName,
-                suffix = "blueprint",
-                extension = "png"
-            )
-        )
-        FileOutputStream(shareFile).use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+    ): ExportResult<Intent> = withContext(Dispatchers.IO) {
+        if (!document.hasGeometry()) {
+            return@withContext ExportResult.Failure("Add at least one wall, room, or opening before exporting a blueprint.")
         }
-        ExportStorage.createShareIntent(
-            context = context,
-            shareFile = shareFile,
-            mimeType = "image/png",
-            subject = "$projectName Blueprint",
-            text = "Blueprint export from TradeSketch",
-            chooserTitle = "Share Blueprint"
+        runCatching {
+            val bitmap = renderBlueprintBitmap(
+                projectName = projectName,
+                document = document,
+                includeGrid = includeGrid
+            )
+            val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
+            val shareFile = File(
+                cacheDir,
+                ExportStorage.buildFileName(
+                    projectName = projectName,
+                    suffix = "blueprint",
+                    extension = "png"
+                )
+            )
+            try {
+                FileOutputStream(shareFile).use { output ->
+                    val wroteImage = bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+                    output.flush()
+                    require(wroteImage) { "Failed to compress blueprint PNG." }
+                }
+                require(shareFile.length() > 0L) { "Generated blueprint PNG was empty." }
+                ExportStorage.createShareIntent(
+                    context = context,
+                    shareFile = shareFile,
+                    mimeType = "image/png",
+                    subject = "$projectName Blueprint",
+                    text = "Blueprint export from TradeSketch",
+                    chooserTitle = "Share Blueprint"
+                )
+            } finally {
+                bitmap.recycle()
+            }
+        }.fold(
+            onSuccess = { result -> result },
+            onFailure = { error ->
+                ExportResult.Failure(
+                    userMessage = "Could not prepare the blueprint image for sharing.",
+                    cause = error
+                )
+            }
         )
     }
 
@@ -121,8 +145,10 @@ object BlueprintExportManager {
         projectName: String,
         document: BlueprintDocument,
         includeGrid: Boolean = true
-    ): Uri? = withContext(Dispatchers.IO) {
-        if (!document.hasGeometry()) return@withContext null
+    ): ExportResult<SavedExport> = withContext(Dispatchers.IO) {
+        if (!document.hasGeometry()) {
+            return@withContext ExportResult.Failure("Add at least one wall, room, or opening before exporting a blueprint.")
+        }
         val fileName = ExportStorage.buildFileName(
             projectName = projectName,
             suffix = "blueprint",
@@ -154,44 +180,58 @@ object BlueprintExportManager {
         projectName: String,
         document: BlueprintDocument,
         includeGrid: Boolean = true
-    ): Intent? = withContext(Dispatchers.IO) {
-        if (!document.hasGeometry()) return@withContext null
-        val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
-        val shareFile = File(
-            cacheDir,
-            ExportStorage.buildFileName(
-                projectName = projectName,
-                suffix = "blueprint",
-                extension = "pdf"
-            )
-        )
-        val pdfBytes = renderBlueprintPdfBytes(
-            projectName = projectName,
-            document = document,
-            includeGrid = includeGrid
-        )
-        FileOutputStream(shareFile).use { output ->
-            output.write(pdfBytes)
+    ): ExportResult<Intent> = withContext(Dispatchers.IO) {
+        if (!document.hasGeometry()) {
+            return@withContext ExportResult.Failure("Add at least one wall, room, or opening before exporting a blueprint.")
         }
-        ExportStorage.createShareIntent(
-            context = context,
-            shareFile = shareFile,
-            mimeType = "application/pdf",
-            subject = "$projectName Blueprint PDF",
-            text = "Blueprint PDF export from TradeSketch",
-            chooserTitle = "Share Blueprint PDF"
+        runCatching {
+            val cacheDir = File(context.cacheDir, "blueprint-share").apply { mkdirs() }
+            val shareFile = File(
+                cacheDir,
+                ExportStorage.buildFileName(
+                    projectName = projectName,
+                    suffix = "blueprint",
+                    extension = "pdf"
+                )
+            )
+            val pdfBytes = renderBlueprintPdfBytes(
+                projectName = projectName,
+                document = document,
+                includeGrid = includeGrid
+            )
+            require(pdfBytes.isNotEmpty()) { "Generated blueprint PDF was empty." }
+            FileOutputStream(shareFile).use { output ->
+                output.write(pdfBytes)
+                output.flush()
+            }
+            require(shareFile.length() > 0L) { "Generated blueprint PDF file was empty." }
+            ExportStorage.createShareIntent(
+                context = context,
+                shareFile = shareFile,
+                mimeType = "application/pdf",
+                subject = "$projectName Blueprint PDF",
+                text = "Blueprint PDF export from TradeSketch",
+                chooserTitle = "Share Blueprint PDF"
+            )
+        }.fold(
+            onSuccess = { result -> result },
+            onFailure = { error ->
+                ExportResult.Failure(
+                    userMessage = "Could not prepare the blueprint PDF for sharing.",
+                    cause = error
+                )
+            }
         )
     }
-
     fun renderBlueprintBitmap(
         projectName: String,
         document: BlueprintDocument,
-        widthPx: Int = 2200,
-        heightPx: Int = 2200,
+        widthPx: Int = 1800,
+        heightPx: Int = 1800,
         includeGrid: Boolean = true
     ): Bitmap {
-        val safeWidth = widthPx.coerceAtLeast(1200)
-        val safeHeight = heightPx.coerceAtLeast(1200)
+        val safeWidth = widthPx.coerceAtLeast(1000)
+        val safeHeight = heightPx.coerceAtLeast(1000)
         val bitmap = Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -668,11 +708,12 @@ private fun renderBlueprintPdfBytes(
         heightPx = 1800,
         includeGrid = includeGrid
     )
-    val margin = 56
-    val blueprintTop = 150
-    val blueprintBottom = pageHeight - 170
-    val blueprintRect = Rect(margin, blueprintTop, pageWidth - margin, blueprintBottom)
-    canvas.drawBitmap(bitmap, null, blueprintRect, null)
+    try {
+        val margin = 56
+        val blueprintTop = 150
+        val blueprintBottom = pageHeight - 170
+        val blueprintRect = Rect(margin, blueprintTop, pageWidth - margin, blueprintBottom)
+        canvas.drawBitmap(bitmap, null, blueprintRect, null)
 
     val summaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(205, 222, 245)
@@ -691,12 +732,18 @@ private fun renderBlueprintPdfBytes(
         (pageHeight - 70).toFloat(),
         summaryPaint
     )
+    } finally {
+        bitmap.recycle()
+    }
 
     pdfDocument.finishPage(page)
     return ByteArrayOutputStream().use { output ->
-        pdfDocument.writeTo(output)
-        pdfDocument.close()
-        output.toByteArray()
+        try {
+            pdfDocument.writeTo(output)
+            output.toByteArray()
+        } finally {
+            pdfDocument.close()
+        }
     }
 }
 
@@ -754,4 +801,8 @@ private fun List<PointMm>.centroid(): PointMm {
         y = ceil(sumY.toDouble() / size.toDouble()).toLong()
     )
 }
+
+
+
+
 

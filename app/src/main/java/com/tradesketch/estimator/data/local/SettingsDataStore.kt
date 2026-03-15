@@ -12,12 +12,17 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = preferencesCorruptionHandler()
+)
 
 @Singleton
 class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val preferencesFlow = context.settingsDataStore.data.recoverPreferences()
+
     companion object {
         private val PRIMARY_TRADE = stringPreferencesKey("primary_trade")
         private val SIMPLIFIED_HOME = booleanPreferencesKey("simplified_home")
@@ -60,16 +65,24 @@ class SettingsDataStore @Inject constructor(
         private val BLUEPRINT_DUAL_JOYSTICKS_ENABLED = booleanPreferencesKey("blueprint_dual_joysticks_enabled")
         private val BLUEPRINT_JOYSTICK_SENSITIVITY = floatPreferencesKey("blueprint_joystick_sensitivity")
         private val BLUEPRINT_JOYSTICK_DEADZONE = floatPreferencesKey("blueprint_joystick_deadzone")
-        private val BLUEPRINT_LARGE_CURSOR_ENABLED = booleanPreferencesKey("blueprint_large_cursor_enabled")
+        private val BLUEPRINT_CURSOR_VISIBLE = booleanPreferencesKey("blueprint_cursor_visible")
+        private val BLUEPRINT_CURSOR_SCALE = floatPreferencesKey("blueprint_cursor_scale")
+        private val BLUEPRINT_LARGE_CURSOR_ENABLED_LEGACY =
+            booleanPreferencesKey("blueprint_large_cursor_enabled")
     }
 
-    val settings: Flow<Settings> = context.settingsDataStore.data
+    val settings: Flow<Settings> = preferencesFlow
         .map { preferences ->
             val defaults = Settings.DEFAULT
             val storedTrade = preferences[PRIMARY_TRADE]
             val primaryTrade = storedTrade
                 ?.let { raw -> runCatching { PrimaryTrade.valueOf(raw) }.getOrNull() }
                 ?: defaults.primaryTrade
+            val legacyLargeCursorEnabled = preferences[BLUEPRINT_LARGE_CURSOR_ENABLED_LEGACY] ?: false
+            val resolvedCursorScale = (
+                preferences[BLUEPRINT_CURSOR_SCALE]
+                    ?: if (legacyLargeCursorEnabled) 1.45f else defaults.blueprintCursorScale
+                ).coerceIn(0.75f, 2.1f)
             Settings(
                 primaryTrade = primaryTrade,
                 simplifiedHome = preferences[SIMPLIFIED_HOME] ?: defaults.simplifiedHome,
@@ -128,8 +141,9 @@ class SettingsDataStore @Inject constructor(
                     ?: defaults.blueprintJoystickSensitivity,
                 blueprintJoystickDeadzone = preferences[BLUEPRINT_JOYSTICK_DEADZONE]
                     ?: defaults.blueprintJoystickDeadzone,
-                blueprintLargeCursorEnabled = preferences[BLUEPRINT_LARGE_CURSOR_ENABLED]
-                    ?: defaults.blueprintLargeCursorEnabled
+                blueprintCursorVisible = preferences[BLUEPRINT_CURSOR_VISIBLE]
+                    ?: defaults.blueprintCursorVisible,
+                blueprintCursorScale = resolvedCursorScale
             )
         }
 
@@ -176,7 +190,9 @@ class SettingsDataStore @Inject constructor(
             preferences[BLUEPRINT_DUAL_JOYSTICKS_ENABLED] = settings.blueprintDualJoysticksEnabled
             preferences[BLUEPRINT_JOYSTICK_SENSITIVITY] = settings.blueprintJoystickSensitivity
             preferences[BLUEPRINT_JOYSTICK_DEADZONE] = settings.blueprintJoystickDeadzone
-            preferences[BLUEPRINT_LARGE_CURSOR_ENABLED] = settings.blueprintLargeCursorEnabled
+            preferences[BLUEPRINT_CURSOR_VISIBLE] = settings.blueprintCursorVisible
+            preferences[BLUEPRINT_CURSOR_SCALE] = settings.blueprintCursorScale.coerceIn(0.75f, 2.1f)
+            preferences.remove(BLUEPRINT_LARGE_CURSOR_ENABLED_LEGACY)
         }
     }
 

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.R
 import com.tradesketch.estimator.domain.model.PrimaryTrade
+import com.tradesketch.estimator.ui.components.CenteredLabelTrailingIcon
 
 @Composable
 fun ProjectRitualScreen2_EstimateType(
@@ -108,11 +109,10 @@ fun ProjectRitualScreen2_EstimateType(
             enabled = selectedTrade != null,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(stringResource(R.string.open_project))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                modifier = Modifier.padding(start = 8.dp)
+            CenteredLabelTrailingIcon(
+                label = stringResource(R.string.open_project),
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

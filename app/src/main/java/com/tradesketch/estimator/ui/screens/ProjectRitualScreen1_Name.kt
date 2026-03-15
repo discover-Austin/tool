@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.R
+import com.tradesketch.estimator.ui.components.CenteredLabelTrailingIcon
 
 @Composable
 fun ProjectRitualScreen1_Name(
@@ -71,11 +72,10 @@ fun ProjectRitualScreen1_Name(
             enabled = validName,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(stringResource(R.string.continue_button))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                modifier = Modifier.padding(start = 8.dp)
+            CenteredLabelTrailingIcon(
+                label = stringResource(R.string.continue_button),
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

@@ -4,12 +4,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
 import android.view.MotionEvent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -1085,7 +1080,9 @@ internal fun OpeningAddonsPanel(
     )
     Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)) {
         Column(
-            modifier = Modifier.width(156.dp).padding(5.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .width(156.dp)
+                .padding(5.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Row(
@@ -1182,7 +1179,11 @@ internal fun RailHelpPanel(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
     ) {
         Column(
-            modifier = Modifier.width(314.dp).padding(12.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .width(314.dp)
+                .heightIn(max = 360.dp)
+                .padding(12.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -1221,7 +1222,7 @@ internal fun RailHelpPanel(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
             ) {
                 Text(
-                    text = "Tip: Right stick moves cursor + right tap cancels/alt-select. Left stick pans + left tap performs primary action at cursor.",
+                    text = "Tip: Right stick moves cursor + tap performs the primary action at cursor. Left stick pans + tap/press handles cancel, alt-select, and quick wall clear.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1392,8 +1393,8 @@ internal fun LiveOverlay(
 ) {
     Card(
         modifier = modifier.widthIn(max = 186.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xD0081B31)),
-        border = BorderStroke(1.dp, Color(0x628CC8FF))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.58f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
@@ -1401,7 +1402,7 @@ internal fun LiveOverlay(
         ) {
             Text(
                 text = "${selectedFloor.compactLabel()} | Live Qty",
-                color = Color(0xFFB8DBFF),
+                color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -1409,7 +1410,7 @@ internal fun LiveOverlay(
             )
             Text(
                 text = liveScopeQuantity.tradeLabel,
-                color = Color(0xFFF6FBFF),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -1417,7 +1418,7 @@ internal fun LiveOverlay(
             )
             Text(
                 text = liveScopeQuantity.value,
-                color = Color(0xFFF6FBFF),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
@@ -1429,7 +1430,7 @@ internal fun LiveOverlay(
                 } else {
                     "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft"
                 },
-                color = Color(0xFFF6FBFF),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -1441,7 +1442,7 @@ internal fun LiveOverlay(
                 } else {
                     "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft"
                 },
-                color = Color(0xFFF6FBFF),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -1481,8 +1482,8 @@ internal fun CursorCoordinateOverlay(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(cornerRadius),
-        color = Color(0xCE091A2E),
-        border = BorderStroke(1.dp, Color(0x6F5C9FD1))
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = horizontalPadding, vertical = verticalPadding),
@@ -1502,7 +1503,7 @@ internal fun CursorCoordinateOverlay(
             }
             Text(
                 text = "X",
-                color = Color(0xFFE6F4FF),
+                color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = labelSize),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1
@@ -1513,7 +1514,7 @@ internal fun CursorCoordinateOverlay(
             ) {
                 Text(
                     text = xValue,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = textSize,
                         fontFamily = FontFamily.Monospace
@@ -1525,13 +1526,13 @@ internal fun CursorCoordinateOverlay(
             }
             Text(
                 text = "|",
-                color = Color(0x9BB8D8F5),
+                color = MaterialTheme.colorScheme.outline,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = labelSize),
                 maxLines = 1
             )
             Text(
                 text = "Y",
-                color = Color(0xFFE6F4FF),
+                color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = labelSize),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1
@@ -1542,7 +1543,7 @@ internal fun CursorCoordinateOverlay(
             ) {
                 Text(
                     text = yValue,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = textSize,
                         fontFamily = FontFamily.Monospace
@@ -1561,28 +1562,27 @@ internal fun ControlStateHud(
     stateLabel: String,
     modifier: Modifier = Modifier
 ) {
-    val pulse = rememberInfiniteTransition(label = "control-state-hud")
-        .animateFloat(
-            initialValue = 0.25f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 920, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "control-state-hud-pulse"
-        ).value
+    val emphasis by animateFloatAsState(
+        targetValue = when (stateLabel) {
+            "Draw", "Box" -> 1f
+            "Selected", "Picked Up" -> 0.92f
+            else -> 0.72f
+        },
+        animationSpec = tween(durationMillis = 180),
+        label = "control-state-hud-emphasis"
+    )
     val (containerColor, borderColor, textColor) = when (stateLabel) {
-        "Draw" -> Triple(Color(0xD9F3D35E), Color(0xFFFFE088), Color(0xFF201605))
-        "Box" -> Triple(Color(0xD9F3D35E), Color(0xFFFFE088), Color(0xFF201605))
-        "Selected" -> Triple(Color(0xD93A6EA9), Color(0xFF7DC1FF), Color(0xFFF0F8FF))
-        "Picked Up" -> Triple(Color(0xD93B7A51), Color(0xFF86E7A8), Color(0xFFF3FFF7))
-        else -> Triple(Color(0xB9223347), Color(0x5A6F8EAC), Color(0xFF9FB5CB))
+        "Draw" -> Triple(Color(0xD9B12822), Color(0xFFFF8B81), Color(0xFFFFF4F1))
+        "Box" -> Triple(Color(0xD9B12822), Color(0xFFFF8B81), Color(0xFFFFF4F1))
+        "Selected" -> Triple(Color(0xD9621C19), Color(0xFFFFB1AA), Color(0xFFFFF5F2))
+        "Picked Up" -> Triple(Color(0xD97A211D), Color(0xFFFFCDC8), Color(0xFFFFF7F5))
+        else -> Triple(Color(0xB9281717), Color(0x5AAF5F59), Color(0xFFF2C4BE))
     }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(10.dp),
-        color = containerColor.copy(alpha = 0.83f + (pulse * 0.09f)),
-        border = BorderStroke((1f + (0.35f * pulse)).dp, borderColor.copy(alpha = 0.72f + (pulse * 0.28f)))
+        color = containerColor.copy(alpha = 0.83f + (emphasis * 0.09f)),
+        border = BorderStroke((1f + (0.35f * emphasis)).dp, borderColor.copy(alpha = 0.72f + (emphasis * 0.28f)))
     ) {
         Text(
             text = stateLabel,
@@ -1601,17 +1601,17 @@ internal fun ControlStateChip(
     modifier: Modifier = Modifier
 ) {
     val container = if (active) {
-        Color(0xFF1F6FAE)
+        MaterialTheme.colorScheme.secondary
     } else {
-        Color(0x52304D68)
+        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.78f)
     }
-    val textColor = if (active) Color(0xFFEFFFFF) else Color(0xFFAECBE4)
+    val textColor = if (active) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         color = container,
         shape = RoundedCornerShape(10.dp),
         border = BorderStroke(
             width = 1.dp,
-            color = if (active) Color(0xFF74C0FF) else Color(0x663C5A79)
+            color = if (active) MaterialTheme.colorScheme.secondary.copy(alpha = 0.92f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.62f)
         ),
         modifier = modifier
     ) {

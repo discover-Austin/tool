@@ -5,12 +5,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -165,7 +160,9 @@ internal fun BlueprintCanvas(
     selectedWallId: String?,
     selectedOpeningId: String?,
     movingWallActive: Boolean,
+    cursorVisible: Boolean,
     cursorSizeScale: Float,
+    draftIntersectionActive: Boolean,
     useMetric: Boolean,
     lineSnappingEnabled: Boolean,
     dragPreview: OpeningDragPreview?,
@@ -181,25 +178,20 @@ internal fun BlueprintCanvas(
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var drawWallPointerScreenPoint by remember { mutableStateOf<Offset?>(null) }
     var drawWallPointerHideAtMs by remember { mutableStateOf<Long?>(null) }
-    val canvasPulseTransition = rememberInfiniteTransition(label = "blueprint-canvas-pulse")
-    val selectionPulse = canvasPulseTransition.animateFloat(
-        initialValue = 0.24f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1180, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "selection-pulse"
-    ).value
-    val snapPulse = canvasPulseTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 920, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "snap-pulse"
-    ).value
+    val selectionHighlightActive = selectedWallId != null || selectedOpeningId != null || movingWallActive
+    val draftHighlightActive = draftIntersectionActive ||
+        (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) ||
+        (tool == BlueprintDraftTool.DRAW_BOX && boxStart != null && boxPreview != null)
+    val selectionPulse by animateFloatAsState(
+        targetValue = if (selectionHighlightActive) 1f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "selection-emphasis"
+    )
+    val snapPulse by animateFloatAsState(
+        targetValue = if (draftHighlightActive) 1f else 0f,
+        animationSpec = tween(durationMillis = if (draftIntersectionActive) 120 else 180),
+        label = "draft-emphasis"
+    )
     LaunchedEffect(drawWallPointerHideAtMs) {
         val hideAt = drawWallPointerHideAtMs ?: return@LaunchedEffect
         val remaining = (hideAt - SystemClock.uptimeMillis()).coerceAtLeast(0L)
@@ -696,16 +688,18 @@ internal fun BlueprintCanvas(
                 nearestWall = nearestProjection?.first,
                 nearestPoint = nearestProjection?.second,
                 worldToScreen = ::worldToScreen,
-                boostActive = rightSelectBoostActive
+                boostActive = rightSelectBoostActive,
+                intersectionActive = draftIntersectionActive,
+                intersectionPulseProgress = snapPulse
             )
         }
         if (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) {
             drawPrecisionPulse(
                 center = worldToScreen(drawingPreview),
                 progress = snapPulse,
-                color = GEOMETRY_SNAP_PULSE,
-                baseRadius = 11f,
-                maxRadius = 28f
+                color = if (draftIntersectionActive) GEOMETRY_INTERSECTION_PULSE else GEOMETRY_SNAP_PULSE,
+                baseRadius = if (draftIntersectionActive) 13f else 11f,
+                maxRadius = if (draftIntersectionActive) 33f else 28f
             )
         }
         if (tool == BlueprintDraftTool.DRAW_BOX && boxPreview != null) {
@@ -735,7 +729,16 @@ internal fun BlueprintCanvas(
             selectedWallId != null -> CursorGlyph.HAND_POINTER
             else -> CursorGlyph.ARROW
         }
-        pointer?.let { drawCursorGlyph(it, cursorGlyph, cursorSizeScale) }
+        if (cursorVisible) {
+            pointer?.let {
+                drawCursorGlyph(
+                    position = it,
+                    glyph = cursorGlyph,
+                    sizeScale = cursorSizeScale,
+                    highlighted = draftIntersectionActive
+                )
+            }
+        }
     }
 }
 
@@ -1246,13 +1249,66 @@ internal enum class CursorGlyph {
     GRAB
 }
 
-internal fun DrawScope.drawCursorGlyph(position: Offset, glyph: CursorGlyph, sizeScale: Float) {
+internal fun DrawScope.drawCursorGlyph(
+    position: Offset,
+    glyph: CursorGlyph,
+    sizeScale: Float,
+    highlighted: Boolean
+) {
+    drawCursorAnchorBlip(
+        position = position,
+        sizeScale = sizeScale,
+        highlighted = highlighted
+    )
     when (glyph) {
         CursorGlyph.ARROW -> drawArrowCursor(position, sizeScale)
         CursorGlyph.PENCIL -> drawPencilCursor(position, sizeScale)
         CursorGlyph.HAND_POINTER -> drawHandPointerCursor(position, sizeScale)
         CursorGlyph.GRAB -> drawGrabHandCursor(position, sizeScale)
     }
+}
+
+internal fun DrawScope.drawCursorAnchorBlip(
+    position: Offset,
+    sizeScale: Float,
+    highlighted: Boolean
+) {
+    val clampedScale = sizeScale.coerceIn(0.75f, 2.1f)
+    val glowRadius = 13f * clampedScale
+    val ringRadius = 5.1f * clampedScale
+    val dotRadius = 2.35f * clampedScale
+    val glowColor = if (highlighted) {
+        Color(0x66FFE27A)
+    } else {
+        Color(0x3E7EB1D8)
+    }
+    val ringColor = if (highlighted) {
+        Color(0xFFFFE27A)
+    } else {
+        Color(0xFFB9D8F0)
+    }
+    val fillColor = if (highlighted) {
+        Color(0xFFFFF1CB)
+    } else {
+        Color(0xFFF7FBFF)
+    }
+
+    drawCircle(
+        color = glowColor,
+        radius = glowRadius,
+        center = position
+    )
+    drawCircle(
+        color = ringColor.copy(alpha = if (highlighted) 0.96f else 0.78f),
+        radius = ringRadius,
+        center = position,
+        style = Stroke(width = (1.45f * clampedScale).coerceAtLeast(1.1f))
+    )
+    drawCircle(
+        color = fillColor,
+        radius = dotRadius,
+        center = position
+    )
 }
 
 internal fun DrawScope.drawArrowCursor(position: Offset, sizeScale: Float) {
@@ -1377,15 +1433,34 @@ internal fun DrawScope.drawSelectionMagnifier(
     nearestWall: WallSegment?,
     nearestPoint: PointMm?,
     worldToScreen: (PointMm) -> Offset,
-    boostActive: Boolean
+    boostActive: Boolean,
+    intersectionActive: Boolean,
+    intersectionPulseProgress: Float
 ) {
     val radius = POINTER_LENS_RADIUS_PX
     val lensCenter = Offset(
         x = (pointer.x + POINTER_LENS_OFFSET_PX.x).coerceIn(radius + 6f, size.width - radius - 6f),
         y = (pointer.y + POINTER_LENS_OFFSET_PX.y).coerceIn(radius + 6f, size.height - radius - 6f)
     )
+    if (intersectionActive) {
+        val pulseRadius = radius + 10f + (intersectionPulseProgress * 10f)
+        drawCircle(
+            color = GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.18f + (0.10f * (1f - intersectionPulseProgress))),
+            radius = pulseRadius,
+            center = lensCenter
+        )
+        drawCircle(
+            color = GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.28f),
+            radius = radius + 3.5f,
+            center = lensCenter
+        )
+    }
     drawLine(
-        color = Color(0x88ACD7FF),
+        color = if (intersectionActive) {
+            GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.72f)
+        } else {
+            Color(0x88ACD7FF)
+        },
         start = pointer,
         end = lensCenter,
         strokeWidth = if (boostActive) 2.6f else 2f
@@ -1403,11 +1478,26 @@ internal fun DrawScope.drawSelectionMagnifier(
     }
     clipPath(lensPath) {
         drawCircle(
-            color = if (boostActive) Color(0xEF0D243B) else Color(0xDE0A1A2C),
+            color = when {
+                intersectionActive -> Color(0xF129415A)
+                boostActive -> Color(0xEF0D243B)
+                else -> Color(0xDE0A1A2C)
+            },
             radius = radius,
             center = lensCenter
         )
-        val gridColor = if (boostActive) Color(0x528FD2FF) else Color(0x3E7FAACD)
+        if (intersectionActive) {
+            drawCircle(
+                color = GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.14f + (0.10f * intersectionPulseProgress)),
+                radius = radius - 4f,
+                center = lensCenter
+            )
+        }
+        val gridColor = when {
+            intersectionActive -> Color(0x78FFE694)
+            boostActive -> Color(0x528FD2FF)
+            else -> Color(0x3E7FAACD)
+        }
         drawLine(
             color = gridColor,
             start = Offset(lensCenter.x - radius, lensCenter.y),
@@ -1438,7 +1528,11 @@ internal fun DrawScope.drawSelectionMagnifier(
                 cap = StrokeCap.Round
             )
             drawLine(
-                color = if (boostActive) Color(0xFFFFEA9C) else Color(0xFFFFE3AF),
+                color = when {
+                    intersectionActive -> GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.95f)
+                    boostActive -> Color(0xFFFFEA9C)
+                    else -> Color(0xFFFFE3AF)
+                },
                 start = start,
                 end = end,
                 strokeWidth = if (boostActive) 4.6f else 4f,
@@ -1453,23 +1547,56 @@ internal fun DrawScope.drawSelectionMagnifier(
                 center = point
             )
             drawCircle(
-                color = if (boostActive) Color(0xFFFFE27A) else Color(0xFFFFF1CB),
-                radius = 5.3f,
+                color = when {
+                    intersectionActive -> GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.98f)
+                    boostActive -> Color(0xFFFFE27A)
+                    else -> Color(0xFFFFF1CB)
+                },
+                radius = if (intersectionActive) 6.1f else 5.3f,
                 center = point
             )
         }
         drawCircle(
-            color = Color(0x4CC8E9FF),
-            radius = 7f,
+            color = if (intersectionActive) {
+                GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.54f)
+            } else {
+                Color(0x4CC8E9FF)
+            },
+            radius = if (intersectionActive) 9f else 7f,
             center = lensCenter,
-            style = Stroke(width = 1.8f)
+            style = Stroke(width = if (intersectionActive) 2.4f else 1.8f)
+        )
+        if (intersectionActive) {
+            drawCircle(
+                color = Color(0xEFFFF9D8),
+                radius = 4.4f + (intersectionPulseProgress * 1.8f),
+                center = lensCenter
+            )
+        }
+    }
+    if (intersectionActive) {
+        drawCircle(
+            color = Color(0xE8FFF8D0),
+            radius = radius - 3.4f,
+            center = lensCenter,
+            style = Stroke(width = 1.4f)
         )
     }
     drawCircle(
-        color = if (boostActive) Color(0xFF8FD8FF) else Color(0xB38AB4D8),
+        color = when {
+            intersectionActive -> GEOMETRY_INTERSECTION_PULSE.copy(alpha = 0.96f)
+            boostActive -> Color(0xFF8FD8FF)
+            else -> Color(0xB38AB4D8)
+        },
         radius = radius,
         center = lensCenter,
-        style = Stroke(width = if (boostActive) 2.8f else 2.2f)
+        style = Stroke(
+            width = when {
+                intersectionActive -> 4.2f
+                boostActive -> 2.8f
+                else -> 2.2f
+            }
+        )
     )
 }
 

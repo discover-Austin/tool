@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Architecture
@@ -35,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,108 +80,154 @@ fun AppTutorialScreen(
                     .widthIn(max = 700.dp)
                     .heightIn(max = cardMaxHeight),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                         .imePadding()
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "Quick Tutorial",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Step ${stepIndex + 1} of ${steps.size}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    TextButton(onClick = onSkip) {
-                        Text("Skip")
-                    }
-                }
-
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                AnimatedContent(
-                    targetState = stepIndex,
-                    transitionSpec = {
-                        if (targetState > initialState) {
-                            slideInHorizontally(
-                                initialOffsetX = { it / 4 },
-                                animationSpec = tween(240)
-                            ) + fadeIn(animationSpec = tween(180)) togetherWith
-                                slideOutHorizontally(
-                                    targetOffsetX = { -it / 4 },
-                                    animationSpec = tween(200)
-                                ) + fadeOut(animationSpec = tween(160))
-                        } else {
-                            slideInHorizontally(
-                                initialOffsetX = { -it / 4 },
-                                animationSpec = tween(240)
-                            ) + fadeIn(animationSpec = tween(180)) togetherWith
-                                slideOutHorizontally(
-                                    targetOffsetX = { it / 4 },
-                                    animationSpec = tween(200)
-                                ) + fadeOut(animationSpec = tween(160))
-                        }
-                    },
-                    label = "app_tutorial_steps"
-                ) { index ->
-                    val page = steps[index]
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = page.icon,
-                                contentDescription = page.title,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TutorialTag(label = "FIELD GUIDE")
                             Text(
-                                text = page.title,
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "Quick Tutorial",
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            Text(
+                                text = "Step ${stepIndex + 1} of ${steps.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Learn the flow once, then move through projects with less guesswork.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Text(
-                            text = page.summary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            page.controls.forEach { control ->
-                                Text(
-                                    text = "• $control",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        TextButton(onClick = onSkip) {
+                            Text("Skip")
+                        }
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+
+                    AnimatedContent(
+                        targetState = stepIndex,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 4 },
+                                    animationSpec = tween(240)
+                                ) + fadeIn(animationSpec = tween(180)) togetherWith
+                                    slideOutHorizontally(
+                                        targetOffsetX = { -it / 4 },
+                                        animationSpec = tween(200)
+                                    ) + fadeOut(animationSpec = tween(160))
+                            } else {
+                                slideInHorizontally(
+                                    initialOffsetX = { -it / 4 },
+                                    animationSpec = tween(240)
+                                ) + fadeIn(animationSpec = tween(180)) togetherWith
+                                    slideOutHorizontally(
+                                        targetOffsetX = { it / 4 },
+                                        animationSpec = tween(200)
+                                    ) + fadeOut(animationSpec = tween(160))
+                            }
+                        },
+                        label = "app_tutorial_steps"
+                    ) { index ->
+                        val page = steps[index]
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = page.icon,
+                                        contentDescription = page.title,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(14.dp)
+                                    )
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = page.title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = page.summary,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                page.controls.forEachIndexed { controlIndex, control ->
+                                    TutorialControlCard(
+                                        step = controlIndex + 1,
+                                        text = control
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
                                 )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "Field Tip",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = page.tip,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
                             }
                         }
-                        Text(
-                            text = "Tip: ${page.tip}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     if (compactFooter) {
                         Column(
@@ -196,9 +245,7 @@ fun AppTutorialScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (stepIndex > 0) {
-                                    OutlinedButton(
-                                        onClick = { stepIndex -= 1 }
-                                    ) {
+                                    OutlinedButton(onClick = { stepIndex -= 1 }) {
                                         Text("Back")
                                     }
                                 }
@@ -227,9 +274,7 @@ fun AppTutorialScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (stepIndex > 0) {
-                                    OutlinedButton(
-                                        onClick = { stepIndex -= 1 }
-                                    ) {
+                                    OutlinedButton(onClick = { stepIndex -= 1 }) {
                                         Text("Back")
                                     }
                                 }
@@ -245,6 +290,60 @@ fun AppTutorialScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TutorialTag(label: String) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun TutorialControlCard(
+    step: Int,
+    text: String
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.84f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.92f)
+            ) {
+                Text(
+                    text = step.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -300,9 +399,9 @@ private fun tutorialSteps(): List<TutorialStep> = listOf(
         controls = listOf(
             "Right stick moves the cursor. Small movement gives precision; full movement crosses the canvas quickly.",
             "Left stick pans the blueprint without changing zoom.",
-            "Left-stick tap is your primary tap at cursor (start walls, place endpoints/openings, confirm).",
-            "Right-stick tap is alternate action (cancel active draw/pick-up, quick-select or clear nearby wall).",
-            "Practice: right-stick to a corner, left-tap start, move, left-tap place, right-tap reset."
+            "Right-stick tap is your primary tap at cursor (start walls, place endpoints/openings, confirm).",
+            "Left-stick tap and stick-press are alternate actions (cancel active draw/pick-up, quick-select, or clear nearby wall).",
+            "Practice: right-stick to a corner, right-tap start, move, right-tap place, left-tap reset."
         ),
         tip = "Fine-tune in Settings/About: lower joystick sensitivity and raise deadzone for tighter control.",
         icon = Icons.Filled.Architecture

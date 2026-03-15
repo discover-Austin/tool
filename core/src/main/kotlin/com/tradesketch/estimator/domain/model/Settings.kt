@@ -53,7 +53,8 @@ data class Settings(
     val blueprintDualJoysticksEnabled: Boolean = true,
     val blueprintJoystickSensitivity: Float = 1.0f,
     val blueprintJoystickDeadzone: Float = 0.08f,
-    val blueprintLargeCursorEnabled: Boolean = false
+    val blueprintCursorVisible: Boolean = true,
+    val blueprintCursorScale: Float = 1.0f
 ) {
     companion object {
         val DEFAULT = Settings()
