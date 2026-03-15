@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -60,9 +61,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -92,6 +90,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardActions
@@ -700,8 +699,8 @@ private fun WorkspaceShell(
     val configuration = LocalConfiguration.current
     val railCompact = configuration.screenWidthDp < 600
     val railExpandedForLargeWindow = configuration.screenWidthDp >= 840
-    val collapsedRailWidth = if (railCompact) 32.dp else 36.dp
-    val expandedRailWidth = if (railExpandedForLargeWindow) 84.dp else 72.dp
+    val collapsedRailWidth = if (railCompact) 22.dp else 24.dp
+    val expandedRailWidth = if (railExpandedForLargeWindow) 64.dp else 60.dp
     val leftBlueprintOverlayInset = 0.dp
     val dockRailForBlueprint = selectedTab == DetailTab.BLUEPRINT
     val blueprintRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
@@ -710,12 +709,12 @@ private fun WorkspaceShell(
     val nonBlueprintContentStartPadding = if (dockRailForBlueprint) {
         0.dp
     } else {
-        if (leftRailCollapsed) collapsedRailWidth + 12.dp else expandedRailWidth + 16.dp
+        if (leftRailCollapsed) collapsedRailWidth + 8.dp else expandedRailWidth + 12.dp
     }
     val tutorialOverlayStartPadding = if (leftRailCollapsed) {
-        collapsedRailWidth + 12.dp
+        collapsedRailWidth + 10.dp
     } else {
-        expandedRailWidth + 18.dp
+        expandedRailWidth + 14.dp
     }
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -937,6 +936,10 @@ private fun WorkspaceShell(
                 onToggleSavedProjects = {
                     showSavedProjects = !showSavedProjects
                 },
+                onOpenSettings = {
+                    navigateToTab(DetailTab.SETTINGS_ABOUT)
+                    showSavedProjects = false
+                },
                 onToggleCollapsed = toggleLeftRail,
                 modifier = Modifier.fillMaxHeight()
             )
@@ -1101,18 +1104,16 @@ private fun WorkspaceLeftRail(
     showSavedProjects: Boolean,
     onCreateNewProject: () -> Unit,
     onToggleSavedProjects: () -> Unit,
+    onOpenSettings: () -> Unit,
     onToggleCollapsed: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val primaryTabs = DetailTab.entries.filterNot { tab ->
-        tab == DetailTab.QUANTITIES ||
-            tab == DetailTab.ADDONS ||
-            tab == DetailTab.REVIEW ||
-            tab == DetailTab.SETTINGS_ABOUT
-    }
-    val blueprintTab = primaryTabs.firstOrNull { it == DetailTab.BLUEPRINT } ?: DetailTab.BLUEPRINT
-    val secondaryTabs = primaryTabs.filterNot { it == DetailTab.BLUEPRINT }
+    val primaryTabs = listOf(
+        DetailTab.BLUEPRINT,
+        DetailTab.MATERIALS,
+        DetailTab.EXPORT
+    )
     if (collapsed) {
         val collapsedArrowTopPadding = when {
             blueprintDocked && compact -> 12.dp
@@ -1134,7 +1135,7 @@ private fun WorkspaceLeftRail(
                 color = WorkspaceRailSurface.copy(alpha = 0.96f),
                 border = BorderStroke(1.dp, WorkspaceRailAccentBorder.copy(alpha = 0.92f)),
                 modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .size(36.dp)
                     .padding(start = 2.dp)
             ) {
                 Icon(
@@ -1147,15 +1148,15 @@ private fun WorkspaceLeftRail(
         }
         return
     }
-    NavigationRail(
+    Box(
         modifier = modifier
             .width(expandedRailWidth)
-            .padding(vertical = 8.dp),
-        containerColor = Color.Transparent
+            .padding(vertical = 8.dp)
     ) {
         Surface(
-            modifier = Modifier.fillMaxHeight(),
-            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
             color = WorkspaceRailShell.copy(alpha = 0.98f),
             border = BorderStroke(
                 width = 1.dp,
@@ -1166,233 +1167,168 @@ private fun WorkspaceLeftRail(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .padding(horizontal = 5.dp, vertical = 8.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                WorkspaceRailBrand()
-                Surface(
-                    onClick = onToggleCollapsed,
-                    shape = MaterialTheme.shapes.small,
-                    color = WorkspaceRailSurface.copy(alpha = 0.98f),
-                    border = BorderStroke(1.dp, WorkspaceRailAccentBorder.copy(alpha = 0.92f)),
-                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = stringResource(R.string.collapse_navigation_rail),
-                        tint = WorkspaceRailAccentBright,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                    WorkspaceRailButton(
+                        label = stringResource(R.string.collapse_navigation_rail),
+                        icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        selected = false,
+                        iconOnly = true,
+                        onClick = onToggleCollapsed,
+                        modifier = Modifier.size(36.dp)
                     )
                 }
-                WorkspaceRailActionItem(
-                    label = stringResource(R.string.rail_new_plus),
-                    icon = Icons.Filled.Add,
-                    selected = false,
-                    onClick = onCreateNewProject,
-                    onLongPress = {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.new_project_toast),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                )
-                WorkspaceRailActionItem(
-                    label = stringResource(R.string.rail_saved),
-                    icon = Icons.Filled.Description,
-                    selected = showSavedProjects,
-                    onClick = onToggleSavedProjects,
-                    onLongPress = {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.saved_projects_toast),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                )
-                WorkspaceRailItem(
-                    tab = blueprintTab,
-                    currentTab = currentTab,
-                    onSelectTab = onSelectTab,
-                    onLongPress = {
-                        Toast.makeText(context, blueprintTab.label, Toast.LENGTH_SHORT).show()
-                    }
-                )
-                secondaryTabs.forEach { tab ->
-                    WorkspaceRailItem(
-                        tab = tab,
-                        currentTab = currentTab,
-                        onSelectTab = onSelectTab,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    WorkspaceRailButton(
+                        label = stringResource(R.string.rail_new_plus),
+                        icon = Icons.Filled.Add,
+                        selected = false,
+                        iconOnly = true,
+                        onClick = onCreateNewProject,
+                        onLongPress = {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.new_project_toast),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                    )
+                    WorkspaceRailButton(
+                        label = stringResource(R.string.rail_saved),
+                        icon = Icons.Filled.Description,
+                        selected = showSavedProjects,
+                        iconOnly = true,
+                        onClick = onToggleSavedProjects,
+                        onLongPress = {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.saved_projects_toast),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    WorkspaceRailButton(
+                        label = stringResource(R.string.rail_settings_short),
+                        icon = Icons.Filled.Settings,
+                        selected = currentTab == DetailTab.SETTINGS_ABOUT,
+                        iconOnly = true,
+                        onClick = onOpenSettings,
+                        onLongPress = {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.rail_settings_short),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+                primaryTabs.forEach { tab ->
+                    WorkspaceRailButton(
+                        label = tab.railLabel(),
+                        icon = tab.icon,
+                        selected = currentTab == tab,
+                        iconOnly = true,
+                        onClick = { onSelectTab(tab) },
                         onLongPress = {
                             Toast.makeText(context, tab.label, Toast.LENGTH_SHORT).show()
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
                     )
                 }
-                WorkspaceRailItem(
-                    tab = DetailTab.SETTINGS_ABOUT,
-                    currentTab = currentTab,
-                    onSelectTab = onSelectTab,
-                    onLongPress = {
-                        Toast.makeText(context, DetailTab.SETTINGS_ABOUT.label, Toast.LENGTH_SHORT).show()
-                    }
-                )
             }
         }
     }
 }
 
 @Composable
-private fun WorkspaceRailActionItem(
+private fun WorkspaceRailButton(
     label: String,
     icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
-    onLongPress: () -> Unit
+    modifier: Modifier = Modifier,
+    iconOnly: Boolean = false,
+    onLongPress: (() -> Unit)? = null
 ) {
     val containerColor = if (selected) WorkspaceRailAccentBright else WorkspaceRailSurface
     val contentColor = if (selected) WorkspaceRailTextOnAccent else WorkspaceRailTextPrimary
     val borderColor = if (selected) Color(0xFFD8E7F5) else WorkspaceRailAccentBorder
-    NavigationRailItem(
-        selected = selected,
+    Surface(
         onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = containerColor,
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        ),
         modifier = Modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = label
             }
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
             .clip(MaterialTheme.shapes.medium)
-            .background(containerColor)
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = MaterialTheme.shapes.medium
-            )
             .pointerInput(label) {
                 detectTapGestures(
-                    onLongPress = {
-                        onLongPress()
-                    }
+                    onLongPress = { onLongPress?.invoke() }
                 )
-            },
-        icon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = contentColor
-            )
-        },
-        label = {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                color = contentColor,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        alwaysShowLabel = true,
-        colors = NavigationRailItemDefaults.colors(
-            selectedIconColor = contentColor,
-            selectedTextColor = contentColor,
-            indicatorColor = Color.Transparent,
-            unselectedIconColor = contentColor,
-            unselectedTextColor = contentColor
-        )
-    )
-}
-
-@Composable
-private fun WorkspaceRailItem(
-    tab: DetailTab,
-    currentTab: DetailTab,
-    onSelectTab: (DetailTab) -> Unit,
-    onLongPress: () -> Unit
-) {
-    val isSelected = currentTab == tab
-    val containerColor = if (isSelected) WorkspaceRailAccentBright else WorkspaceRailSurface
-    val contentColor = if (isSelected) WorkspaceRailTextOnAccent else WorkspaceRailTextPrimary
-    val borderColor = if (isSelected) Color(0xFFD8E7F5) else WorkspaceRailAccentBorder
-    NavigationRailItem(
-        selected = isSelected,
-        onClick = { onSelectTab(tab) },
-        modifier = Modifier
-            .semantics(mergeDescendants = true) {
-                contentDescription = tab.label
             }
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(containerColor)
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = MaterialTheme.shapes.medium
-            )
-            .pointerInput(tab) {
-                detectTapGestures(
-                    onLongPress = {
-                        onLongPress()
-                    }
-                )
-            },
-        icon = {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = tab.label,
-                tint = contentColor
-            )
-        },
-        label = {
-            Text(
-                text = tab.railLabel(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                color = contentColor,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        alwaysShowLabel = true,
-        colors = NavigationRailItemDefaults.colors(
-            selectedIconColor = contentColor,
-            selectedTextColor = contentColor,
-            indicatorColor = Color.Transparent,
-            unselectedIconColor = contentColor,
-            unselectedTextColor = contentColor
-        )
-    )
-}
-
-@Composable
-private fun WorkspaceRailBrand() {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = WorkspaceRailSurface,
-        border = BorderStroke(
-            width = 1.dp,
-            color = WorkspaceRailAccentBorder.copy(alpha = 0.88f)
-        )
+            .then(modifier)
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = WorkspaceRailAccent,
-                border = BorderStroke(1.dp, WorkspaceRailAccentBright)
-            ) {
+            if (iconOnly) {
                 Icon(
-                    imageVector = Icons.Filled.Architecture,
-                    contentDescription = stringResource(R.string.app_name),
-                    tint = Color.White,
-                    modifier = Modifier.padding(10.dp)
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(18.dp)
                 )
+            } else {
+                Column(
+                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = contentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = contentColor,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
