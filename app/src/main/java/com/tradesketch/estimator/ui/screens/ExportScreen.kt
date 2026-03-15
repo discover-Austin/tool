@@ -85,8 +85,8 @@ private enum class EstimatePreviewPage(
         docHint = "Geometry summary page with wall, room, opening, and area coverage detail."
     ),
     COMBINED_NO_BLUEPRINT(
-        label = "Combined (No Blueprint)",
-        docHint = "Single-page blend of Cost + Shopping List with blueprint content omitted."
+        label = "Cost + Shopping List",
+        docHint = "Combined cost sheet and shopping list without the blueprint page."
     )
 }
 
@@ -186,20 +186,20 @@ fun ExportScreen(
             projectName = uiState.project?.name.orEmpty(),
             businessName = uiState.settings.businessName.ifBlank { null },
             takeoffType = uiState.takeoffType.ifBlank {
-                uiState.selectedType?.displayLabel ?: "Not selected"
+                uiState.selectedType?.displayLabel ?: "Choose a trade"
             },
             result = uiState.result
         )
 
         TitledSectionCard(
-            title = "Estimate Type",
-            subtitle = "Set which trade this export represents.",
+            title = "Trade",
+            subtitle = "Choose which trade this export represents.",
             modifier = Modifier.animateContentSize()
         ) {
             val selectedType = uiState.selectedType
             if (selectedType != null && !showScopeSelector) {
                 Text(
-                    text = "Selected type: ${selectedType.displayLabel}",
+                    text = "Selected trade: ${selectedType.displayLabel}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -207,7 +207,7 @@ fun ExportScreen(
                     onClick = { showScopeSelector = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Change Estimate Type")
+                    Text("Change Trade")
                 }
             } else {
                 Row(
@@ -240,7 +240,7 @@ fun ExportScreen(
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Select an estimate type to continue.",
+                        text = "Choose a trade to continue.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -265,7 +265,7 @@ fun ExportScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Open Takeoff")
+                    Text("Open Materials & Pricing")
                 }
             }
         }
@@ -296,7 +296,7 @@ fun ExportScreen(
                     )
                     if (uiState.settings.businessName.isBlank()) {
                         Text(
-                            text = "Tip: add your business details in Settings > Business Identity for branded exports.",
+                            text = "Tip: add your business details in Settings > Business Identity to include them on exported files.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -652,7 +652,7 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "No estimate data for this type yet. Open Takeoff to generate quantities.",
+                    text = "No estimate data for this trade yet. Open Materials & Pricing to generate quantities.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SecondaryActionButton(
@@ -662,7 +662,7 @@ fun ExportScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Open Takeoff")
+                    Text("Open Materials & Pricing")
                 }
             }
         }
@@ -749,7 +749,7 @@ private fun ExportProjectHeaderCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Export Dossier",
+                text = "Export Summary",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -759,10 +759,10 @@ private fun ExportProjectHeaderCard(
             )
             PreviewMetricRow(
                 label = "Business",
-                value = businessName ?: "Not set (add in Settings for branded exports)"
+                value = businessName ?: "Not set. Add your business name in Settings to include it on exported files."
             )
             PreviewMetricRow(
-                label = "Estimate Type",
+                label = "Trade",
                 value = takeoffType
             )
             PreviewMetricRow(
@@ -777,12 +777,12 @@ private fun ExportProjectHeaderCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Readiness",
+                    text = "Status",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = if (result == null) "Waiting for estimate data" else "Preview ready",
+                    text = if (result == null) "Waiting for quantities" else "Preview ready",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (result == null) {
                         MaterialTheme.colorScheme.onSurfaceVariant

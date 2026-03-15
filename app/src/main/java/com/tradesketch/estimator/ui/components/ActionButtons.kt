@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private val CompactActionMinHeight = 48.dp
@@ -143,11 +144,17 @@ fun CenteredLabelTrailingIcon(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = label)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.align(Alignment.CenterEnd)
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
         )
     }
 }

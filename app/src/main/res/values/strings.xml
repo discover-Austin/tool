@@ -2,7 +2,6 @@
     <string name="app_name">TradeSketch Estimator</string>
     <string name="dismiss">Dismiss</string>
     <string name="back">Back</string>
-    <string name="back_to_name">Back to Name</string>
     <string name="finalizing_project_ritual">Setting up your project</string>
     <string name="interactive_tour">Interactive Tour</string>
     <string name="skip">Skip</string>
@@ -10,12 +9,12 @@
     <string name="finish_tour">Finish Tour</string>
     <string name="tour_step_progress">Step %1$d of %2$d · %3$s</string>
     <string name="tour_tip">Tip: %1$s</string>
-    <string name="rail_new_plus">New+</string>
-    <string name="rail_saved">Saved</string>
+    <string name="rail_new_plus">New Project</string>
+    <string name="rail_saved">Projects</string>
     <string name="new_project_toast">New Project</string>
-    <string name="saved_projects_toast">Saved Projects</string>
-    <string name="rail_plan_short">Plan</string>
-    <string name="rail_materials_short">Mats</string>
+    <string name="saved_projects_toast">Projects</string>
+    <string name="rail_plan_short">Blueprint</string>
+    <string name="rail_materials_short">Materials</string>
     <string name="rail_settings_short">Settings</string>
     <string name="project_setup_step_1">Project Setup 1 of 2</string>
     <string name="project_setup_step_2">Project Setup 2 of 2</string>
@@ -25,9 +24,8 @@
     <string name="continue_button">Continue</string>
     <string name="what_are_you_estimating">What are you estimating?</string>
     <string name="choose_main_estimate_type">Choose the main estimate type for this project. You can change it later.</string>
-    <string name="open_project">Open Project</string>
+    <string name="open_project">Create Project</string>
     <string name="welcome_title">TradeSketch Estimator</string>
-    <string name="welcome_message">Draw precise 2D geometry first. Materials, quantities, pricing, review, and export all stay connected to the active blueprint.</string>
     <string name="begin">Begin</string>
     <string name="project_name_label">Project Name</string>
     <string name="start_new_project_title">Start New Project?</string>
@@ -45,6 +43,6 @@
     <string name="delete_project_message">Delete \"%1$s\" permanently?</string>
     <string name="delete">Delete</string>
     <string name="no_project_selected_title">No project selected</string>
-    <string name="no_project_selected_message">Create a starter project to continue in the blueprint-first workspace.</string>
+    <string name="no_project_selected_message">Create a starter project to begin estimating.</string>
     <string name="create_starter_project">Create Starter Project</string>
 </resources>

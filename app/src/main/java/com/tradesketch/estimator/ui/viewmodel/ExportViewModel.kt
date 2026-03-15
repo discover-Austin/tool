@@ -268,7 +268,7 @@ class ExportViewModel @Inject constructor(
             uxMetricsRepository.recordTap("export_output_shared")
         }
         val exportPayload = buildEstimateExportPayload()
-            ?: return failAction("Open Takeoff and generate quantities before exporting.")
+            ?: return failAction("Open Materials & Pricing and generate quantities before exporting.")
         return runCatching {
             EstimateExportManager.createEstimatePdfShareIntent(
                 context = context,
@@ -296,7 +296,7 @@ class ExportViewModel @Inject constructor(
             uxMetricsRepository.recordTap("export_output_shared")
         }
         val exportPayload = buildEstimateExportPayload()
-            ?: return failAction("Open Takeoff and generate quantities before exporting.")
+            ?: return failAction("Open Materials & Pricing and generate quantities before exporting.")
         return runCatching {
             EstimateExportManager.saveEstimatePdfToDownloads(
                 context = context,
@@ -320,7 +320,7 @@ class ExportViewModel @Inject constructor(
 
     suspend fun saveEstimatePdfToUri(uri: Uri): ExportActionResult {
         val exportPayload = buildEstimateExportPayload()
-            ?: return failAction("Open Takeoff and generate quantities before exporting.")
+            ?: return failAction("Open Materials & Pricing and generate quantities before exporting.")
         val fileName = ExportStorage.buildFileName(
             projectName = exportPayload.project.name,
             suffix = "estimate",

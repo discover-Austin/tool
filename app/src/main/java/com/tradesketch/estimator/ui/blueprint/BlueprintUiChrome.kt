@@ -406,8 +406,8 @@ internal fun ClearAllButton(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.52f)),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.26f)),
         modifier = modifier.heightIn(min = 48.dp)
     ) {
         Row(
@@ -418,13 +418,13 @@ internal fun ClearAllButton(
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Clear all blueprint items",
-                tint = MaterialTheme.colorScheme.onErrorContainer,
+                tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(13.dp)
             )
             Text(
                 text = "Clear All",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onErrorContainer
+                color = MaterialTheme.colorScheme.error
             )
         }
     }

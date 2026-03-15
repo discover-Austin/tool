@@ -418,13 +418,7 @@ private fun ProjectRitualFlow(
                 },
                 enabled = !isSaving
             ) {
-                Text(
-                    if (step == 1) {
-                        stringResource(R.string.back)
-                    } else {
-                        stringResource(R.string.back_to_name)
-                    }
-                )
+                Text(stringResource(R.string.back))
             }
             if (isSaving) {
                 CircularProgressIndicator(modifier = Modifier.height(28.dp))
@@ -454,15 +448,15 @@ private fun WorkspaceShell(
     val tutorialSteps = remember {
         listOf(
             WorkspaceTourStep(
-                title = "Workspace Rail",
-                message = "Use the left rail to control projects and move through the full estimating flow.",
+                title = "Navigation",
+                message = "Use the left navigation rail to start projects and move through the estimating flow.",
                 controls = listOf(
-                    "New+ starts a fresh project.",
-                    "Saved opens your project list so you can switch or delete jobs.",
-                    "Blueprint, Materials, Export, and Settings/About are your main workflow tabs.",
-                    "Use the top arrow to collapse or expand the rail."
+                    "New Project starts a fresh estimate.",
+                    "Projects opens your saved job list so you can switch or delete work.",
+                    "Blueprint, Materials, Export, and Settings are your main workspace tabs.",
+                    "Use the top arrow to collapse or expand the navigation rail."
                 ),
-                tip = "If you are learning, stay in Blueprint first, then move right through Materials and Export.",
+                tip = "Start in Blueprint, then continue to Materials and Export when the drawing is ready.",
                 targetTab = DetailTab.BLUEPRINT
             ),
             WorkspaceTourStep(
@@ -542,7 +536,7 @@ private fun WorkspaceShell(
                 controls = listOf(
                     "Touch is best for quick zooming, panning, and direct taps.",
                     "Joystick is best when you want a steady cursor without covering the canvas.",
-                    "Left-tap is the primary action at the cursor; right-tap is cancel or reset.",
+                    "Right-stick tap is the primary action at the cursor; left-stick tap or press handles cancel and alternate actions.",
                     "Swap freely between touch and joystick while the same tool stays active."
                 ),
                 tip = "Many users frame the view with touch, then use joystick for precise wall placement.",
@@ -591,7 +585,7 @@ private fun WorkspaceShell(
                 targetTab = DetailTab.EXPORT
             ),
             WorkspaceTourStep(
-                title = "Settings/About",
+                title = "Settings",
                 message = "Configure defaults once to make every new project faster and more consistent.",
                 controls = listOf(
                     "Set snap defaults, joystick behavior, and touch preferences.",
@@ -713,6 +707,16 @@ private fun WorkspaceShell(
     val blueprintRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
     val blueprintCollapsedRailTopPadding = if (configuration.screenHeightDp < 760) 56.dp else 68.dp
     val blueprintRailBottomPadding = if (configuration.screenHeightDp < 760) 156.dp else 172.dp
+    val nonBlueprintContentStartPadding = if (dockRailForBlueprint) {
+        0.dp
+    } else {
+        if (leftRailCollapsed) collapsedRailWidth + 12.dp else expandedRailWidth + 16.dp
+    }
+    val tutorialOverlayStartPadding = if (leftRailCollapsed) {
+        collapsedRailWidth + 12.dp
+    } else {
+        expandedRailWidth + 18.dp
+    }
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxSize()
@@ -761,16 +765,24 @@ private fun WorkspaceShell(
                         onRecordTap("settings_replay_tutorial")
                         onOpenTutorial()
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = nonBlueprintContentStartPadding)
                 )
             } else {
-                ProjectScopedTab(
-                    selectedProjectId = selectedProjectId,
-                    onCreateStarterProject = {
-                        projectsViewModel.createEasyStartProject()
-                    },
-                    content = projectTabContent
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = nonBlueprintContentStartPadding)
+                ) {
+                    ProjectScopedTab(
+                        selectedProjectId = selectedProjectId,
+                        onCreateStarterProject = {
+                            projectsViewModel.createEasyStartProject()
+                        },
+                        content = projectTabContent
+                    )
+                }
             }
 
             if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
@@ -819,7 +831,10 @@ private fun WorkspaceShell(
                 onDismiss = { showSavedProjects = false },
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(start = 10.dp, top = 8.dp)
+                    .padding(
+                        start = if (dockRailForBlueprint) 10.dp else nonBlueprintContentStartPadding + 6.dp,
+                        top = 8.dp
+                    )
             )
 
             if (showNewProjectConfirm) {
@@ -873,8 +888,12 @@ private fun WorkspaceShell(
                         }
                     },
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            start = tutorialOverlayStartPadding,
+                            end = 12.dp,
+                            bottom = 10.dp
+                        )
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 )
             }
@@ -952,7 +971,7 @@ private fun WorkspaceTourOverlay(
     modifier: Modifier = Modifier
 ) {
     val compactHeightWindow = LocalConfiguration.current.screenHeightDp < 700
-    val maxCardHeight = if (compactHeightWindow) 320.dp else 520.dp
+    val maxCardHeight = if (compactHeightWindow) 300.dp else 440.dp
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -1554,5 +1573,5 @@ private enum class DetailTab(
     ADDONS("tab_addons", "Add-ons", Icons.Filled.Add),
     REVIEW("tab_review", "Review", Icons.Filled.Description),
     EXPORT("tab_export", "Export", Icons.Filled.Flag),
-    SETTINGS_ABOUT("tab_settings_about", "Settings/About", Icons.Filled.Settings)
+    SETTINGS_ABOUT("tab_settings_about", "Settings", Icons.Filled.Settings)
 }

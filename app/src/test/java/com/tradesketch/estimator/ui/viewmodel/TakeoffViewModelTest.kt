@@ -124,6 +124,7 @@ private class FakeUxMetricsRepository : UxMetricsRepository {
     override suspend fun recordTimeToFirstEstimate(timeMs: Long) = Unit
 }
 
+@OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 private fun newSingleMainThread(name: String): ExecutorCoroutineDispatcher {
     return newSingleThreadContext(name)
 }
