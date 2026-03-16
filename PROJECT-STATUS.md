@@ -1,13 +1,13 @@
 # TradeSketch Estimator - Project Status
 
-Updated: March 9, 2026
+Updated: March 16, 2026
 
 See `RELEASE_STATUS.md` for authoritative release state.
 
 ## Current Technical Baseline
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.8` (`versionCode = 10`)
+- Version: `1.0.11` (`versionCode = 13`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`minify + resource shrink`)
 

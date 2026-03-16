@@ -1,13 +1,13 @@
 # TradeSketch Estimator - Release Status (Authoritative)
 
-Last updated: March 9, 2026
+Last updated: March 16, 2026
 
 This file is the single source of truth for current release readiness in this repository.
 
 ## Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.8` (`versionCode = 10`)
+- Version: `1.0.11` (`versionCode = 13`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`isMinifyEnabled = true`, `isShrinkResources = true`)
 
@@ -54,6 +54,8 @@ This file is the single source of truth for current release readiness in this re
   - Expanded `androidTest` Compose smoke coverage for onboarding + workspace tab journey/navigation.
 - Accessibility/localization prep:
   - Centralized additional high-frequency onboarding/workspace strings into `strings.xml`.
+- Blueprint controls parity:
+  - Touch mode now keeps dedicated floor/grid/cursor access while matching joystick mode for center undo/redo/zoom controls.
 
 ## Optional Work Remaining (Not Required For Current Launch)
 

@@ -1,13 +1,13 @@
 # TradeSketch Estimator - Play Store Launch Guide
 
-Last updated: March 9, 2026
+Last updated: March 16, 2026
 
 Use this on release day with `RELEASE_STATUS.md` as source of truth.
 
 ## 1) Verify Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.8` (`versionCode = 10`)
+- Version: `1.0.11` (`versionCode = 13`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 
 ## 2) Run Release Gates
@@ -52,7 +52,7 @@ Required values via env vars or `local.properties`:
 
 1. Open Play Console app `com.tradesketch.estimator`.
 2. Upload `app-release.aab` in Production track.
-3. Confirm parsed version is `versionCode 10` / `versionName 1.0.8`.
+3. Confirm parsed version is `versionCode 13` / `versionName 1.0.11`.
 4. Upload listing assets from `store-assets/`.
 5. Paste release notes from `store-assets/listing/whats-new.txt`.
 6. Verify screenshots are freshly captured from the current UI build.

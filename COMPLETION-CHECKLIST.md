@@ -1,17 +1,17 @@
 # TradeSketch Estimator - Launch Checklist
 
-Updated: March 8, 2026
+Updated: March 16, 2026
 
 ## Release Checklist
 
-- [ ] `:app:testDebugUnitTest` passes
-- [ ] `:core:test` passes
-- [ ] `:app:lint` passes
-- [ ] `:app:lintRelease` passes
+- [x] `:app:testDebugUnitTest` passes
+- [x] `:core:test` passes
+- [x] `:app:lint` passes
+- [x] `:app:lintRelease` passes
 - [ ] `:app:bundleRelease` passes
 - [ ] Signed AAB exists at `app/build/outputs/bundle/release/app-release.aab`
-- [ ] Play Console parses `versionCode 10` / `versionName 1.0.8`
-- [ ] Release notes updated in `store-assets/listing/whats-new.txt`
+- [ ] Play Console parses `versionCode 13` / `versionName 1.0.11`
+- [x] Release notes updated in `store-assets/listing/whats-new.txt`
 
 ## Testing Checklist
 
@@ -28,8 +28,8 @@ Updated: March 8, 2026
 
 - [ ] Listing text reviewed (`store-assets/listing/`)
 - [ ] Screenshots match current UI
-- [ ] Privacy policy URL reachable and current
-- [ ] Data safety answers match app behavior
+- [x] Privacy policy URL reachable and current
+- [x] Data safety answers match app behavior
 
 ## Known Limitations
 

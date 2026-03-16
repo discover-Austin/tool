@@ -1,8 +1,8 @@
-TradeSketch Estimator 1.0.8
+TradeSketch Estimator 1.0.11
 
 What's new:
 - Improved blueprint reliability: safer room detection preservation and stronger opening placement validation
-- Better multi-floor workflow with consistent floor controls in blueprint editing
+- Better blueprint controls: touch mode now matches joystick mode for undo/redo/zoom while keeping floor/grid/cursor access easy
 - Drywall ceiling calculations now honor room ceiling-enabled settings
 - Export quality hardening: safer CSV escaping and more collision-resistant file naming
 - Adaptive and accessibility refinements for navigation/blueprint controls

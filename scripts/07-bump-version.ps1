@@ -134,8 +134,18 @@ if ($rebuild -eq "yes") {
 # ── WHAT'S NEW PROMPT ────────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "  Don't forget to update the 'What's New' text!" -ForegroundColor Yellow
-Write-Host "  File: store-assets\listing\whats-new.txt" -ForegroundColor DarkGray
+Write-Host "  Don't forget to sync the release docs and Play assets!" -ForegroundColor Yellow
+Write-Host "  Files to review:" -ForegroundColor DarkGray
+Write-Host "    - store-assets\\listing\\whats-new.txt" -ForegroundColor DarkGray
+Write-Host "    - store-assets\\listing\\data-safety-answers.txt" -ForegroundColor DarkGray
+Write-Host "    - store-assets\\listing\\content-rating-answers.txt" -ForegroundColor DarkGray
+Write-Host "    - README.md" -ForegroundColor DarkGray
+Write-Host "    - RELEASE_STATUS.md" -ForegroundColor DarkGray
+Write-Host "    - PLAY-STORE-LAUNCH-GUIDE.md" -ForegroundColor DarkGray
+Write-Host "    - PROJECT-STATUS.md" -ForegroundColor DarkGray
+Write-Host "    - COMPLETION-CHECKLIST.md" -ForegroundColor DarkGray
+Write-Host "    - documentation\\COMPLIANCE-CHECKLIST.md" -ForegroundColor DarkGray
+Write-Host "    - documentation\\SUBMISSION-GUIDE.md" -ForegroundColor DarkGray
 Write-Host ""
 
 $editNow = Read-Host "  Open it in Notepad now? (yes/no)"
