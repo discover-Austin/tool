@@ -1,6 +1,6 @@
 # Google Play Submission Guide
 
-Updated: March 9, 2026
+Updated: March 16, 2026
 
 Use together with `RELEASE_STATUS.md`.
 
@@ -21,7 +21,7 @@ Expected output:
 Expected metadata:
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.8` (`versionCode = 10`)
+- Version: `1.0.11` (`versionCode = 13`)
 
 ## Signing Gate
 
@@ -40,7 +40,7 @@ Configure one of:
 ## Submission Steps
 
 1. Upload `app-release.aab` to Production.
-2. Confirm parsed version is `10 / 1.0.8`.
+2. Confirm parsed version is `13 / 1.0.11`.
 3. Apply release notes from `store-assets/listing/whats-new.txt`.
 4. Complete listing, privacy, data safety, and content rating sections.
 5. Run final rollout checklist and start rollout.

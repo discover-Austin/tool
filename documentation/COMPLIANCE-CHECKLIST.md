@@ -1,6 +1,6 @@
 # Play Store Compliance Checklist
 
-Updated: March 9, 2026
+Updated: March 16, 2026
 
 ## Platform
 
@@ -8,7 +8,7 @@ Updated: March 9, 2026
 - [x] `minSdk = 26`
 - [x] `targetSdk = 35`
 - [x] `compileSdk = 35`
-- [x] Current release version is `versionCode = 10`, `versionName = "1.0.8"`
+- [x] Current release version is `versionCode = 13`, `versionName = "1.0.11"`
 
 ## Privacy / Data Safety
 
@@ -36,8 +36,8 @@ Updated: March 9, 2026
 ## Manual Pre-Rollout Checks
 
 - [ ] Validate smoke flow on the exact upload commit
-- [ ] Confirm Play Console parses `versionCode 10` and `versionName 1.0.8`
+- [ ] Confirm Play Console parses `versionCode 13` and `versionName 1.0.11`
 - [ ] Confirm screenshots/listing text match current UI
-- [ ] Confirm privacy policy URL is publicly reachable
+- [x] Confirm privacy policy URL is publicly reachable
 
 

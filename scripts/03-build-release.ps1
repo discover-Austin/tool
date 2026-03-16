@@ -7,7 +7,7 @@
     This script:
       1. Verifies signing config exists (local.properties or env vars)
       2. Runs Android app unit tests
-      3. Runs Android app lint checks
+      3. Runs Android app lint checks for both debug and release
       4. Builds the signed release App Bundle (.aab)
       5. Shows you the file size and location
       6. Optionally builds a universal APK for device testing
@@ -126,11 +126,11 @@ try {
 # ── 3. RUN LINT ──────────────────────────────────────────────────────────────
 
 Write-Host ""
-Write-Host "[3/4] Running lint checks..." -ForegroundColor Yellow
+Write-Host "[3/4] Running lint checks (debug + release)..." -ForegroundColor Yellow
 
 Push-Location $projectRoot
 try {
-    & $gradlew :app:lint --no-daemon 2>&1 | ForEach-Object {
+    & $gradlew :app:lint :app:lintRelease --no-daemon 2>&1 | ForEach-Object {
         if ($_ -match "error:|Error:") {
             Write-Host "  $_" -ForegroundColor Red
         } elseif ($_ -match "BUILD SUCCESSFUL") {
@@ -142,11 +142,11 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "  LINT FAILED. Fix lint errors before building a release." -ForegroundColor Red
-        Write-Host "  Lint report: app\build\reports\lint-results-debug.html" -ForegroundColor Red
+        Write-Host "  Lint reports: app\build\reports\lint-results-*.html" -ForegroundColor Red
         exit 1
     }
     # Lint warnings are OK, only lint task failure should stop the build.
-    Write-Host "  PASS: Lint complete." -ForegroundColor Green
+    Write-Host "  PASS: Debug and release lint complete." -ForegroundColor Green
 } finally {
     Pop-Location
 }

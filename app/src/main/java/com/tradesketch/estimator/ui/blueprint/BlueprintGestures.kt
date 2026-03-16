@@ -215,58 +215,26 @@ internal fun DualJoystickOverlay(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = centerColumnBottom),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (controlStateLabel != null) {
-                    ControlStateHud(
-                        stateLabel = controlStateLabel
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(controlRowSpacing), verticalAlignment = Alignment.CenterVertically) {
-                    SlimIconAction(
-                        icon = Icons.Filled.Add,
-                        contentDescription = "Zoom in",
-                        enabled = canZoomIn,
-                        onClick = onZoomIn,
-                        buttonSize = zoomButtonSize,
-                        iconSize = zoomIconSize
-                    )
-                    SlimIconAction(
-                        icon = Icons.Filled.Remove,
-                        contentDescription = "Zoom out",
-                        enabled = canZoomOut,
-                        onClick = onZoomOut,
-                        buttonSize = zoomButtonSize,
-                        iconSize = zoomIconSize
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(controlRowSpacing), verticalAlignment = Alignment.CenterVertically) {
-                    SlimIconAction(
-                        icon = Icons.AutoMirrored.Filled.Undo,
-                        contentDescription = "Undo",
-                        enabled = canUndo,
-                        onClick = onUndo,
-                        buttonSize = historyButtonSize,
-                        iconSize = historyIconSize
-                    )
-                    SlimIconAction(
-                        icon = Icons.AutoMirrored.Filled.Redo,
-                        contentDescription = "Redo",
-                        enabled = canRedo,
-                        onClick = onRedo,
-                        buttonSize = historyButtonSize,
-                        iconSize = historyIconSize
-                    )
-                }
-                belowHistoryContent?.let { content ->
-                    Box(
-                        modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        content()
-                    }
-                }
+                CenteredOverlayControls(
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    canZoomIn = canZoomIn,
+                    canZoomOut = canZoomOut,
+                    onUndo = onUndo,
+                    onRedo = onRedo,
+                    onZoomIn = onZoomIn,
+                    onZoomOut = onZoomOut,
+                    controlStateLabel = controlStateLabel,
+                    compact = compact,
+                    controlRowSpacing = controlRowSpacing,
+                    zoomButtonSize = zoomButtonSize,
+                    zoomIconSize = zoomIconSize,
+                    historyButtonSize = historyButtonSize,
+                    historyIconSize = historyIconSize,
+                    belowHistoryContent = belowHistoryContent
+                )
             }
             JoystickPad(
                 insideLabel = "Cursor / Select",
@@ -282,6 +250,87 @@ internal fun DualJoystickOverlay(
                 labelFontSize = labelFontSize,
                 modifier = Modifier.align(Alignment.BottomEnd)
             )
+        }
+    }
+}
+
+@Composable
+private fun CenteredOverlayControls(
+    canUndo: Boolean,
+    canRedo: Boolean,
+    canZoomIn: Boolean,
+    canZoomOut: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    controlStateLabel: String?,
+    compact: Boolean,
+    controlRowSpacing: Dp,
+    zoomButtonSize: Dp,
+    zoomIconSize: Dp,
+    historyButtonSize: Dp,
+    historyIconSize: Dp,
+    belowHistoryContent: (@Composable () -> Unit)? = null
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
+    ) {
+        if (controlStateLabel != null) {
+            ControlStateHud(
+                stateLabel = controlStateLabel
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SlimIconAction(
+                icon = Icons.Filled.Add,
+                contentDescription = "Zoom in",
+                enabled = canZoomIn,
+                onClick = onZoomIn,
+                buttonSize = zoomButtonSize,
+                iconSize = zoomIconSize
+            )
+            SlimIconAction(
+                icon = Icons.Filled.Remove,
+                contentDescription = "Zoom out",
+                enabled = canZoomOut,
+                onClick = onZoomOut,
+                buttonSize = zoomButtonSize,
+                iconSize = zoomIconSize
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SlimIconAction(
+                icon = Icons.AutoMirrored.Filled.Undo,
+                contentDescription = "Undo",
+                enabled = canUndo,
+                onClick = onUndo,
+                buttonSize = historyButtonSize,
+                iconSize = historyIconSize
+            )
+            SlimIconAction(
+                icon = Icons.AutoMirrored.Filled.Redo,
+                contentDescription = "Redo",
+                enabled = canRedo,
+                onClick = onRedo,
+                buttonSize = historyButtonSize,
+                iconSize = historyIconSize
+            )
+        }
+        belowHistoryContent?.let { content ->
+            Box(
+                modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                content()
+            }
         }
     }
 }
@@ -584,64 +633,122 @@ internal fun TouchModeQuickToolsOverlay(
     onDrawMode: () -> Unit,
     onGrabMode: () -> Unit,
     onCancel: () -> Unit,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    canZoomIn: Boolean,
+    canZoomOut: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    controlStateLabel: String?,
+    belowHistoryContent: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
-        val compact = maxWidth < 360.dp
-        val buttonSize = if (compact) 40.dp else 46.dp
-        val iconSize = if (compact) 17.dp else 19.dp
-        val labelFontSize = if (compact) 8.sp else 9.sp
-        val verticalSpacing = if (compact) 3.dp else 4.dp
-        val slotSpacing = if (compact) 2.dp else 4.dp
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(slotSpacing),
-            verticalAlignment = Alignment.Bottom
+        val compact = maxWidth < 420.dp
+        val ultraCompact = maxWidth < 360.dp
+        val sidePadding = if (compact) 4.dp else 8.dp
+        val toolButtonSize = when {
+            ultraCompact -> 34.dp
+            compact -> 38.dp
+            else -> 42.dp
+        }
+        val toolIconSize = when {
+            ultraCompact -> 14.dp
+            compact -> 16.dp
+            else -> 18.dp
+        }
+        val labelFontSize = if (compact) 7.sp else 8.sp
+        val verticalSpacing = if (compact) 2.dp else 3.dp
+        val controlRowSpacing = if (compact) 5.dp else 6.dp
+        val zoomButtonSize = if (compact) 32.dp else 36.dp
+        val zoomIconSize = if (compact) 14.dp else 16.dp
+        val historyButtonSize = if (compact) 30.dp else 34.dp
+        val historyIconSize = if (compact) 13.dp else 15.dp
+        val centerColumnBottom = if (compact) 14.dp else 24.dp
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = sidePadding)
         ) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.BottomCenter) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 TouchToolButton(
                     icon = Icons.Filled.AdsClick,
                     label = "Select",
                     selected = selectedMode == TouchToolMode.SELECT,
                     onClick = onSelectMode,
-                    buttonSize = buttonSize,
-                    iconSize = iconSize,
+                    buttonSize = toolButtonSize,
+                    iconSize = toolIconSize,
                     labelFontSize = labelFontSize,
                     verticalSpacing = verticalSpacing
                 )
-            }
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.BottomCenter) {
                 TouchToolButton(
                     icon = Icons.Filled.BorderColor,
                     label = "Draw",
                     selected = selectedMode == TouchToolMode.DRAW,
                     onClick = onDrawMode,
-                    buttonSize = buttonSize,
-                    iconSize = iconSize,
+                    buttonSize = toolButtonSize,
+                    iconSize = toolIconSize,
                     labelFontSize = labelFontSize,
                     verticalSpacing = verticalSpacing
                 )
             }
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.BottomCenter) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = centerColumnBottom),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CenteredOverlayControls(
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    canZoomIn = canZoomIn,
+                    canZoomOut = canZoomOut,
+                    onUndo = onUndo,
+                    onRedo = onRedo,
+                    onZoomIn = onZoomIn,
+                    onZoomOut = onZoomOut,
+                    controlStateLabel = controlStateLabel,
+                    compact = compact,
+                    controlRowSpacing = controlRowSpacing,
+                    zoomButtonSize = zoomButtonSize,
+                    zoomIconSize = zoomIconSize,
+                    historyButtonSize = historyButtonSize,
+                    historyIconSize = historyIconSize,
+                    belowHistoryContent = belowHistoryContent
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 TouchToolButton(
                     icon = Icons.Filled.Workspaces,
                     label = "Grab",
                     selected = selectedMode == TouchToolMode.GRAB,
                     onClick = onGrabMode,
-                    buttonSize = buttonSize,
-                    iconSize = iconSize,
+                    buttonSize = toolButtonSize,
+                    iconSize = toolIconSize,
                     labelFontSize = labelFontSize,
                     verticalSpacing = verticalSpacing
                 )
-            }
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.BottomCenter) {
                 TouchToolButton(
                     icon = Icons.Filled.Close,
                     label = "Cancel",
                     selected = false,
                     onClick = onCancel,
-                    buttonSize = buttonSize,
-                    iconSize = iconSize,
+                    buttonSize = toolButtonSize,
+                    iconSize = toolIconSize,
                     labelFontSize = labelFontSize,
                     verticalSpacing = verticalSpacing
                 )

@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -35,6 +37,7 @@ class TakeoffViewModel @Inject constructor(
     private var projectObserverJob: Job? = null
     private var calculationJob: Job? = null
     private var calculationGeneration = 0L
+    private val persistMutex = Mutex()
     private val trackedFirstEstimateProjectIds = mutableSetOf<String>()
     private val trackedGeneratedEstimateKeys = mutableSetOf<String>()
 
@@ -416,7 +419,12 @@ class TakeoffViewModel @Inject constructor(
     private fun calculate() {
         val state = _uiState.value
         val project = state.project ?: return
-        val type = state.selectedType ?: return
+        val type = state.selectedType
+            ?: defaultTakeoffTypeForTrade(state.settings.primaryTrade)
+            ?: TakeoffType.DRYWALL
+        if (state.selectedType == null) {
+            _uiState.update { it.copy(selectedType = type) }
+        }
         val pricing = state.pricingParams
         val sessionSnapshot = state.toTakeoffSession(type)
         val generation = ++calculationGeneration
@@ -472,19 +480,21 @@ class TakeoffViewModel @Inject constructor(
         session: ProjectTakeoffSession,
         generation: Long
     ) {
-        if (generation != calculationGeneration) return
-        val latestProject = _uiState.value.project?.takeIf { it.id == projectId } ?: return
-        if (latestProject.takeoffSession == session) return
-        runCatching {
-            repository.saveProject(
-                latestProject.copy(
-                    takeoffSession = session,
-                    updatedAt = System.currentTimeMillis()
+        persistMutex.withLock {
+            if (generation != calculationGeneration) return@withLock
+            val latestProject = _uiState.value.project?.takeIf { it.id == projectId } ?: return@withLock
+            if (latestProject.takeoffSession == session) return@withLock
+            runCatching {
+                repository.saveProject(
+                    latestProject.copy(
+                        takeoffSession = session,
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
-        }.onFailure { error ->
-            if (generation == calculationGeneration && error !is CancellationException) {
-                _uiState.update { it.copy(error = "Failed to save takeoff session: ${error.message}") }
+            }.onFailure { error ->
+                if (generation == calculationGeneration && error !is CancellationException) {
+                    _uiState.update { it.copy(error = "Failed to save takeoff session: ${error.message}") }
+                }
             }
         }
     }

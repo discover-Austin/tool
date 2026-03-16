@@ -2,6 +2,7 @@ package com.tradesketch.estimator.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,7 +50,7 @@ fun ProjectRitualScreen1_Name(
             maxHeight > 700.dp -> 52.dp
             else -> 12.dp
         }
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = topOffset),

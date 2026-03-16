@@ -1218,6 +1218,7 @@ fun BlueprintScreen(
         )
     val floorSwitcherTopPadding = overlayTopPadding + topStackMeasuredHeight + topOverlaySpacing
     val floorSwitcherBottomPadding = helpBottomPadding + if (compactHeightWindow) 8.dp else 12.dp
+    val sharedBottomControlsPadding = 56.dp
     val controlStateLabel: String? = when {
         movingWallPreview != null -> "Picked Up"
         tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> "Draw"
@@ -1251,6 +1252,41 @@ fun BlueprintScreen(
                     y = local.y.coerceIn(0f, canvasSize.height)
                 )
             }
+        }
+    }
+    val sharedBelowHistoryContent: @Composable () -> Unit = {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GridScaleBadge(
+                label = gridScaleLabel,
+                onClick = {
+                    showGridScaleEditor = !showGridScaleEditor
+                    if (showGridScaleEditor) {
+                        val currentStepFeet = snapSettings.gridStepFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
+                        gridScaleInput = if (appSettings.useMetric) {
+                            val centimeters = Millimeters.fromFeet(currentStepFeet).value / 10.0
+                            "${formatScaleCentimetersValue(centimeters)}cm"
+                        } else {
+                            formatFeetInchesPrime(currentStepFeet)
+                        }
+                        syncGridScaleAssistInputs(currentStepFeet)
+                    }
+                },
+                compact = true,
+                modifier = Modifier.onGloballyPositioned {
+                    gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
+                }
+            )
+            FloorCompactBadge(
+                level = selectedFloor,
+                onLowerFloor = { selectedFloor -= 1 },
+                onUpperFloor = { selectedFloor += 1 },
+                modifier = Modifier.onGloballyPositioned {
+                    floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
+                }
+            )
         }
     }
     val onEdgeDialInteractionChanged: (Boolean) -> Unit = { active ->
@@ -1840,6 +1876,7 @@ fun BlueprintScreen(
                             "• Select: pick walls/openings.\n" +
                             "• Draw: tap start/end to create lines.\n" +
                             "• Grab: pick up a wall, move it, tap to place.\n" +
+                            "• Center controls: zoom plus undo/redo.\n" +
                             "• Cancel: exits current action/selection.\n" +
                             "• Two fingers: pan and zoom the view."
                     )
@@ -2024,48 +2061,13 @@ fun BlueprintScreen(
                 onZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) },
                 onZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) },
                 controlStateLabel = controlStateLabel,
-                belowHistoryContent = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        GridScaleBadge(
-                            label = gridScaleLabel,
-                            onClick = {
-                                showGridScaleEditor = !showGridScaleEditor
-                                if (showGridScaleEditor) {
-                                    val currentStepFeet = snapSettings.gridStepFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
-                                    gridScaleInput = if (appSettings.useMetric) {
-                                        val centimeters = Millimeters.fromFeet(currentStepFeet).value / 10.0
-                                        "${formatScaleCentimetersValue(centimeters)}cm"
-                                    } else {
-                                        formatFeetInchesPrime(currentStepFeet)
-                                    }
-                                    syncGridScaleAssistInputs(currentStepFeet)
-                                }
-                            },
-                            compact = true,
-                            modifier = Modifier.onGloballyPositioned {
-                                gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
-                            }
-                        )
-                        FloorCompactBadge(
-                            level = selectedFloor,
-                            onLowerFloor = { selectedFloor -= 1 },
-                            onUpperFloor = { selectedFloor += 1 },
-                            modifier = Modifier.onGloballyPositioned {
-                                floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
-                            }
-                        )
-                    }
-                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(
                         start = 12.dp + centeredControlsInset,
                         end = 12.dp + centeredControlsInset,
-                        bottom = joystickRailPadding
+                        bottom = sharedBottomControlsPadding
                     )
                     .navigationBarsPadding()
             )
@@ -2158,13 +2160,22 @@ fun BlueprintScreen(
                         }
                     }
                 },
+                canUndo = uiState.canUndo,
+                canRedo = uiState.canRedo,
+                canZoomIn = scale < MAX_BLUEPRINT_SCALE,
+                canZoomOut = scale > MIN_BLUEPRINT_SCALE,
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+                onZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) },
+                onZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) },
+                controlStateLabel = controlStateLabel,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(
-                        start = 16.dp + centeredControlsInset,
-                        end = 16.dp + centeredControlsInset,
-                        bottom = 56.dp
+                        start = 12.dp + centeredControlsInset,
+                        end = 12.dp + centeredControlsInset,
+                        bottom = sharedBottomControlsPadding
                     )
                     .navigationBarsPadding()
             )
@@ -2242,7 +2253,7 @@ fun BlueprintScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = joystickRailPadding + 122.dp)
+                    .padding(bottom = sharedBottomControlsPadding + 122.dp)
                     .navigationBarsPadding()
                     .onGloballyPositioned {
                         gridScaleEditorBounds = Rect(it.positionInRoot(), it.size.toSize())
