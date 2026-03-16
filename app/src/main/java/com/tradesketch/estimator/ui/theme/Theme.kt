@@ -1,51 +1,58 @@
 package com.tradesketch.estimator.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-private val SleekDarkColors = darkColorScheme(
-    primary = ElectricCyan,
-    onPrimary = Midnight950,
-    primaryContainer = Color(0xFF123146),
-    onPrimaryContainer = Color(0xFFBEEBFF),
-    secondary = EmberOrange,
-    onSecondary = Midnight950,
-    secondaryContainer = Color(0xFF4A2C11),
-    onSecondaryContainer = Color(0xFFFFDFBF),
-    tertiary = MintSignal,
-    onTertiary = Midnight950,
-    tertiaryContainer = Color(0xFF163A31),
-    onTertiaryContainer = Color(0xFFBDFBE5),
-    background = Midnight950,
-    onBackground = Color(0xFFE2ECF7),
-    surface = Midnight900,
-    onSurface = Color(0xFFE2ECF7),
-    surfaceVariant = Midnight850,
-    onSurfaceVariant = SteelText,
-    surfaceBright = Slate800,
-    surfaceContainer = Midnight850,
-    surfaceContainerHigh = Slate800,
-    error = Color(0xFFFF8A80),
-    errorContainer = Color(0xFF5A1F1F),
-    onErrorContainer = Color(0xFFFFD9D6),
-    outline = Slate700
+private val TradeSketchColors = lightColorScheme(
+    primary = SignalBlue,
+    onPrimary = Bone50,
+    primaryContainer = SignalMist,
+    onPrimaryContainer = SignalBlueDeep,
+    secondary = SteelBlue,
+    onSecondary = Bone50,
+    secondaryContainer = SteelBlueSoft,
+    onSecondaryContainer = Color(0xFF21364E),
+    tertiary = Oxblood760,
+    onTertiary = Bone50,
+    tertiaryContainer = Color(0xFFE3EAF2),
+    onTertiaryContainer = Color(0xFF293847),
+    background = Obsidian990,
+    onBackground = Oxblood820,
+    surface = Bone50,
+    onSurface = Oxblood820,
+    surfaceDim = Obsidian950,
+    surfaceBright = Bone50,
+    surfaceContainerLowest = Bone50,
+    surfaceContainerLow = Bone120,
+    surfaceContainer = Obsidian950,
+    surfaceContainerHigh = Obsidian900,
+    surfaceContainerHighest = Obsidian860,
+    surfaceVariant = Color(0xFFE8EDF4),
+    onSurfaceVariant = SlateText,
+    error = Color(0xFFBF3B31),
+    onError = Bone50,
+    errorContainer = Color(0xFFF8DAD7),
+    onErrorContainer = Color(0xFF6A1912),
+    outline = Color(0xFFC2CDD8),
+    outlineVariant = Color(0xFFDBE2EA),
+    scrim = Color(0x55000000)
 )
 
 private val AppShapes = Shapes(
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp)
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(30.dp)
 )
 
 @Composable
 fun TradeSketchTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = SleekDarkColors,
+        colorScheme = TradeSketchColors,
         typography = Typography,
         shapes = AppShapes,
         content = content

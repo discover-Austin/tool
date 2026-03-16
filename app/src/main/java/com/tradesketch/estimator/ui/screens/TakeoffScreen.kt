@@ -33,7 +33,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.OpeningType
@@ -71,7 +71,7 @@ fun TakeoffScreen(
     onOpenExport: () -> Unit = {},
     viewModel: TakeoffViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showPricingInputs by rememberSaveable(projectId) { mutableStateOf(true) }
     var showDetailedResults by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(false)
@@ -142,9 +142,9 @@ fun TakeoffScreen(
         item {
             AnimatedEntry(delayMs = staggeredDelay(70)) {
                 TitledSectionCard(
-                    title = if (isMaterialsMode) "Estimate Type" else "Quantity Scope",
+                    title = if (isMaterialsMode) "Trade" else "Quantity Scope",
                     subtitle = if (isManualMode) {
-                        "Pick the estimate type directly when entering measurements manually."
+                        "Pick the trade directly when entering measurements manually."
                     } else if (isMaterialsMode) {
                         "Set in Blueprint so this tab always stays in sync."
                     } else {

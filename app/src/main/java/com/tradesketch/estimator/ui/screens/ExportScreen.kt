@@ -7,7 +7,6 @@ import com.tradesketch.estimator.ui.components.QuietActionButton
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -39,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +47,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
@@ -60,11 +62,11 @@ import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
+import com.tradesketch.estimator.ui.viewmodel.ExportActionResult
 import com.tradesketch.estimator.utils.ExportStorage
+import com.tradesketch.estimator.utils.defaultDeviceSaveHint
 import com.tradesketch.estimator.utils.Formatters
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private enum class EstimatePreviewPage(
     val label: String,
@@ -83,8 +85,8 @@ private enum class EstimatePreviewPage(
         docHint = "Geometry summary page with wall, room, opening, and area coverage detail."
     ),
     COMBINED_NO_BLUEPRINT(
-        label = "Combined (No Blueprint)",
-        docHint = "Single-page blend of Cost + Shopping List with blueprint content omitted."
+        label = "Cost + Shopping List",
+        docHint = "Combined cost sheet and shopping list without the blueprint page."
     )
 }
 
@@ -95,10 +97,15 @@ fun ExportScreen(
     onOpenTakeoff: () -> Unit = {},
     viewModel: ExportViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val haptics = rememberAppHaptics()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val reportFailure: (ExportActionResult) -> Unit = { result ->
+        if (result is ExportActionResult.Failure) {
+            viewModel.reportExternalFailure(result.message)
+        }
+    }
     var showScopeSelector by rememberSaveable(projectId, uiState.selectedType?.name ?: "none") {
         mutableStateOf(uiState.selectedType == null)
     }
@@ -116,20 +123,7 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            runCatching {
-                val bytes = viewModel.buildCsvBytes()
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(uri)
-                        ?: error("Unable to open CSV output stream")
-                    output.use { stream ->
-                        stream.write(bytes)
-                    }
-                }
-            }.onSuccess {
-                Toast.makeText(context, "CSV exported.", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Could not export CSV.", Toast.LENGTH_SHORT).show()
-            }
+            reportFailure(viewModel.saveCsvToUri(uri))
         }
     }
     val jsonSafLauncher = rememberLauncherForActivityResult(
@@ -137,20 +131,7 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            runCatching {
-                val bytes = viewModel.buildJsonBytes()
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(uri)
-                        ?: error("Unable to open JSON output stream")
-                    output.use { stream ->
-                        stream.write(bytes)
-                    }
-                }
-            }.onSuccess {
-                Toast.makeText(context, "JSON exported.", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Could not export JSON.", Toast.LENGTH_SHORT).show()
-            }
+            reportFailure(viewModel.saveJsonToUri(uri))
         }
     }
     val pdfSafLauncher = rememberLauncherForActivityResult(
@@ -158,24 +139,7 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            val bytes = viewModel.buildEstimatePdfBytes()
-            if (bytes == null) {
-                Toast.makeText(context, "Could not prepare estimate PDF.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(uri)
-                        ?: error("Unable to open PDF output stream")
-                    output.use { stream ->
-                        stream.write(bytes)
-                    }
-                }
-            }.onSuccess {
-                Toast.makeText(context, "PDF exported.", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Could not export PDF.", Toast.LENGTH_SHORT).show()
-            }
+            reportFailure(viewModel.saveEstimatePdfToUri(uri))
         }
     }
     val blueprintPngSafLauncher = rememberLauncherForActivityResult(
@@ -183,24 +147,7 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            val bytes = viewModel.buildBlueprintPngBytes()
-            if (bytes == null) {
-                Toast.makeText(context, "Could not prepare blueprint PNG.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(uri)
-                        ?: error("Unable to open PNG output stream")
-                    output.use { stream ->
-                        stream.write(bytes)
-                    }
-                }
-            }.onSuccess {
-                Toast.makeText(context, "Blueprint PNG exported.", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Could not export blueprint PNG.", Toast.LENGTH_SHORT).show()
-            }
+            reportFailure(viewModel.saveBlueprintPngToUri(uri))
         }
     }
     val blueprintPdfSafLauncher = rememberLauncherForActivityResult(
@@ -208,24 +155,7 @@ fun ExportScreen(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         coroutineScope.launch {
-            val bytes = viewModel.buildBlueprintPdfBytes()
-            if (bytes == null || bytes.isEmpty()) {
-                Toast.makeText(context, "Could not prepare blueprint PDF.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val output = context.contentResolver.openOutputStream(uri)
-                        ?: error("Unable to open blueprint PDF output stream")
-                    output.use { stream ->
-                        stream.write(bytes)
-                    }
-                }
-            }.onSuccess {
-                Toast.makeText(context, "Blueprint PDF exported.", Toast.LENGTH_SHORT).show()
-            }.onFailure {
-                Toast.makeText(context, "Could not export blueprint PDF.", Toast.LENGTH_SHORT).show()
-            }
+            reportFailure(viewModel.saveBlueprintPdfToUri(uri))
         }
     }
 
@@ -256,20 +186,20 @@ fun ExportScreen(
             projectName = uiState.project?.name.orEmpty(),
             businessName = uiState.settings.businessName.ifBlank { null },
             takeoffType = uiState.takeoffType.ifBlank {
-                uiState.selectedType?.displayLabel ?: "Not selected"
+                uiState.selectedType?.displayLabel ?: "Choose a trade"
             },
             result = uiState.result
         )
 
         TitledSectionCard(
-            title = "Estimate Type",
-            subtitle = "Set which trade this export represents.",
+            title = "Trade",
+            subtitle = "Choose which trade this export represents.",
             modifier = Modifier.animateContentSize()
         ) {
             val selectedType = uiState.selectedType
             if (selectedType != null && !showScopeSelector) {
                 Text(
-                    text = "Selected type: ${selectedType.displayLabel}",
+                    text = "Selected trade: ${selectedType.displayLabel}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -277,7 +207,7 @@ fun ExportScreen(
                     onClick = { showScopeSelector = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Change Estimate Type")
+                    Text("Change Trade")
                 }
             } else {
                 Row(
@@ -310,7 +240,7 @@ fun ExportScreen(
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Select an estimate type to continue.",
+                        text = "Choose a trade to continue.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -335,7 +265,7 @@ fun ExportScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Open Takeoff")
+                    Text("Open Materials & Pricing")
                 }
             }
         }
@@ -366,7 +296,7 @@ fun ExportScreen(
                     )
                     if (uiState.settings.businessName.isBlank()) {
                         Text(
-                            text = "Tip: add your business details in Settings > Business Identity for branded exports.",
+                            text = "Tip: add your business details in Settings > Business Identity to include them on exported files.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -384,7 +314,8 @@ fun ExportScreen(
                             launchExportIntent(
                                 context = context,
                                 intent = intent,
-                                noTargetMessage = "No app available to share this report."
+                                noTargetMessage = "No app available to share this report.",
+                                onFailure = viewModel::reportExternalFailure
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -399,15 +330,16 @@ fun ExportScreen(
                             isPreparingEstimatePdf = true
                             coroutineScope.launch {
                                 try {
-                                    val intent = viewModel.createEstimatePdfShareIntent()
-                                    if (intent == null) {
-                                        Toast.makeText(context, "Could not prepare estimate PDF.", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        launchExportIntent(
-                                            context = context,
-                                            intent = intent,
-                                            noTargetMessage = "No app available to share this PDF."
-                                        )
+                                    when (val result = viewModel.createEstimatePdfShareIntent()) {
+                                        is ExportActionResult.Success -> {
+                                            launchExportIntent(
+                                                context = context,
+                                                intent = result.intent ?: return@launch,
+                                                noTargetMessage = "No app available to share this PDF.",
+                                                onFailure = viewModel::reportExternalFailure
+                                            )
+                                        }
+                                        is ExportActionResult.Failure -> viewModel.reportExternalFailure(result.message)
                                     }
                                 } finally {
                                     isPreparingEstimatePdf = false
@@ -427,19 +359,16 @@ fun ExportScreen(
                             isPreparingBlueprintPdf = true
                             coroutineScope.launch {
                                 try {
-                                    val intent = viewModel.createBlueprintPdfShareIntent()
-                                    if (intent == null) {
-                                        Toast.makeText(
-                                            context,
-                                            "No blueprint geometry available for PDF export.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        launchExportIntent(
-                                            context = context,
-                                            intent = intent,
-                                            noTargetMessage = "No app available to share this blueprint PDF."
-                                        )
+                                    when (val result = viewModel.createBlueprintPdfShareIntent()) {
+                                        is ExportActionResult.Success -> {
+                                            launchExportIntent(
+                                                context = context,
+                                                intent = result.intent ?: return@launch,
+                                                noTargetMessage = "No app available to share this blueprint PDF.",
+                                                onFailure = viewModel::reportExternalFailure
+                                            )
+                                        }
+                                        is ExportActionResult.Failure -> viewModel.reportExternalFailure(result.message)
                                     }
                                 } finally {
                                     isPreparingBlueprintPdf = false
@@ -466,21 +395,20 @@ fun ExportScreen(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
+                    Text(
+                        text = defaultDeviceSaveHint(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     SecondaryActionButton(
                         onClick = {
                             haptics.confirm()
                             isPreparingEstimatePdf = true
                             coroutineScope.launch {
                                 try {
-                                    val uri = viewModel.saveEstimatePdfToDownloads()
-                                    if (uri == null) {
-                                        Toast.makeText(context, "Could not save estimate PDF.", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "Estimate PDF saved to TradeSketch folder.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                    when (val result = viewModel.saveEstimatePdfToDownloads()) {
+                                        is ExportActionResult.Success -> Unit
+                                        is ExportActionResult.Failure -> viewModel.reportExternalFailure(result.message)
                                     }
                                 } finally {
                                     isPreparingEstimatePdf = false
@@ -500,19 +428,9 @@ fun ExportScreen(
                             isPreparingBlueprintPdf = true
                             coroutineScope.launch {
                                 try {
-                                    val uri = viewModel.saveBlueprintPdfToDownloads()
-                                    if (uri == null) {
-                                        Toast.makeText(
-                                            context,
-                                            "No blueprint geometry available for PDF export.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(
-                                            context,
-                                            "Blueprint PDF saved to TradeSketch folder.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                    when (val result = viewModel.saveBlueprintPdfToDownloads()) {
+                                        is ExportActionResult.Success -> Unit
+                                        is ExportActionResult.Failure -> viewModel.reportExternalFailure(result.message)
                                     }
                                 } finally {
                                     isPreparingBlueprintPdf = false
@@ -549,7 +467,7 @@ fun ExportScreen(
                                 } else {
                                     "Could not open save dialog."
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                viewModel.reportExternalFailure(message)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -579,7 +497,7 @@ fun ExportScreen(
                                 } else {
                                     "Could not open save dialog."
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                viewModel.reportExternalFailure(message)
                             }
                         },
                         enabled = hasBlueprintGeometry,
@@ -644,7 +562,7 @@ fun ExportScreen(
                                 } else {
                                     "Could not open save dialog."
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                viewModel.reportExternalFailure(message)
                             }
                         },
                         enabled = hasBlueprintGeometry,
@@ -691,7 +609,7 @@ fun ExportScreen(
                                 } else {
                                     "Could not open save dialog."
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                viewModel.reportExternalFailure(message)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -717,7 +635,7 @@ fun ExportScreen(
                                 } else {
                                     "Could not open save dialog."
                                 }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                                viewModel.reportExternalFailure(message)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -734,7 +652,7 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "No estimate data for this type yet. Open Takeoff to generate quantities.",
+                    text = "No estimate data for this trade yet. Open Materials & Pricing to generate quantities.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SecondaryActionButton(
@@ -744,13 +662,16 @@ fun ExportScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Open Takeoff")
+                    Text("Open Materials & Pricing")
                 }
             }
         }
 
         uiState.lastAction?.let { action ->
             Card(
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                },
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 )
@@ -771,6 +692,9 @@ fun ExportScreen(
 
         uiState.error?.let { error ->
             Card(
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Assertive
+                },
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
@@ -789,7 +713,8 @@ fun ExportScreen(
 private fun launchExportIntent(
     context: Context,
     intent: Intent,
-    noTargetMessage: String
+    noTargetMessage: String,
+    onFailure: (String) -> Unit
 ) {
     runCatching {
         context.startActivity(intent)
@@ -799,7 +724,7 @@ private fun launchExportIntent(
         } else {
             "Could not open share sheet."
         }
-        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        onFailure(message)
     }
 }
 
@@ -824,7 +749,7 @@ private fun ExportProjectHeaderCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "Export Dossier",
+                text = "Export Summary",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -834,10 +759,10 @@ private fun ExportProjectHeaderCard(
             )
             PreviewMetricRow(
                 label = "Business",
-                value = businessName ?: "Not set (add in Settings for branded exports)"
+                value = businessName ?: "Not set. Add your business name in Settings to include it on exported files."
             )
             PreviewMetricRow(
-                label = "Estimate Type",
+                label = "Trade",
                 value = takeoffType
             )
             PreviewMetricRow(
@@ -852,12 +777,12 @@ private fun ExportProjectHeaderCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Readiness",
+                    text = "Status",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = if (result == null) "Waiting for estimate data" else "Preview ready",
+                    text = if (result == null) "Waiting for quantities" else "Preview ready",
                     style = MaterialTheme.typography.labelMedium,
                     color = if (result == null) {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -1352,3 +1277,6 @@ private fun PreviewPageTitle(
         )
     }
 }
+
+
+

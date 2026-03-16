@@ -25,7 +25,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.BuildConfig
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.ui.components.BufferedInputField
@@ -50,7 +50,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val haptics = rememberAppHaptics()
     var showResetConfirm by rememberSaveable { mutableStateOf(false) }
 
@@ -286,17 +286,51 @@ fun SettingsScreen(
                         },
                         label = { Text("Dual joysticks") }
                     )
-                    FilterChip(
-                        selected = uiState.settings.blueprintLargeCursorEnabled,
-                        onClick = {
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Cursor blip", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "Shows the draft cursor blip and lights it up when a line locks into existing geometry.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.settings.blueprintCursorVisible,
+                        onCheckedChange = {
                             haptics.tap()
-                            viewModel.updateBlueprintControlDefaults(
-                                largeCursorEnabled = !uiState.settings.blueprintLargeCursorEnabled
-                            )
-                        },
-                        label = { Text("Large cursor") }
+                            viewModel.updateBlueprintControlDefaults(cursorVisible = it)
+                        }
                     )
                 }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Blip size: ${(uiState.settings.blueprintCursorScale * 100f).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = uiState.settings.blueprintCursorScale.coerceIn(0.75f, 2.1f),
+                    onValueChange = {
+                        viewModel.updateBlueprintControlDefaults(
+                            cursorScale = it.coerceIn(0.75f, 2.1f)
+                        )
+                    },
+                    valueRange = 0.75f..2.1f,
+                    steps = 12,
+                    enabled = uiState.settings.blueprintCursorVisible
+                )
+                Text(
+                    text = "Smaller keeps the blueprint cleaner. Larger makes the joystick aim marker easier to track.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "Joystick sensitivity: ${"%.2f".format(uiState.settings.blueprintJoystickSensitivity)}x",
@@ -651,3 +685,4 @@ private fun BufferedField(
         onValueChange = onTextChanged
     )
 }
+

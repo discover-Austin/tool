@@ -2,14 +2,27 @@ package com.tradesketch.estimator.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Midnight950 = Color(0xFF060A10)
-val Midnight900 = Color(0xFF0A1018)
-val Midnight850 = Color(0xFF111A26)
-val Slate800 = Color(0xFF1B2735)
-val Slate700 = Color(0xFF28394C)
+val Obsidian990 = Color(0xFFF7F9FC)
+val Obsidian950 = Color(0xFFF0F4F9)
+val Obsidian900 = Color(0xFFE5EBF3)
+val Obsidian860 = Color(0xFFD8E0EA)
+val Oxblood820 = Color(0xFF243240)
+val Oxblood760 = Color(0xFF415163)
 
-val ElectricCyan = Color(0xFF43C8FF)
-val EmberOrange = Color(0xFFFFA551)
-val MintSignal = Color(0xFF35D6A1)
+val SignalBlue = Color(0xFF2F6E9E)
+val SignalBlueBright = Color(0xFF4F89BB)
+val SignalBlueDeep = Color(0xFF183B59)
+val SignalMist = Color(0xFFDDEBFA)
+val Bone50 = Color(0xFFFFFFFF)
+val Bone120 = Color(0xFFF8FAFD)
+val AshRose = Color(0xFFD8C6C3)
+val AshRoseDeep = Color(0xFFB7A29E)
+val SteelBlue = Color(0xFF3B5874)
+val SteelBlueSoft = Color(0xFFE3ECF5)
+val SlateText = Color(0xFF67788B)
 
-val SteelText = Color(0xFFB7C6D9)
+val Midnight950 = Obsidian990
+val Midnight900 = Obsidian950
+val Midnight850 = Obsidian900
+val Slate800 = Obsidian860
+val Slate700 = Color(0xFFC9D2DC)

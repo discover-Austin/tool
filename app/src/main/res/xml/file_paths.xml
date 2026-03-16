@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path
-        name="cache"
-        path="." />
+        name="estimate_share"
+        path="estimate-share/" />
+    <cache-path
+        name="blueprint_share"
+        path="blueprint-share/" />
     <external-files-path
-        name="external_files"
-        path="." />
+        name="exports"
+        path="Download/TradeSketch/" />
+    <files-path
+        name="internal_exports"
+        path="exports/TradeSketch/" />
 </paths>

@@ -10,9 +10,14 @@ import com.tradesketch.estimator.domain.model.*
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -30,6 +35,9 @@ class TakeoffViewModel @Inject constructor(
 
     private var currentProjectId: String? = savedStateHandle["projectId"]
     private var projectObserverJob: Job? = null
+    private var calculationJob: Job? = null
+    private var calculationGeneration = 0L
+    private val persistMutex = Mutex()
     private val trackedFirstEstimateProjectIds = mutableSetOf<String>()
     private val trackedGeneratedEstimateKeys = mutableSetOf<String>()
 
@@ -44,6 +52,7 @@ class TakeoffViewModel @Inject constructor(
         if (currentProjectId == projectId && projectObserverJob != null) return
         currentProjectId = projectId
         savedStateHandle["projectId"] = projectId
+        calculationJob?.cancel()
         observeProjectAndSettings(projectId)
     }
 
@@ -57,6 +66,17 @@ class TakeoffViewModel @Inject constructor(
                 projectId = projectId
             ).collect { (project, settings) ->
                 if (project != null) {
+                    if (shouldReuseCurrentTakeoffState(project, settings)) {
+                        _uiState.update {
+                            it.copy(
+                                project = project,
+                                settings = settings,
+                                isLoading = false,
+                                error = null
+                            )
+                        }
+                        return@collect
+                    }
                     val session = project.takeoffSession
                     val hasPersistedSession = session != ProjectTakeoffSession()
                     val sessionSelectedType = session.selectedScope.toTakeoffType()
@@ -130,6 +150,17 @@ class TakeoffViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun shouldReuseCurrentTakeoffState(
+        project: Project,
+        settings: Settings
+    ): Boolean {
+        val state = _uiState.value
+        val selectedType = state.selectedType ?: return false
+        if (state.project?.id != project.id) return false
+        if (state.settings != settings) return false
+        return state.toTakeoffSession(selectedType) == project.takeoffSession
     }
     
     fun selectTakeoffType(type: TakeoffType) {
@@ -388,23 +419,41 @@ class TakeoffViewModel @Inject constructor(
     private fun calculate() {
         val state = _uiState.value
         val project = state.project ?: return
-        val type = state.selectedType ?: return
+        val type = state.selectedType
+            ?: defaultTakeoffTypeForTrade(state.settings.primaryTrade)
+            ?: TakeoffType.DRYWALL
+        if (state.selectedType == null) {
+            _uiState.update { it.copy(selectedType = type) }
+        }
         val pricing = state.pricingParams
         val sessionSnapshot = state.toTakeoffSession(type)
+        val generation = ++calculationGeneration
+        calculationJob?.cancel()
+        calculationJob = viewModelScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.Default) {
+                    calculateTakeoffUseCase.calculateForType(
+                        project = project,
+                        type = type,
+                        inputs = TakeoffCalculationInputs(
+                            drywall = state.drywallParams,
+                            concrete = state.concreteParams,
+                            gravel = state.gravelParams,
+                            paint = state.paintParams,
+                            pricing = pricing
+                        ),
+                        sessionOverride = sessionSnapshot
+                    )
+                }
+            }.getOrElse { error ->
+                if (error is CancellationException) throw error
+                if (generation == calculationGeneration) {
+                    _uiState.update { it.copy(error = "Calculation failed: ${error.message}") }
+                }
+                return@launch
+            }
 
-        try {
-            val result = calculateTakeoffUseCase.calculateForType(
-                project = project,
-                type = type,
-                inputs = TakeoffCalculationInputs(
-                    drywall = state.drywallParams,
-                    concrete = state.concreteParams,
-                    gravel = state.gravelParams,
-                    paint = state.paintParams,
-                    pricing = pricing
-                ),
-                sessionOverride = sessionSnapshot
-            )
+            if (generation != calculationGeneration) return@launch
             _uiState.update { it.copy(result = result, error = null) }
             val generatedEstimateKey = "${project.id}:${type.name}"
             if (trackedGeneratedEstimateKeys.add(generatedEstimateKey)) {
@@ -418,27 +467,34 @@ class TakeoffViewModel @Inject constructor(
                     uxMetricsRepository.recordTimeToFirstEstimate(timeToFirstEstimateMs)
                 }
             }
-        } catch (e: Exception) {
-            _uiState.update { it.copy(error = "Calculation failed: ${e.message}") }
+            persistTakeoffSessionIfNeeded(
+                projectId = project.id,
+                session = sessionSnapshot,
+                generation = generation
+            )
         }
-        persistTakeoffSessionIfNeeded(project, sessionSnapshot)
     }
 
-    private fun persistTakeoffSessionIfNeeded(
-        project: Project,
-        session: ProjectTakeoffSession
+    private suspend fun persistTakeoffSessionIfNeeded(
+        projectId: String,
+        session: ProjectTakeoffSession,
+        generation: Long
     ) {
-        if (project.takeoffSession == session) return
-        viewModelScope.launch {
+        persistMutex.withLock {
+            if (generation != calculationGeneration) return@withLock
+            val latestProject = _uiState.value.project?.takeIf { it.id == projectId } ?: return@withLock
+            if (latestProject.takeoffSession == session) return@withLock
             runCatching {
                 repository.saveProject(
-                    project.copy(
+                    latestProject.copy(
                         takeoffSession = session,
                         updatedAt = System.currentTimeMillis()
                     )
                 )
             }.onFailure { error ->
-                _uiState.update { it.copy(error = "Failed to save takeoff session: ${error.message}") }
+                if (generation == calculationGeneration && error !is CancellationException) {
+                    _uiState.update { it.copy(error = "Failed to save takeoff session: ${error.message}") }
+                }
             }
         }
     }

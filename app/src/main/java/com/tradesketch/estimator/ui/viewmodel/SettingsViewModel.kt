@@ -223,7 +223,8 @@ class SettingsViewModel @Inject constructor(
         dualJoysticksEnabled: Boolean? = null,
         joystickSensitivity: Float? = null,
         joystickDeadzone: Float? = null,
-        largeCursorEnabled: Boolean? = null
+        cursorVisible: Boolean? = null,
+        cursorScale: Float? = null
     ) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -232,7 +233,8 @@ class SettingsViewModel @Inject constructor(
                     blueprintDualJoysticksEnabled = dualJoysticksEnabled ?: current.blueprintDualJoysticksEnabled,
                     blueprintJoystickSensitivity = joystickSensitivity ?: current.blueprintJoystickSensitivity,
                     blueprintJoystickDeadzone = joystickDeadzone ?: current.blueprintJoystickDeadzone,
-                    blueprintLargeCursorEnabled = largeCursorEnabled ?: current.blueprintLargeCursorEnabled
+                    blueprintCursorVisible = cursorVisible ?: current.blueprintCursorVisible,
+                    blueprintCursorScale = cursorScale ?: current.blueprintCursorScale
                 )
             )
         }

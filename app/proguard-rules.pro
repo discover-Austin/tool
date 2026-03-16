@@ -12,6 +12,7 @@
 -dontwarn sun.misc.**
 -keep class com.google.gson.** { *; }
 -keep class com.tradesketch.estimator.domain.model.** { <fields>; }
+-keep class com.tradesketch.estimator.data.local.*Json { *; }
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}

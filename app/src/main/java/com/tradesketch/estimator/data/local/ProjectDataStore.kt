@@ -27,7 +27,10 @@ import kotlin.math.cos
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
-private val Context.projectsDataStore: DataStore<Preferences> by preferencesDataStore(name = "projects")
+private val Context.projectsDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "projects",
+    corruptionHandler = preferencesCorruptionHandler()
+)
 
 @Singleton
 class ProjectDataStore @Inject constructor(
@@ -37,6 +40,8 @@ class ProjectDataStore @Inject constructor(
     private val gson = Gson()
     private val migrationMutex = Mutex()
     private val refreshSignal = MutableStateFlow(0L)
+    private val preferencesFlow = context.projectsDataStore.data.recoverPreferences()
+    private var lastFailedMigrationPayloadHash: Int? = null
     
     companion object {
         private val PROJECTS_KEY = stringPreferencesKey("projects_json")
@@ -44,7 +49,7 @@ class ProjectDataStore @Inject constructor(
     }
     
     val projects: Flow<List<Project>> = combine(
-        context.projectsDataStore.data,
+        preferencesFlow,
         refreshSignal
     ) { preferences, _ ->
         preferences
@@ -55,22 +60,22 @@ class ProjectDataStore @Inject constructor(
         }
     
     suspend fun saveProjects(projects: List<Project>) {
-        ensureMigrated(context.projectsDataStore.data.first())
+        ensureMigrated(preferencesFlow.first())
         val targetById = projects.associateBy { it.id }
         val existingIds = projectFileStore.loadAllProjects().map { it.id }.toSet()
+        projects.forEach { project ->
+            projectFileStore.saveProject(project)
+        }
         existingIds
             .filterNot { it in targetById.keys }
             .forEach { staleId ->
                 projectFileStore.deleteProject(staleId)
             }
-        projects.forEach { project ->
-            projectFileStore.saveProject(project)
-        }
         refreshSignal.value = System.currentTimeMillis()
     }
     
     suspend fun saveProject(project: Project) {
-        ensureMigrated(context.projectsDataStore.data.first())
+        ensureMigrated(preferencesFlow.first())
         projectFileStore.saveProject(
             project.copy(updatedAt = System.currentTimeMillis())
         )
@@ -78,7 +83,7 @@ class ProjectDataStore @Inject constructor(
     }
     
     suspend fun deleteProject(projectId: String) {
-        ensureMigrated(context.projectsDataStore.data.first())
+        ensureMigrated(preferencesFlow.first())
         projectFileStore.deleteProject(projectId)
         refreshSignal.value = System.currentTimeMillis()
     }
@@ -86,17 +91,32 @@ class ProjectDataStore @Inject constructor(
     private suspend fun ensureMigrated(preferencesSnapshot: Preferences) {
         if (preferencesSnapshot[MIGRATED_TO_FILES_KEY] == true) return
         migrationMutex.withLock {
-            val latest = context.projectsDataStore.data.first()
+            val latest = preferencesFlow.first()
             if (latest[MIGRATED_TO_FILES_KEY] == true) return@withLock
+            val legacyProjectsJson = latest[PROJECTS_KEY]
+            val payloadHash = legacyProjectsJson?.hashCode()
+            if (
+                !legacyProjectsJson.isNullOrBlank() &&
+                payloadHash != null &&
+                lastFailedMigrationPayloadHash == payloadHash
+            ) {
+                return@withLock
+            }
 
-            migrateLegacyProjectsJsonToFileStore(
-                projectsJson = latest[PROJECTS_KEY],
+            val migration = migrateLegacyProjectsJsonToFileStore(
+                projectsJson = legacyProjectsJson,
                 gson = gson,
                 storageEngine = projectFileStore.storageEngine()
             )
+            if (!migration.migratedToFiles) {
+                lastFailedMigrationPayloadHash = payloadHash
+                return@withLock
+            }
+            lastFailedMigrationPayloadHash = null
 
             context.projectsDataStore.edit { preferences ->
                 preferences[MIGRATED_TO_FILES_KEY] = true
+                preferences[PROJECTS_KEY] = ""
             }
         }
     }
@@ -104,7 +124,8 @@ class ProjectDataStore @Inject constructor(
 
 internal data class LegacyMigrationResult(
     val migratedToFiles: Boolean,
-    val writtenCount: Int
+    val writtenCount: Int,
+    val failureMessage: String? = null
 )
 
 internal suspend fun migrateLegacyProjectsJsonToFileStore(
@@ -121,14 +142,35 @@ internal suspend fun migrateLegacyProjectsJsonToFileStore(
     val parsed = runCatching {
         val type = object : TypeToken<List<ProjectJson>>() {}.type
         gson.fromJson<List<ProjectJson>>(projectsJson, type)
-    }.getOrDefault(emptyList())
-    parsed.forEach { projectJson ->
-        storageEngine.saveProject(projectJson.toProject())
-    }
-    return LegacyMigrationResult(
-        migratedToFiles = true,
-        writtenCount = parsed.size
+    }.getOrElse { error ->
+        return LegacyMigrationResult(
+            migratedToFiles = false,
+            writtenCount = 0,
+            failureMessage = error.message ?: "Legacy project data could not be parsed."
+        )
+    } ?: return LegacyMigrationResult(
+        migratedToFiles = false,
+        writtenCount = 0,
+        failureMessage = "Legacy project data could not be parsed."
     )
+
+    var writtenCount = 0
+    return try {
+        parsed.forEach { projectJson ->
+            storageEngine.saveProject(projectJson.toProject())
+            writtenCount += 1
+        }
+        LegacyMigrationResult(
+            migratedToFiles = true,
+            writtenCount = writtenCount
+        )
+    } catch (error: Exception) {
+        LegacyMigrationResult(
+            migratedToFiles = false,
+            writtenCount = writtenCount,
+            failureMessage = error.message ?: "Legacy project migration failed."
+        )
+    }
 }
 
 // JSON data classes for Gson serialization

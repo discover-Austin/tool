@@ -9,6 +9,9 @@ import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +42,10 @@ internal class ProjectFileStorageEngine(
     private val rootDir: File,
     private val gson: Gson = Gson()
 ) {
+    private companion object {
+        const val MAX_PROJECT_FILE_BYTES = 16L * 1024 * 1024
+    }
+
     suspend fun loadAllProjects(): List<Project> = withContext(Dispatchers.IO) {
         val dir = ensureRootDir() ?: return@withContext emptyList()
         val files = dir.listFiles { file ->
@@ -47,6 +54,10 @@ internal class ProjectFileStorageEngine(
         val quarantineStamp = System.currentTimeMillis()
         files.mapNotNull { file ->
             val loaded = runCatching {
+                val fileSize = file.length()
+                require(fileSize in 1..MAX_PROJECT_FILE_BYTES) {
+                    "Project file ${file.name} was empty or exceeded ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB."
+                }
                 val raw = file.readText()
                 val parsed = runCatching {
                     gson.fromJson(raw, Project::class.java)
@@ -74,15 +85,29 @@ internal class ProjectFileStorageEngine(
                 blueprintDocument = project.blueprintDocument.copy(projectId = project.id)
             )
         )
-        temp.writeText(payload)
-        if (!temp.renameTo(target)) {
-            runCatching {
-                target.writeText(payload)
-                temp.delete()
-            }.getOrElse {
-                temp.delete()
-                throw IOException("Failed to atomically write project ${project.id}", it)
+        val payloadBytes = payload.toByteArray(Charsets.UTF_8)
+        require(payloadBytes.size.toLong() <= MAX_PROJECT_FILE_BYTES) {
+            "Project ${project.id} exceeds the safe storage size limit."
+        }
+        temp.writeBytes(payloadBytes)
+        try {
+            try {
+                Files.move(
+                    temp.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temp.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
             }
+        } catch (error: Exception) {
+            temp.delete()
+            throw IOException("Failed to persist project ${project.id}", error)
         }
     }
 
@@ -90,7 +115,11 @@ internal class ProjectFileStorageEngine(
         val dir = ensureRootDir() ?: return@withContext
         val target = File(dir, "${safeProjectId(projectId)}.json")
         if (target.exists()) {
-            target.delete()
+            runCatching {
+                Files.delete(target.toPath())
+            }.getOrElse { error ->
+                throw IOException("Failed to delete project $projectId", error)
+            }
         }
     }
 
@@ -195,8 +224,12 @@ internal class ProjectFileStorageEngine(
         }
         if (!file.renameTo(candidate)) {
             runCatching {
-                candidate.writeText(file.readText())
-                file.delete()
+                Files.copy(
+                    file.toPath(),
+                    candidate.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+                Files.delete(file.toPath())
             }
         }
     }
