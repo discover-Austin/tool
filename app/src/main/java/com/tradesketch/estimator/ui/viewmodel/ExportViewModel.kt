@@ -18,6 +18,7 @@ import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.utils.BlueprintExportManager
 import com.tradesketch.estimator.utils.EstimateExportManager
@@ -83,11 +84,12 @@ class ExportViewModel @Inject constructor(
                     _uiState.update { it.copy(project = null, settings = settings, isLoading = false) }
                     return@collect
                 }
+                val fallbackType = defaultTakeoffTypeForTrade(settings.primaryTrade) ?: TakeoffType.DRYWALL
                 val selectedType = _uiState.value.selectedType
                     ?: project.takeoffSession.takeIf { it != ProjectTakeoffSession() }
                         ?.selectedScope
                         ?.toTakeoffType()
-                    ?: TakeoffType.DRYWALL
+                    ?: fallbackType
                 _uiState.update {
                     it.copy(
                         project = project,

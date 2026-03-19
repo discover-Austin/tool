@@ -4,7 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tradesketch.estimator.data.repository.ProjectRepository
-import com.tradesketch.estimator.domain.calc.RoomLoopDetector
+import com.tradesketch.estimator.data.repository.SettingsRepository
 import com.tradesketch.estimator.domain.model.BlueprintCommand
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.BlueprintDocumentCommand
@@ -15,6 +15,7 @@ import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Room
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
@@ -25,7 +26,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -34,17 +34,10 @@ import kotlinx.coroutines.sync.withLock
 @HiltViewModel
 class BlueprintEditorViewModel @Inject constructor(
     private val projectRepository: ProjectRepository,
+    private val settingsRepository: SettingsRepository,
     private val saveProjectUseCase: SaveProjectUseCase,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
-
-    companion object {
-        private const val WALL_SCOPE_TAG_PREFIX = "trade_scope:"
-        private const val FLOOR_TAG_PREFIX = "floor:"
-        private const val FLOOR_DEFAULT_TAG = "${FLOOR_TAG_PREFIX}0"
-        private const val FLOOR_LEGACY_LOWER_TAG = "${FLOOR_TAG_PREFIX}lower"
-        private const val FLOOR_LEGACY_UPPER_TAG = "${FLOOR_TAG_PREFIX}upper"
-    }
 
     private var currentProjectId: String? = savedStateHandle["projectId"]
     private var observerJob: Job? = null
@@ -68,38 +61,42 @@ class BlueprintEditorViewModel @Inject constructor(
         observerJob?.cancel()
         _uiState.update { it.copy(isLoading = true, error = null) }
         observerJob = viewModelScope.launch {
-            projectRepository.getProjects()
-                .map { projects -> projects.firstOrNull { it.id == projectId } }
-                .collect { project ->
-                    if (project == null) {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                error = "Project not found",
-                                project = null,
-                                document = null,
-                                canUndo = false,
-                                canRedo = false
-                            )
-                        }
-                    } else {
-                        val document = project.authoritativeBlueprint()
-                            .copy(projectId = project.id)
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                error = null,
-                                project = project,
-                                document = document,
-                                canUndo = undoStack.isNotEmpty(),
-                                canRedo = redoStack.isNotEmpty()
-                            )
-                        }
+            val projectUpdates = projectAndSettingsFlow(
+                projectRepository = projectRepository,
+                settingsRepository = settingsRepository,
+                projectId = projectId
+            )
+            projectUpdates.collect { (project, settings) ->
+                if (project == null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Project not found",
+                            project = null,
+                            document = null,
+                            settings = settings,
+                            canUndo = false,
+                            canRedo = false
+                        )
+                    }
+                } else {
+                    val document = project.authoritativeBlueprint()
+                        .copy(projectId = project.id)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = null,
+                            project = project,
+                            document = document,
+                            settings = settings,
+                            canUndo = undoStack.isNotEmpty(),
+                            canRedo = redoStack.isNotEmpty()
+                        )
                     }
                 }
+            }
         }
     }
-
     fun addWall(wall: WallSegment) {
         updateDocument(label = "Add Wall") { document ->
             val updatedWalls = document.walls + wall
@@ -152,7 +149,13 @@ class BlueprintEditorViewModel @Inject constructor(
 
     fun addOpening(opening: BlueprintOpening) {
         val document = _uiState.value.document ?: return
-        val sanitized = opening.normalized()
+        val currentScope = _uiState.value.project?.takeoffSession?.selectedScope
+        val linkedWallScope = document.walls
+            .firstOrNull { wall -> wall.id == opening.wallId }
+            ?.takeoffScopeOrNull()
+        val sanitized = opening.normalized().copy(
+            tags = opening.tags.withTradeScope(linkedWallScope ?: currentScope)
+        )
         val placementError = openingPlacementError(document = document, opening = sanitized)
         if (placementError != null) {
             _uiState.update { it.copy(error = placementError) }
@@ -181,9 +184,17 @@ class BlueprintEditorViewModel @Inject constructor(
 
     fun updateWallHeight(heightMm: Long) {
         val sanitizedHeight = heightMm.coerceAtLeast(1L)
+        val currentScope = _uiState.value.project?.takeoffSession?.selectedScope ?: return
         updateDocument(label = "Update Wall Height") { document ->
+            val scopedWallIds = document.scopedToTakeoffScope(currentScope)
+                .walls
+                .mapTo(mutableSetOf()) { wall -> wall.id }
             val updatedWalls = document.walls.map { wall ->
-                wall.copy(height = Millimeters(sanitizedHeight))
+                if (wall.id in scopedWallIds) {
+                    wall.copy(height = Millimeters(sanitizedHeight))
+                } else {
+                    wall
+                }
             }
             val sanitizedOpenings = sanitizeOpeningsForWalls(
                 walls = updatedWalls,
@@ -363,14 +374,21 @@ class BlueprintEditorViewModel @Inject constructor(
     }
 
     fun clearAllGeometry() {
+        val currentScope = _uiState.value.project?.takeoffSession?.selectedScope ?: return
         updateDocument(label = "Clear Blueprint") { document ->
-            if (document.walls.isEmpty() && document.openings.isEmpty() && document.rooms.isEmpty()) {
+            val scopedDocument = document.scopedToTakeoffScope(currentScope)
+            val scopedWallIds = scopedDocument.walls.mapTo(mutableSetOf()) { wall -> wall.id }
+            val scopedOpeningIds = scopedDocument.openings.mapTo(mutableSetOf()) { opening -> opening.id }
+            val scopedRoomIds = scopedDocument.rooms.mapTo(mutableSetOf()) { room -> room.id }
+            if (scopedWallIds.isEmpty() && scopedOpeningIds.isEmpty() && scopedRoomIds.isEmpty()) {
                 document
             } else {
                 document.copy(
-                    walls = emptyList(),
-                    openings = emptyList(),
-                    rooms = emptyList()
+                    walls = document.walls.filterNot { wall -> wall.id in scopedWallIds },
+                    openings = document.openings.filterNot { opening ->
+                        opening.id in scopedOpeningIds || opening.wallId in scopedWallIds
+                    },
+                    rooms = document.rooms.filterNot { room -> room.id in scopedRoomIds }
                 ).withUndoMeta(undoDepth = undoStack.size + 1)
             }
         }
@@ -424,7 +442,7 @@ class BlueprintEditorViewModel @Inject constructor(
     fun updateTakeoffScope(scope: TakeoffScope) {
         val previousScope = _uiState.value.project?.takeoffSession?.selectedScope ?: return
         if (previousScope != scope) {
-            stampUnscopedWalls(previousScope)
+            stampUnscopedGeometry(previousScope)
         }
         updateTakeoffSession(errorMessage = "Failed to update scope") { session ->
             if (session.selectedScope == scope) {
@@ -435,21 +453,9 @@ class BlueprintEditorViewModel @Inject constructor(
         }
     }
 
-    private fun stampUnscopedWalls(scope: TakeoffScope) {
-        val scopeTag = scope.wallScopeTag()
-        updateDocument(label = "Assign Wall Trade", trackUndo = false) { document ->
-            val updatedWalls = document.walls.map { wall ->
-                if (wall.tags.any { it.startsWith(WALL_SCOPE_TAG_PREFIX) }) {
-                    wall
-                } else {
-                    wall.copy(tags = wall.tags + scopeTag)
-                }
-            }
-            if (updatedWalls == document.walls) {
-                document
-            } else {
-                document.copy(walls = updatedWalls)
-            }
+    private fun stampUnscopedGeometry(scope: TakeoffScope) {
+        updateDocument(label = "Assign Trade Scope", trackUndo = false) { document ->
+            document.assignUnscopedGeometryTo(scope)
         }
     }
 
@@ -548,94 +554,14 @@ class BlueprintEditorViewModel @Inject constructor(
         }
     }
 
-    private fun mergeRoomNames(existing: List<Room>, detected: List<Room>): List<Room> {
-        if (detected.isEmpty()) return existing
-        val namesBySignature = existing.associateBy(
-            keySelector = { room -> signature(room) },
-            valueTransform = { room -> room.name }
-        )
-        return detected.mapIndexed { index, room ->
-            val signature = signature(room)
-            val existingName = namesBySignature[signature]
-            room.copy(name = existingName ?: "Room ${index + 1}")
-        }
-    }
-
     private fun detectRoomsByFloor(
         walls: List<WallSegment>,
         existingRooms: List<Room>
     ): List<Room> {
-        if (walls.isEmpty()) {
-            // Preserve manually defined rooms (slabs/beds/custom spaces) when no wall loops are present.
-            return existingRooms
-                .filterNot { it.isAutoDetectedRoom() }
-                .map { room -> room.copy(tags = room.tags.withFloorTag(room.floorTag())) }
-        }
-        val existingByFloor = existingRooms.groupBy { room -> room.floorTag() }
-        val wallsByFloor = walls.groupBy { wall -> wall.floorTag() }
-        val allFloorTags = (existingByFloor.keys + wallsByFloor.keys).toSortedSet()
-        return allFloorTags
-            .flatMap { floorTag ->
-                val floorWalls = wallsByFloor[floorTag].orEmpty()
-                val floorExisting = existingByFloor[floorTag].orEmpty()
-                val preservedManualRooms = floorExisting
-                    .filterNot { room -> room.isAutoDetectedRoom() }
-                    .map { room -> room.copy(tags = room.tags.withFloorTag(floorTag)) }
-                if (floorWalls.isEmpty()) {
-                    return@flatMap preservedManualRooms
-                }
-                val detected = RoomLoopDetector.detectRooms(floorWalls)
-                if (detected.isEmpty()) {
-                    preservedManualRooms
-                } else {
-                    val detectedWithMetadata = mergeRoomNames(existing = floorExisting, detected = detected)
-                        .map { detectedRoom ->
-                            val existingMatch = floorExisting.firstOrNull { known ->
-                                known.isAutoDetectedRoom() && signature(known) == signature(detectedRoom)
-                            }
-                            detectedRoom.copy(
-                                tags = (existingMatch?.tags ?: detectedRoom.tags).withFloorTag(floorTag),
-                                ceiling = existingMatch?.ceiling ?: detectedRoom.ceiling,
-                                overrides = existingMatch?.overrides ?: detectedRoom.overrides
-                            )
-                        }
-                    preservedManualRooms + detectedWithMetadata
-                }
-            }
-    }
-
-    private fun signature(room: Room): String {
-        val sorted = room.polygon
-            .sortedWith(compareBy<com.tradesketch.estimator.domain.model.PointMm> { it.x }.thenBy { it.y })
-        return sorted.joinToString(separator = "|") { "${it.x}:${it.y}" }
-    }
-
-    private fun WallSegment.floorTag(): String {
-        return canonicalFloorTag(tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) })
-    }
-
-    private fun Room.floorTag(): String {
-        return canonicalFloorTag(tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) })
-    }
-
-    private fun Set<String>.withFloorTag(floorTag: String): Set<String> {
-        return filterNot { tag -> tag.startsWith(FLOOR_TAG_PREFIX) }
-            .toSet() + canonicalFloorTag(floorTag)
-    }
-
-    private fun canonicalFloorTag(rawTag: String?): String {
-        val normalized = rawTag?.trim() ?: return FLOOR_DEFAULT_TAG
-        if (!normalized.startsWith(FLOOR_TAG_PREFIX)) return FLOOR_DEFAULT_TAG
-        if (normalized.equals(FLOOR_LEGACY_LOWER_TAG, ignoreCase = true)) return FLOOR_DEFAULT_TAG
-        if (normalized.equals(FLOOR_LEGACY_UPPER_TAG, ignoreCase = true)) return "${FLOOR_TAG_PREFIX}1"
-        val numeric = normalized.removePrefix(FLOOR_TAG_PREFIX).toIntOrNull() ?: return FLOOR_DEFAULT_TAG
-        return "${FLOOR_TAG_PREFIX}$numeric"
-    }
-
-    private fun Room.isAutoDetectedRoom(): Boolean {
-        return wallSegmentIds.isNotEmpty() ||
-            wallLoopRef.isNotEmpty() ||
-            id.startsWith("room-auto-")
+        return detectRoomsByFloorAndScope(
+            walls = walls,
+            existingRooms = existingRooms
+        )
     }
 
     private fun openingPlacementError(
@@ -704,12 +630,6 @@ class BlueprintEditorViewModel @Inject constructor(
         )
     }
 
-    private fun TakeoffScope.wallScopeTag(): String = when (this) {
-        TakeoffScope.DRYWALL -> "${WALL_SCOPE_TAG_PREFIX}drywall"
-        TakeoffScope.CONCRETE -> "${WALL_SCOPE_TAG_PREFIX}concrete"
-        TakeoffScope.GRAVEL_MULCH -> "${WALL_SCOPE_TAG_PREFIX}gravel_mulch"
-        TakeoffScope.PAINT -> "${WALL_SCOPE_TAG_PREFIX}paint"
-    }
 }
 
 enum class BlueprintDraftTool {
@@ -727,6 +647,7 @@ enum class BlueprintDraftTool {
 data class BlueprintEditorUiState(
     val project: Project? = null,
     val document: BlueprintDocument? = null,
+    val settings: Settings = Settings.DEFAULT,
     val activeTool: BlueprintDraftTool = BlueprintDraftTool.DRAW_WALL,
     val selectedWallId: String? = null,
     val selectedOpeningId: String? = null,
@@ -736,3 +657,6 @@ data class BlueprintEditorUiState(
     val canRedo: Boolean = false,
     val error: String? = null
 )
+
+
+
