@@ -70,6 +70,12 @@ internal data class LiveScopeQuantity(
     val value: String
 )
 
+internal data class CircleSelectionInfo(
+    val radiusMm: Long,
+    val diameterMm: Long,
+    val segmentCount: Int
+)
+
 internal fun openingPreset(
     name: String,
     type: OpeningType,
