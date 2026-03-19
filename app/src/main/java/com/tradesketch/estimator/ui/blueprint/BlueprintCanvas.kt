@@ -143,6 +143,28 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
+private val CORNER_ANGLE_HIGHLIGHT_LENGTH_MM = Millimeters.fromFeet(3.0).value
+private const val CORNER_ANGLE_HIGHLIGHT_GLOW_WIDTH_PX = 12f
+private const val CORNER_ANGLE_HIGHLIGHT_CORE_WIDTH_PX = 4.6f
+private val CIRCLE_GUIDE_RING_COLOR = Color(0xFF6CE8FF)
+private val CIRCLE_GUIDE_CORE_COLOR = Color(0xFFB5FBFF)
+private val CIRCLE_SEGMENT_ACCENT_COLOR = Color(0xFF7EE6F4)
+private const val CIRCLE_GUIDE_CHIP_TEXT_SP = 9.4f
+private const val CIRCLE_GUIDE_CHIP_OFFSET_PX = 18f
+private val CORNER_ANGLE_BUCKET_COLORS = mapOf(
+    15 to Color(0xFF87F07F),
+    30 to Color(0xFF4FE6C8),
+    45 to Color(0xFF73D9FF),
+    60 to Color(0xFF7FAEFF),
+    75 to Color(0xFFC58FFF),
+    90 to Color(0xFFFFD05E),
+    105 to Color(0xFFFFB06E),
+    120 to Color(0xFFFF9468),
+    135 to Color(0xFFFF84C3),
+    150 to Color(0xFFE88FFF),
+    165 to Color(0xFFFF98C5)
+)
+
 @Composable
 internal fun BlueprintCanvas(
     modifier: Modifier = Modifier,
@@ -547,6 +569,7 @@ internal fun BlueprintCanvas(
             val wallColor = wall.scopeFromTag()?.wallColor() ?: scopeWallColor
             val color = if (isSelected) GEOMETRY_SELECTION_COLOR else wallColor
             val parallelMatch = wallHasParallelLengthMatch(wall, document.walls)
+            val isCircleSegment = wall.tags.contains(CURVE_SHAPE_CIRCLE_TAG)
             val strokeWidth = if (isSelected) 6.4f else if (parallelMatch) 5.2f else 4.4f
             val wallStartScreen = worldToScreen(wall.start)
             val wallEndScreen = worldToScreen(wall.end)
@@ -558,6 +581,13 @@ internal fun BlueprintCanvas(
                 selected = isSelected,
                 pulse = selectionPulse
             )
+            if (isCircleSegment) {
+                drawCircleWallAccent(
+                    start = wallStartScreen,
+                    end = wallEndScreen,
+                    selected = isSelected
+                )
+            }
             wallLengthLabels += WallLengthLabelSpec(
                 start = wallStartScreen,
                 end = wallEndScreen,
@@ -697,7 +727,19 @@ internal fun BlueprintCanvas(
                     selected = true,
                     pulse = snapPulse
                 )
+                drawCircleWallAccent(
+                    start = draftStart,
+                    end = draftEnd,
+                    selected = true,
+                    accentAlpha = 0.42f + (0.18f * snapPulse)
+                )
             }
+        }
+        cornerAngleHints.forEach { hint ->
+            drawCornerAngleLegHighlight(
+                hint = hint,
+                worldToScreen = ::worldToScreen
+            )
         }
         rightAngleHints.forEach { hint ->
             drawRightAngleHint(
@@ -711,6 +753,15 @@ internal fun BlueprintCanvas(
                 hint = hint,
                 worldToScreen = ::worldToScreen,
                 scale = scale
+            )
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null) {
+            drawCircleDraftGuide(
+                center = circleCenter,
+                edge = circlePreviewEdge,
+                worldToScreen = ::worldToScreen,
+                useMetric = useMetric,
+                pulse = snapPulse
             )
         }
         wallLengthLabels.forEach { label ->
@@ -1698,7 +1749,10 @@ internal fun DrawScope.drawRightAngleHint(
     val legAScreen = worldToScreen(legA)
     val legBScreen = worldToScreen(legB)
     val boxScreen = worldToScreen(boxCorner)
-    val color = if (hint.highlighted) Color(0xFFFFCD86) else Color(0xFF8FD0FF)
+    val color = cornerAngleAccentColor(
+        angleDegrees = 90.0,
+        highlighted = hint.highlighted
+    )
     val stroke = if (hint.highlighted) 2.2f else 1.7f
     drawLine(
         color = color,
@@ -1753,7 +1807,10 @@ internal fun DrawScope.drawCornerAngleLabel(
     ) ?: return
     val labelScreen = worldToScreen(labelWorld)
     val labelText = formatAngleLabel(hint.angleDegrees)
-    val textColor = if (hint.highlighted) Color(0xFFFFD08A) else Color(0xFFAFC6DF)
+    val textColor = cornerAngleAccentColor(
+        angleDegrees = hint.angleDegrees,
+        highlighted = hint.highlighted
+    )
     val textSizePx = RIGHT_ANGLE_LABEL_TEXT_SP * density
     drawCircle(
         color = Color(0x43081527),
@@ -1773,6 +1830,191 @@ internal fun DrawScope.drawCornerAngleLabel(
             textSize = textSizePx
         }
         drawText(labelText, labelScreen.x, labelScreen.y + (textSizePx * 0.34f), textPaint)
+    }
+}
+
+internal fun DrawScope.drawCornerAngleLegHighlight(
+    hint: CornerAngleHint,
+    worldToScreen: (PointMm) -> Offset
+) {
+    val legA = unitStepFrom(hint.corner, hint.legA, CORNER_ANGLE_HIGHLIGHT_LENGTH_MM) ?: return
+    val legB = unitStepFrom(hint.corner, hint.legB, CORNER_ANGLE_HIGHLIGHT_LENGTH_MM) ?: return
+    val color = cornerAngleAccentColor(
+        angleDegrees = hint.angleDegrees,
+        highlighted = hint.highlighted
+    )
+    val glowAlpha = if (hint.highlighted) 0.34f else 0.22f
+    val coreAlpha = if (hint.highlighted) 0.96f else 0.74f
+    val cornerScreen = worldToScreen(hint.corner)
+    val legAScreen = worldToScreen(legA)
+    val legBScreen = worldToScreen(legB)
+    listOf(legAScreen, legBScreen).forEach { endpoint ->
+        drawLine(
+            color = color.copy(alpha = glowAlpha),
+            start = cornerScreen,
+            end = endpoint,
+            strokeWidth = CORNER_ANGLE_HIGHLIGHT_GLOW_WIDTH_PX,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color.copy(alpha = coreAlpha),
+            start = cornerScreen,
+            end = endpoint,
+            strokeWidth = CORNER_ANGLE_HIGHLIGHT_CORE_WIDTH_PX,
+            cap = StrokeCap.Round
+        )
+    }
+    drawCircle(
+        color = color.copy(alpha = if (hint.highlighted) 0.9f else 0.72f),
+        radius = if (hint.highlighted) 4.2f else 3.6f,
+        center = cornerScreen
+    )
+}
+
+internal fun DrawScope.drawCircleWallAccent(
+    start: Offset,
+    end: Offset,
+    selected: Boolean,
+    accentAlpha: Float = if (selected) 0.30f else 0.18f
+) {
+    drawLine(
+        color = CIRCLE_SEGMENT_ACCENT_COLOR.copy(alpha = accentAlpha),
+        start = start,
+        end = end,
+        strokeWidth = if (selected) 8.4f else 6.4f,
+        cap = StrokeCap.Square
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = if (selected) 0.76f else 0.52f),
+        start = start,
+        end = end,
+        strokeWidth = if (selected) 1.8f else 1.4f,
+        cap = StrokeCap.Square
+    )
+}
+
+internal fun DrawScope.drawCircleDraftGuide(
+    center: PointMm,
+    edge: PointMm,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    val radiusMm = BlueprintSnapMath.distanceMillimeters(center, edge)
+    if (radiusMm < 35L) return
+    val centerScreen = worldToScreen(center)
+    val edgeScreen = worldToScreen(edge)
+    val radiusPx = hypot(
+        (edgeScreen.x - centerScreen.x).toDouble(),
+        (edgeScreen.y - centerScreen.y).toDouble()
+    ).toFloat()
+    val dx = edgeScreen.x - centerScreen.x
+    val dy = edgeScreen.y - centerScreen.y
+    val lineMagnitude = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val nx = -dy / lineMagnitude
+    val ny = dx / lineMagnitude
+    val midpoint = Offset(
+        x = (centerScreen.x + edgeScreen.x) / 2f,
+        y = (centerScreen.y + edgeScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = midpoint.x + (nx * CIRCLE_GUIDE_CHIP_OFFSET_PX),
+        y = midpoint.y + (ny * CIRCLE_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = buildString {
+        append("R ")
+        append(formatLengthDisplay(mm = radiusMm, useMetric = useMetric))
+        append(" | D ")
+        append(formatLengthDisplay(mm = radiusMm * 2L, useMetric = useMetric))
+    }
+
+    drawCircle(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.16f + (0.10f * pulse)),
+        radius = radiusPx + (3.6f * pulse),
+        center = centerScreen,
+        style = Stroke(width = 2.2f)
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.30f + (0.18f * pulse)),
+        start = centerScreen,
+        end = edgeScreen,
+        strokeWidth = 8.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.86f),
+        start = centerScreen,
+        end = edgeScreen,
+        strokeWidth = 2.4f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.92f),
+        radius = 4.8f,
+        center = centerScreen
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.84f),
+        radius = 6.4f + pulse,
+        center = centerScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.78f),
+        radius = 4.2f,
+        center = edgeScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = CIRCLE_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = CIRCLE_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.56f
+        val padYTop = textSizePx * 0.96f
+        val padYBottom = textSizePx * 0.34f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.56f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xDE071522).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.86f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0x8C07131F).toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+        }
+        drawText(labelText, labelPoint.x + 0.6f, baselineY + 0.6f, shadowPaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+private fun cornerAngleAccentColor(
+    angleDegrees: Double,
+    highlighted: Boolean
+): Color {
+    val snappedBucket = ((angleDegrees / 15.0).roundToInt() * 15).coerceIn(15, 165)
+    val base = CORNER_ANGLE_BUCKET_COLORS[snappedBucket] ?: Color(0xFFAFC6DF)
+    return if (highlighted) {
+        base.copy(alpha = 0.98f)
+    } else {
+        base.copy(alpha = 0.84f)
     }
 }
 

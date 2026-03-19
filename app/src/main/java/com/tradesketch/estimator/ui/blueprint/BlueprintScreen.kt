@@ -1457,37 +1457,21 @@ fun BlueprintScreen(
             }
         }
     }
-    val sharedBelowHistoryContent: @Composable () -> Unit = {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            GridScaleBadge(
-                label = gridScaleLabel,
-                onClick = {
-                    showGridScaleEditor = !showGridScaleEditor
-                    if (showGridScaleEditor) {
-                        val currentStepFeet = snapSettings.gridStepFeet.coerceIn(gridScaleMinFeet, gridScaleMaxFeet)
-                        gridScaleInput = if (appSettings.useMetric) {
-                            val centimeters = Millimeters.fromFeet(currentStepFeet).value / 10.0
-                            "${formatScaleCentimetersValue(centimeters)}cm"
-                        } else {
-                            formatFeetInchesPrime(currentStepFeet)
-                        }
-                        syncGridScaleAssistInputs(currentStepFeet)
-                    }
-                },
+    val coordinateOverlayWorldPoint = if (dualJoysticksEnabled) {
+        joystickCursorWorldPoint
+    } else {
+        openingPointerWorld
+    }
+    val centerCoordinateOverlay: (@Composable () -> Unit)? = coordinateOverlayWorldPoint?.let { worldPoint ->
+        {
+            CursorCoordinateOverlay(
+                worldPoint = worldPoint,
+                showRotate = movingWallPreview != null,
+                onRotate = rotatePickedUpWallClockwise,
+                useMetric = appSettings.useMetric,
                 compact = true,
-                modifier = Modifier.onGloballyPositioned {
-                    gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
-                }
-            )
-            FloorCompactBadge(
-                level = selectedFloor,
-                onLowerFloor = { selectedFloor -= 1 },
-                onUpperFloor = { selectedFloor += 1 },
-                modifier = Modifier.onGloballyPositioned {
-                    floorSwitcherBounds = Rect(it.positionInRoot(), it.size.toSize())
+                rotateButtonModifier = Modifier.onGloballyPositioned {
+                    wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
                 }
             )
         }
@@ -1829,18 +1813,17 @@ fun BlueprintScreen(
                             gridScaleBadgeBounds = Rect(it.positionInRoot(), it.size.toSize())
                         }
                 )
-            } else {
-                CursorCoordinateOverlay(
-                    worldPoint = joystickCursorWorldPoint,
-                    showRotate = movingWallPreview != null,
-                    onRotate = rotatePickedUpWallClockwise,
-                    useMetric = appSettings.useMetric,
-                    compact = true,
-                    rotateButtonModifier = Modifier.onGloballyPositioned {
-                        wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
-                    }
-                )
             }
+
+            ScopeSelector(
+                scope = currentScope,
+                onChangeScope = viewModel::updateTakeoffScope,
+                minWidth = if (compactHeightWindow) 70.dp else 78.dp,
+                minHeight = if (compactHeightWindow) 32.dp else 36.dp,
+                horizontalPadding = if (compactHeightWindow) 7.dp else 8.dp,
+                iconSize = if (compactHeightWindow) 11.dp else 12.dp,
+                labelFontSize = if (compactHeightWindow) 9.5.sp else 10.5.sp
+            )
 
             if (activeOpeningPanel != null) {
                 OpeningAddonsPanel(
@@ -2183,6 +2166,27 @@ fun BlueprintScreen(
                 BlueprintDraftTool.DRAW_BOX
             }
         }
+        val toggleCircleMode = {
+            pendingGrabSelection = false
+            movingWallPreview = null
+            drawingStart = null
+            drawingPreview = null
+            resetCurveDraft()
+            resetCircleDraft()
+            chainOrigin = null
+            restartLineFromNearestWallStart = false
+            boxStart = null
+            boxPreview = null
+            boxRotationRadians = 0.0
+            activeOpeningPanel = null
+            showParams = false
+            showRailHelp = false
+            tool = if (tool == BlueprintDraftTool.DRAW_CIRCLE) {
+                BlueprintDraftTool.DRAW_WALL
+            } else {
+                BlueprintDraftTool.DRAW_CIRCLE
+            }
+        }
         val toggleDoorsPanel = {
             pendingGrabSelection = false
             val opening = activeOpeningPanel != OpeningPanelType.DOORS
@@ -2246,20 +2250,20 @@ fun BlueprintScreen(
             canDeleteSelection = selectedWall != null || selectedOpening != null,
             detachedWalls = detachedWalls,
             boxModeEnabled = tool == BlueprintDraftTool.DRAW_BOX,
-            scope = currentScope,
+            circleModeEnabled = tool == BlueprintDraftTool.DRAW_CIRCLE,
             activePanel = activeOpeningPanel,
             paramsExpanded = showParams,
             onToggleDetached = {
                 detachedWalls = !detachedWalls
             },
             onToggleBoxMode = toggleBoxMode,
+            onToggleCircleMode = toggleCircleMode,
             onDeleteSelection = {
                 when {
                     selectedOpening != null -> viewModel.deleteSelectedOpening()
                     selectedWall != null -> viewModel.deleteSelectedWall()
                 }
             },
-            onChangeScope = viewModel::updateTakeoffScope,
             onToggleDoors = toggleDoorsPanel,
             onToggleWindows = toggleWindowsPanel,
             onToggleStairUp = toggleStairUpPanel,
@@ -2310,6 +2314,7 @@ fun BlueprintScreen(
                 onZoomIn = handleZoomIn,
                 onZoomOut = handleZoomOut,
                 controlStateLabel = controlStateLabel,
+                belowHistoryContent = centerCoordinateOverlay,
                 leftPadModifier = Modifier.onGloballyPositioned {
                     tutorialLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
@@ -2437,6 +2442,7 @@ fun BlueprintScreen(
                 onZoomIn = handleZoomIn,
                 onZoomOut = handleZoomOut,
                 controlStateLabel = controlStateLabel,
+                belowHistoryContent = centerCoordinateOverlay,
                 leftToolsModifier = Modifier.onGloballyPositioned {
                     tutorialLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
@@ -2470,25 +2476,6 @@ fun BlueprintScreen(
                     .zIndex(6f)
             )
         }
-        if (!dualJoysticksEnabled) {
-            CursorCoordinateOverlay(
-                worldPoint = joystickCursorWorldPoint,
-                showRotate = movingWallPreview != null,
-                onRotate = rotatePickedUpWallClockwise,
-                useMetric = appSettings.useMetric,
-                rotateButtonModifier = Modifier.onGloballyPositioned {
-                    wallRotateButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        end = 12.dp,
-                        bottom = helpBottomPadding + 4.dp
-                    )
-                    .navigationBarsPadding()
-            )
-        }
-
         if (dualJoysticksEnabled) {
             GridScaleEditorPanel(
                 expanded = showGridScaleEditor,
@@ -2928,6 +2915,7 @@ private const val ARC_PREVIEW_TARGET_SEGMENT_MM = 240.0
 private const val ARC_COMMIT_TARGET_SEGMENT_MM = 420.0
 private const val CIRCLE_PREVIEW_TARGET_SEGMENT_MM = 210.0
 private const val CIRCLE_COMMIT_TARGET_SEGMENT_MM = 320.0
+private const val MIN_CIRCLE_SEGMENTS = 12
 private const val MAX_PREVIEW_CURVE_SEGMENTS = 40
 private const val MAX_COMMIT_CURVE_SEGMENTS = 28
 
@@ -3004,10 +2992,9 @@ internal fun buildDraftCirclePreviewWalls(
     val pointChain = buildCirclePointChain(
         center = center,
         edge = edge,
-        segmentCount = estimateCurveSegmentCount(
+        segmentCount = estimateCircleSegmentCount(
             curveLengthMm = approximateCircleCircumferenceMillimeters(center, edge),
             targetSegmentMm = CIRCLE_PREVIEW_TARGET_SEGMENT_MM,
-            minSegments = 10,
             maxSegments = MAX_PREVIEW_CURVE_SEGMENTS
         )
     )
@@ -3030,10 +3017,9 @@ internal fun buildDraftCircleWalls(
     val pointChain = buildCirclePointChain(
         center = center,
         edge = edge,
-        segmentCount = estimateCurveSegmentCount(
+        segmentCount = estimateCircleSegmentCount(
             curveLengthMm = approximateCircleCircumferenceMillimeters(center, edge),
             targetSegmentMm = CIRCLE_COMMIT_TARGET_SEGMENT_MM,
-            minSegments = 10,
             maxSegments = MAX_COMMIT_CURVE_SEGMENTS
         )
     )
@@ -3083,11 +3069,8 @@ private fun buildCirclePointChain(
         (edge.y - center.y).toDouble()
     )
     if (radiusMm < MIN_GENERATED_CURVE_SEGMENT_MM.toDouble()) return emptyList()
-    val startAngleRadians = atan2(
-        (edge.y - center.y).toDouble(),
-        (edge.x - center.x).toDouble()
-    )
-    val safeSegments = segmentCount.coerceIn(6, MAX_PREVIEW_CURVE_SEGMENTS)
+    val startAngleRadians = Math.PI / 2.0
+    val safeSegments = snapCircleSegmentCount(segmentCount, MAX_PREVIEW_CURVE_SEGMENTS)
     return (0 until safeSegments).map { index ->
         val angle = startAngleRadians + ((Math.PI * 2.0 * index) / safeSegments.toDouble())
         PointMm(
@@ -3138,6 +3121,29 @@ private fun estimateCurveSegmentCount(
     return (curveLengthMm / targetSegmentMm)
         .roundToInt()
         .coerceIn(minSegments, maxSegments)
+}
+
+private fun estimateCircleSegmentCount(
+    curveLengthMm: Double,
+    targetSegmentMm: Double,
+    maxSegments: Int
+): Int {
+    val estimated = estimateCurveSegmentCount(
+        curveLengthMm = curveLengthMm,
+        targetSegmentMm = targetSegmentMm,
+        minSegments = MIN_CIRCLE_SEGMENTS,
+        maxSegments = maxSegments
+    )
+    return snapCircleSegmentCount(estimated, maxSegments)
+}
+
+private fun snapCircleSegmentCount(
+    segmentCount: Int,
+    maxSegments: Int
+): Int {
+    val safeMax = (maxSegments / 4).coerceAtLeast(MIN_CIRCLE_SEGMENTS / 4) * 4
+    val clamped = segmentCount.coerceIn(MIN_CIRCLE_SEGMENTS, safeMax)
+    return ((clamped + 2) / 4) * 4
 }
 
 private fun buildPreviewWallsFromPointChain(

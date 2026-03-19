@@ -37,9 +37,28 @@ class BlueprintCurveGeometryTest {
             edge = edge
         )
 
-        assertTrue(previewWalls.size >= 10)
-        assertEquals(edge, previewWalls.first().start)
+        assertTrue(previewWalls.size >= 12)
+        assertEquals(0, previewWalls.size % 4)
+        assertEquals(PointMm(0, 1_200), previewWalls.first().start)
         assertEquals(previewWalls.first().start, previewWalls.last().end)
+    }
+
+    @Test
+    fun `circle preview keeps a repeatable orientation regardless of tapped radius direction`() {
+        val center = PointMm(0, 0)
+
+        val eastPreview = buildDraftCirclePreviewWalls(
+            center = center,
+            edge = PointMm(1_200, 0)
+        )
+        val northPreview = buildDraftCirclePreviewWalls(
+            center = center,
+            edge = PointMm(0, 1_200)
+        )
+
+        assertEquals(eastPreview.size, northPreview.size)
+        assertEquals(eastPreview.first().start, northPreview.first().start)
+        assertEquals(PointMm(0, 1_200), eastPreview.first().start)
     }
 
     @Test

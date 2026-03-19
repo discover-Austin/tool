@@ -668,67 +668,76 @@ private fun WorkspaceShell(
             }
 
             if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
-                Row(
+                val blueprintHeaderLanePadding = if (compactBlueprintHud) 100.dp else 128.dp
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(x = if (compactBlueprintHud) 12.dp else 0.dp)
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(if (compactBlueprintHud) 6.dp else 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxWidth()
+                        .padding(
+                            start = blueprintHeaderLanePadding,
+                            end = blueprintHeaderLanePadding,
+                            top = 8.dp
+                        ),
+                    contentAlignment = Alignment.TopCenter
                 ) {
-                    Surface(
-                        modifier = Modifier
-                            .widthIn(
-                                min = if (compactBlueprintHud) 118.dp else 136.dp,
-                                max = if (compactBlueprintHud) 148.dp else 184.dp
-                            )
-                            .height(if (compactBlueprintHud) 46.dp else 50.dp),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
-                        shadowElevation = 8.dp
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(if (compactBlueprintHud) 6.dp else 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = projectNameDraft,
-                            onValueChange = { projectNameDraft = it },
-                            placeholder = {
-                                Text(
-                                    stringResource(R.string.project_name_label),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
+                        Surface(
+                            modifier = Modifier
+                                .widthIn(
+                                    min = if (compactBlueprintHud) 108.dp else 132.dp,
+                                    max = if (compactBlueprintHud) 136.dp else 172.dp
                                 )
-                            },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { saveActiveProject() }),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                disabledContainerColor = Color.Transparent,
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent
-                            ),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    Surface(
-                        onClick = saveActiveProject,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                        border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
-                        shadowElevation = 6.dp,
-                        modifier = Modifier.size(if (compactBlueprintHud) 36.dp else 40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Save,
-                                contentDescription = stringResource(R.string.save_project),
-                                tint = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(if (compactBlueprintHud) 16.dp else 18.dp)
+                                .height(if (compactBlueprintHud) 52.dp else 56.dp),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                            border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
+                            shadowElevation = 8.dp
+                        ) {
+                            OutlinedTextField(
+                                value = projectNameDraft,
+                                onValueChange = { projectNameDraft = it },
+                                placeholder = {
+                                    Text(
+                                        stringResource(R.string.project_name_label),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
+                                    )
+                                },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { saveActiveProject() }),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent
+                                ),
+                                modifier = Modifier.fillMaxSize()
                             )
+                        }
+                        Surface(
+                            onClick = saveActiveProject,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                            border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
+                            shadowElevation = 6.dp,
+                            modifier = Modifier.size(if (compactBlueprintHud) 34.dp else 38.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Save,
+                                    contentDescription = stringResource(R.string.save_project),
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(if (compactBlueprintHud) 15.dp else 17.dp)
+                                )
+                            }
                         }
                     }
                 }
