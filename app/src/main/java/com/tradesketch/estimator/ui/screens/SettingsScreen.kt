@@ -38,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.BuildConfig
 import com.tradesketch.estimator.domain.model.PrimaryTrade
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
@@ -166,10 +167,10 @@ fun SettingsScreen(
             item {
                 TitledSectionCard(
                     title = "Help & Onboarding",
-                    subtitle = "Short walkthrough for the core workflow."
+                    subtitle = "Replay the blueprint control tour for the current input mode."
                 ) {
                     Text(
-                        text = "Need a refresher? Launch the skippable tutorial session anytime.",
+                        text = "Need a refresher? Replay the control tour to spotlight each blueprint control with brief guidance.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -181,188 +182,19 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Replay Tutorial")
+                        Text("Replay Control Tour")
                     }
                 }
             }
         }
 
         item {
-            TitledSectionCard(
-                title = "Blueprint Controls",
-                subtitle = "Snap and joystick behavior for the Blueprint tab."
-            ) {
-                Text(
-                    text = "Snap Toggles",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = uiState.settings.blueprintSnapGridEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintSnapDefaults(gridEnabled = !uiState.settings.blueprintSnapGridEnabled)
-                        },
-                        label = { Text("Grid") }
-                    )
-                    FilterChip(
-                        selected = uiState.settings.blueprintSnapAngleEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintSnapDefaults(angleEnabled = !uiState.settings.blueprintSnapAngleEnabled)
-                        },
-                        label = { Text("Angle") }
-                    )
-                    FilterChip(
-                        selected = uiState.settings.blueprintSnapEndpointEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintSnapDefaults(endpointEnabled = !uiState.settings.blueprintSnapEndpointEnabled)
-                        },
-                        label = { Text("Endpoints") }
-                    )
-                    FilterChip(
-                        selected = uiState.settings.blueprintSnapMidpointEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintSnapDefaults(midpointEnabled = !uiState.settings.blueprintSnapMidpointEnabled)
-                        },
-                        label = { Text("Midpoints") }
-                    )
-                    FilterChip(
-                        selected = uiState.settings.blueprintSnapClosureEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintSnapDefaults(closureEnabled = !uiState.settings.blueprintSnapClosureEnabled)
-                        },
-                        label = { Text("Room closure") }
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Snap sensitivity: ${"%.2f".format(uiState.settings.blueprintSnapThresholdFeet)} ft",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = uiState.settings.blueprintSnapThresholdFeet.coerceIn(0.2, 2.0).toFloat(),
-                    onValueChange = {
-                        viewModel.updateBlueprintSnapDefaults(
-                            thresholdFeet = it.coerceIn(0.2f, 2.0f).toDouble()
-                        )
-                    },
-                    valueRange = 0.2f..2.0f
-                )
-                Text(
-                    text = "Lower values require closer alignment. Higher values snap more aggressively.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Controls",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = uiState.settings.blueprintDualJoysticksEnabled,
-                        onClick = {
-                            haptics.tap()
-                            viewModel.updateBlueprintControlDefaults(
-                                dualJoysticksEnabled = !uiState.settings.blueprintDualJoysticksEnabled
-                            )
-                        },
-                        label = { Text("Dual joysticks") }
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Cursor blip", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "Shows the draft cursor blip and lights it up when a line locks into existing geometry.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.settings.blueprintCursorVisible,
-                        onCheckedChange = {
-                            haptics.tap()
-                            viewModel.updateBlueprintControlDefaults(cursorVisible = it)
-                        }
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Blip size: ${(uiState.settings.blueprintCursorScale * 100f).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = uiState.settings.blueprintCursorScale.coerceIn(0.75f, 2.1f),
-                    onValueChange = {
-                        viewModel.updateBlueprintControlDefaults(
-                            cursorScale = it.coerceIn(0.75f, 2.1f)
-                        )
-                    },
-                    valueRange = 0.75f..2.1f,
-                    steps = 12,
-                    enabled = uiState.settings.blueprintCursorVisible
-                )
-                Text(
-                    text = "Smaller keeps the blueprint cleaner. Larger makes the joystick aim marker easier to track.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Joystick sensitivity: ${"%.2f".format(uiState.settings.blueprintJoystickSensitivity)}x",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = uiState.settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
-                    onValueChange = {
-                        viewModel.updateBlueprintControlDefaults(
-                            joystickSensitivity = it.coerceIn(0.55f, 2.2f)
-                        )
-                    },
-                    valueRange = 0.55f..2.2f,
-                    steps = 16
-                )
-                Text(
-                    text = "Joystick deadzone: ${(uiState.settings.blueprintJoystickDeadzone * 100f).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Slider(
-                    value = uiState.settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
-                    onValueChange = {
-                        viewModel.updateBlueprintControlDefaults(
-                            joystickDeadzone = it.coerceIn(0.08f, 0.30f)
-                        )
-                    },
-                    valueRange = 0.08f..0.30f,
-                    steps = 10
-                )
-            }
+            BlueprintControlsCard(
+                settings = uiState.settings,
+                onUpdateBlueprintSnapDefaults = viewModel::updateBlueprintSnapDefaults,
+                onUpdateBlueprintControlDefaults = viewModel::updateBlueprintControlDefaults,
+                onHapticTap = haptics::tap
+            )
         }
 
         item {
@@ -610,6 +442,268 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+internal fun BlueprintControlsCard(
+    settings: Settings,
+    onUpdateBlueprintSnapDefaults: (
+        Boolean?,
+        Boolean?,
+        Boolean?,
+        Boolean?,
+        Boolean?,
+        Double?
+    ) -> Unit,
+    onUpdateBlueprintControlDefaults: (
+        Boolean?,
+        Float?,
+        Float?,
+        Boolean?,
+        Float?
+    ) -> Unit,
+    onHapticTap: () -> Unit = {}
+) {
+    TitledSectionCard(
+        title = "Blueprint Controls",
+        subtitle = "Snap and control-mode defaults for the Blueprint tab."
+    ) {
+        Text(
+            text = "Snap Toggles",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = settings.blueprintSnapGridEnabled,
+                onClick = {
+                    onHapticTap()
+                    onUpdateBlueprintSnapDefaults(
+                        !settings.blueprintSnapGridEnabled,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                    )
+                },
+                label = { Text("Grid") }
+            )
+            FilterChip(
+                selected = settings.blueprintSnapAngleEnabled,
+                onClick = {
+                    onHapticTap()
+                    onUpdateBlueprintSnapDefaults(
+                        null,
+                        null,
+                        null,
+                        !settings.blueprintSnapAngleEnabled,
+                        null,
+                        null
+                    )
+                },
+                label = { Text("Angle") }
+            )
+            FilterChip(
+                selected = settings.blueprintSnapEndpointEnabled,
+                onClick = {
+                    onHapticTap()
+                    onUpdateBlueprintSnapDefaults(
+                        null,
+                        !settings.blueprintSnapEndpointEnabled,
+                        null,
+                        null,
+                        null,
+                        null
+                    )
+                },
+                label = { Text("Endpoints") }
+            )
+            FilterChip(
+                selected = settings.blueprintSnapMidpointEnabled,
+                onClick = {
+                    onHapticTap()
+                    onUpdateBlueprintSnapDefaults(
+                        null,
+                        null,
+                        !settings.blueprintSnapMidpointEnabled,
+                        null,
+                        null,
+                        null
+                    )
+                },
+                label = { Text("Midpoints") }
+            )
+            FilterChip(
+                selected = settings.blueprintSnapClosureEnabled,
+                onClick = {
+                    onHapticTap()
+                    onUpdateBlueprintSnapDefaults(
+                        null,
+                        null,
+                        null,
+                        null,
+                        !settings.blueprintSnapClosureEnabled,
+                        null
+                    )
+                },
+                label = { Text("Room closure") }
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Snap sensitivity: ${"%.2f".format(settings.blueprintSnapThresholdFeet)} ft",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = settings.blueprintSnapThresholdFeet.coerceIn(0.2, 2.0).toFloat(),
+            onValueChange = {
+                onUpdateBlueprintSnapDefaults(
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    it.coerceIn(0.2f, 2.0f).toDouble()
+                )
+            },
+            valueRange = 0.2f..2.0f
+        )
+        Text(
+            text = "Lower values require closer alignment. Higher values snap more aggressively.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Control mode",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !settings.blueprintDualJoysticksEnabled,
+                onClick = {
+                    if (settings.blueprintDualJoysticksEnabled) {
+                        onHapticTap()
+                        onUpdateBlueprintControlDefaults(false, null, null, null, null)
+                    }
+                },
+                label = { Text("Touch mode") }
+            )
+            FilterChip(
+                selected = settings.blueprintDualJoysticksEnabled,
+                onClick = {
+                    if (!settings.blueprintDualJoysticksEnabled) {
+                        onHapticTap()
+                        onUpdateBlueprintControlDefaults(true, null, null, null, null)
+                    }
+                },
+                label = { Text("Dual joysticks") }
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Cursor marker", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "Shows the active draft marker and highlights precise geometry targets while you edit.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = settings.blueprintCursorVisible,
+                onCheckedChange = {
+                    onHapticTap()
+                    onUpdateBlueprintControlDefaults(null, null, null, it, null)
+                }
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Marker size: ${(settings.blueprintCursorScale * 100f).toInt()}%",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = settings.blueprintCursorScale.coerceIn(0.75f, 2.1f),
+            onValueChange = {
+                onUpdateBlueprintControlDefaults(null, null, null, null, it.coerceIn(0.75f, 2.1f))
+            },
+            valueRange = 0.75f..2.1f,
+            steps = 12,
+            enabled = settings.blueprintCursorVisible
+        )
+        Text(
+            text = "Smaller keeps the blueprint cleaner. Larger makes the active marker easier to follow.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (settings.blueprintDualJoysticksEnabled) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Joystick sensitivity: ${"%.2f".format(settings.blueprintJoystickSensitivity)}x",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
+                onValueChange = {
+                    onUpdateBlueprintControlDefaults(
+                        null,
+                        it.coerceIn(0.55f, 2.2f),
+                        null,
+                        null,
+                        null
+                    )
+                },
+                valueRange = 0.55f..2.2f,
+                steps = 16
+            )
+            Text(
+                text = "Joystick deadzone: ${(settings.blueprintJoystickDeadzone * 100f).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
+                onValueChange = {
+                    onUpdateBlueprintControlDefaults(
+                        null,
+                        null,
+                        it.coerceIn(0.08f, 0.30f),
+                        null,
+                        null
+                    )
+                },
+                valueRange = 0.08f..0.30f,
+                steps = 10
+            )
+        } else {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Joystick tuning appears when Dual joysticks is active.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
