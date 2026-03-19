@@ -17,6 +17,8 @@ fun BlueprintScreen(
     leftEdgeDialInset: Dp = 0.dp,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
+    tutorialMode: Boolean = false,
+    onExitTutorialMode: () -> Unit = {},
     viewModel: BlueprintEditorViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -28,6 +30,8 @@ fun BlueprintScreen(
         leftEdgeDialInset = leftEdgeDialInset,
         onOpenTakeoff = onOpenTakeoff,
         onFullscreenBlueprintChanged = onFullscreenBlueprintChanged,
+        tutorialMode = tutorialMode,
+        onExitTutorialMode = onExitTutorialMode,
         viewModel = viewModel,
         settingsViewModel = settingsViewModel
     )

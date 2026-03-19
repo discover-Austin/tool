@@ -127,6 +127,7 @@ import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
+import com.tradesketch.estimator.ui.viewmodel.scopedToTakeoffScope
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -151,6 +152,8 @@ fun BlueprintScreen(
     leftEdgeDialInset: Dp = 0.dp,
     onOpenTakeoff: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
+    tutorialMode: Boolean = false,
+    onExitTutorialMode: () -> Unit = {},
     viewModel: BlueprintEditorViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -230,9 +233,14 @@ fun BlueprintScreen(
     var gridScaleEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var railHelpBounds by remember { mutableStateOf<Rect?>(null) }
     var wallRotateButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialLeftControlsBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialCenterControlsBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialRightControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var dualJoysticksEnabled by rememberSaveable(projectId) {
         mutableStateOf(appSettings.blueprintDualJoysticksEnabled)
     }
+    val currentControlMode = blueprintControlMode(dualJoysticksEnabled)
+    var lastTrackedOpenMode by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
     var cursorVisible by rememberSaveable(projectId) {
         mutableStateOf(appSettings.blueprintCursorVisible)
     }
@@ -253,15 +261,31 @@ fun BlueprintScreen(
     var edgeDialInteracting by remember { mutableStateOf(false) }
     var edgeDialAngleRadians by remember { mutableStateOf<Double?>(null) }
     var edgeDialLengthMm by remember { mutableStateOf<Double?>(null) }
-    var showTouchModeQuickToolsTutorial by rememberSaveable(projectId) { mutableStateOf(false) }
     var gridScaleInput by rememberSaveable(projectId) { mutableStateOf("1'") }
     var gridScaleFeetInput by rememberSaveable(projectId) { mutableStateOf("1") }
     var gridScaleInchesInput by rememberSaveable(projectId) { mutableStateOf("0") }
     var gridScaleCentimetersInput by rememberSaveable(projectId) { mutableStateOf("30") }
     var selectedFloor by rememberSaveable(projectId) { mutableStateOf(FLOOR_GROUND_LEVEL) }
+    var hasTrackedFloorSelection by rememberSaveable(projectId) { mutableStateOf(false) }
+    var tutorialStepIndex by rememberSaveable(projectId, tutorialMode, dualJoysticksEnabled) {
+        mutableIntStateOf(0)
+    }
     val rootView = LocalView.current
+    val recordBlueprintMetric: (BlueprintMetricAction) -> Unit = { action ->
+        settingsViewModel.recordTap(blueprintMetricKey(action, currentControlMode))
+    }
+    val controlTutorialSteps = remember(dualJoysticksEnabled) {
+        blueprintControlTutorialSteps(dualJoysticksEnabled)
+    }
+    val currentTutorialStep = controlTutorialSteps.getOrNull(tutorialStepIndex)
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
+    LaunchedEffect(projectId, currentControlMode) {
+        blueprintScreenOpenedMetricKey(lastTrackedOpenMode, currentControlMode)?.let { metricKey ->
+            settingsViewModel.recordTap(metricKey)
+            lastTrackedOpenMode = currentControlMode.metricSuffix
+        }
+    }
     LaunchedEffect(projectId, initialShowAddons, initialShowParams) {
         activeOpeningPanel = if (initialShowAddons) OpeningPanelType.DOORS else null
         showParams = initialShowParams
@@ -296,9 +320,21 @@ fun BlueprintScreen(
     LaunchedEffect(appSettings.blueprintDualJoysticksEnabled) {
         dualJoysticksEnabled = appSettings.blueprintDualJoysticksEnabled
     }
-    LaunchedEffect(dualJoysticksEnabled, appSettings.hasSeenTouchModeQuickToolsTutorial) {
-        if (!dualJoysticksEnabled && !appSettings.hasSeenTouchModeQuickToolsTutorial) {
-            showTouchModeQuickToolsTutorial = true
+    LaunchedEffect(tutorialMode, dualJoysticksEnabled) {
+        if (tutorialMode) {
+            tutorialStepIndex = 0
+            showRailHelp = false
+            showParams = false
+            showGridScaleEditor = false
+            showClearAllConfirm = false
+            activeOpeningPanel = null
+            pendingGrabSelection = false
+            movingWallPreview = null
+            drawingStart = null
+            drawingPreview = null
+            boxStart = null
+            boxPreview = null
+            tool = BlueprintDraftTool.DRAW_WALL
         }
     }
     LaunchedEffect(appSettings.blueprintCursorVisible) {
@@ -324,6 +360,9 @@ fun BlueprintScreen(
         pendingGrabSelection = false
         restartLineFromNearestWallStart = false
         viewModel.selectWall(null)
+        if (!hasTrackedFloorSelection) {
+            hasTrackedFloorSelection = true
+        }
     }
     LaunchedEffect(tool) {
         if (tool != BlueprintDraftTool.DRAW_BOX) {
@@ -340,21 +379,24 @@ fun BlueprintScreen(
     }
 
     val doc = uiState.document ?: return
+    val takeoffSession = uiState.project?.takeoffSession ?: ProjectTakeoffSession()
+    val currentScope = takeoffSession.selectedScope
+    val scopedDoc = doc.scopedToTakeoffScope(currentScope)
     val overlayTopPadding = if (compactHeightWindow) 8.dp else 12.dp
     val topOverlaySpacing = if (compactHeightWindow) 4.dp else 6.dp
     val topStackMaxHeight = if (compactHeightWindow) 220.dp else 320.dp
-    val stairWorkflowActive = doc.openings.any { it.type.isStair() } ||
+    val stairWorkflowActive = scopedDoc.openings.any { it.type.isStair() } ||
         activeOpeningPanel == OpeningPanelType.STAIR_UP ||
         activeOpeningPanel == OpeningPanelType.STAIR_DOWN ||
         tool == BlueprintDraftTool.PLACE_STAIR_UP ||
         tool == BlueprintDraftTool.PLACE_STAIR_DOWN
     val movingDoc = movingWallPreview?.let { movingWall ->
-        doc.copy(
-            walls = doc.walls.map { wall ->
+        scopedDoc.copy(
+            walls = scopedDoc.walls.map { wall ->
                 if (wall.id == movingWall.id) movingWall else wall
             }
         )
-    } ?: doc
+    } ?: scopedDoc
     val wallsById = movingDoc.walls.associateBy { it.id }
     val renderedDoc = movingDoc.copy(
         walls = movingDoc.walls.filter { wall -> wall.isOnFloor(selectedFloor) },
@@ -403,14 +445,12 @@ fun BlueprintScreen(
             performSyntheticTap(rootView, rootPoint)
         }
     }
-    val takeoffSession = uiState.project?.takeoffSession ?: ProjectTakeoffSession()
-    val currentScope = takeoffSession.selectedScope
-    val wallAreaSqFt = BlueprintTakeoffCalculator.wallAreaByIdSqFt(renderedDoc).values.sum()
-    val openingAreaSqFt = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(renderedDoc).values.sum()
+    val wallAreaSqFt = BlueprintTakeoffCalculator.wallAreaByIdSqFt(scopedDoc).values.sum()
+    val openingAreaSqFt = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(scopedDoc).values.sum()
     val squareFeet = (wallAreaSqFt - openingAreaSqFt).coerceAtLeast(0.0)
-    val linearFeet = renderedDoc.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
+    val linearFeet = scopedDoc.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
     val liveScopeQuantity = computeLiveScopeQuantity(
-        document = renderedDoc,
+        document = scopedDoc,
         scope = currentScope,
         takeoffSession = takeoffSession
     )
@@ -485,6 +525,7 @@ fun BlueprintScreen(
                     tags = listOfNotNull(candidate.swingTag, selectedFloor.floorTag()).toSet()
                 ).normalized()
             )
+            recordBlueprintMetric(BlueprintMetricAction.OPENING_PLACED)
         }
     }
     val placementPreviewPreset = when (tool) {
@@ -717,25 +758,15 @@ fun BlueprintScreen(
                         } else {
                             val start = drawingStart
                             if (start != null) {
-                                var end = snappedTap
-                                if (draftSnapSettings.endpointEnabled) {
-                                    end = snapToNearestWallEndpoint(
-                                        candidate = end,
-                                        walls = draftSnapWalls,
-                                        thresholdMm = (Millimeters.fromFeet(draftSnapSettings.thresholdFeet).value * 3L / 2L)
-                                            .coerceAtLeast(1L)
-                                    )
-                                }
-                                if (draftSnapSettings.closureEnabled) {
-                                    chainOrigin?.let { origin ->
-                                        BlueprintSnapMath.roomClosureSnap(
-                                            candidateEnd = end,
-                                            roomStart = origin,
-                                            thresholdMm = Millimeters.fromFeet(draftSnapSettings.thresholdFeet).value,
-                                            walls = draftSnapWalls
-                                        )?.let { end = it }
-                                    }
-                                }
+                                val end = resolveDraftWallCommitEnd(
+                                    previewEnd = drawingPreview,
+                                    snappedTap = snappedTap,
+                                    walls = draftSnapWalls,
+                                    snapThresholdFeet = draftSnapSettings.thresholdFeet,
+                                    endpointSnappingEnabled = draftSnapSettings.endpointEnabled,
+                                    closureEnabled = draftSnapSettings.closureEnabled,
+                                    chainOrigin = chainOrigin
+                                )
                                 val wallCanBeAdded = canAddDraftedWall(
                                     document = renderedDoc,
                                     start = start,
@@ -754,6 +785,7 @@ fun BlueprintScreen(
                                             tags = setOf("drawn", currentScope.wallScopeTag(), selectedFloor.floorTag())
                                         )
                                     )
+                                    recordBlueprintMetric(BlueprintMetricAction.WALL_PLACED)
                                     if (detachedThisPlacement) {
                                         detachedWalls = false
                                     }
@@ -788,15 +820,13 @@ fun BlueprintScreen(
                 } else {
                     val start = boxStart
                     if (start != null) {
-                        var end = snappedTap
-                        if (boxDraftSnapSettings.endpointEnabled) {
-                            end = snapToNearestWallEndpoint(
-                                candidate = end,
-                                walls = draftSnapWalls,
-                                thresholdMm = (Millimeters.fromFeet(boxDraftSnapSettings.thresholdFeet).value * 3L / 2L)
-                                    .coerceAtLeast(1L)
-                            )
-                        }
+                        val end = resolveDraftBoxCommitEnd(
+                            previewEnd = boxPreview,
+                            snappedTap = snappedTap,
+                            walls = draftSnapWalls,
+                            snapThresholdFeet = boxDraftSnapSettings.thresholdFeet,
+                            endpointSnappingEnabled = boxDraftSnapSettings.endpointEnabled
+                        )
                         val walls = buildDraftBoxWalls(
                             document = renderedDoc,
                             start = start,
@@ -809,6 +839,7 @@ fun BlueprintScreen(
                         )
                         if (walls.isNotEmpty()) {
                             viewModel.addWalls(walls)
+                            recordBlueprintMetric(BlueprintMetricAction.BOX_PLACED)
                         }
                     }
                     boxStart = null
@@ -1289,6 +1320,38 @@ fun BlueprintScreen(
             )
         }
     }
+    val handleUndo = { viewModel.undo() }
+    val handleRedo = { viewModel.redo() }
+    val handleZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) }
+    val handleZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) }
+    val tutorialTargetBounds = when (currentTutorialStep?.target) {
+        BlueprintControlTutorialTarget.BOTTOM_RAIL -> bottomRailBounds
+        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
+        BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD -> tutorialLeftControlsBounds
+        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
+        BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS -> tutorialCenterControlsBounds
+        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
+        BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD -> tutorialRightControlsBounds
+        BlueprintControlTutorialTarget.FLOOR_SWITCHER -> floorSwitcherBounds
+        BlueprintControlTutorialTarget.GRID_SCALE_BADGE -> gridScaleBadgeBounds
+        BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> clearAllButtonBounds
+        null -> null
+    }
+    val tutorialLeftVector = if (tutorialMode) {
+        animatedTutorialJoystickVector(currentTutorialStep?.demoLeftVector ?: Offset.Zero)
+    } else {
+        Offset.Zero
+    }
+    val tutorialRightVector = if (tutorialMode) {
+        animatedTutorialJoystickVector(currentTutorialStep?.demoRightVector ?: Offset.Zero)
+    } else {
+        Offset.Zero
+    }
+    val tutorialModeLabel = if (dualJoysticksEnabled) {
+        "Dual joysticks control tour"
+    } else {
+        "Touch mode control tour"
+    }
     val onEdgeDialInteractionChanged: (Boolean) -> Unit = { active ->
         edgeDialActiveTouchCount = (edgeDialActiveTouchCount + if (active) 1 else -1).coerceAtLeast(0)
         val currentlyActive = edgeDialActiveTouchCount > 0
@@ -1484,6 +1547,7 @@ fun BlueprintScreen(
             dragPreview = dragPreview,
             onPanScaleChange = { updatedPan, updatedScale ->
                 val panDelta = updatedPan - pan
+                val transformed = panDelta.getDistance() > 0.5f || kotlin.math.abs(updatedScale - scale) > 0.001f
                 if (dualJoysticksEnabled) {
                     joystickCursorLocal = joystickCursorLocal?.let { cursor ->
                         if (canvasSize.width > 0f && canvasSize.height > 0f) {
@@ -1846,6 +1910,13 @@ fun BlueprintScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
+                            if (
+                                scopedDoc.walls.isNotEmpty() ||
+                                scopedDoc.openings.isNotEmpty() ||
+                                scopedDoc.rooms.isNotEmpty()
+                            ) {
+                                recordBlueprintMetric(BlueprintMetricAction.CLEAR_ALL)
+                            }
                             viewModel.clearAllGeometry()
                             drawingStart = null
                             drawingPreview = null
@@ -1863,47 +1934,6 @@ fun BlueprintScreen(
                 }
             )
         }
-        if (showTouchModeQuickToolsTutorial && !dualJoysticksEnabled) {
-            AlertDialog(
-                onDismissRequest = {
-                    showTouchModeQuickToolsTutorial = false
-                    settingsViewModel.setTouchModeQuickToolsTutorialSeen(true)
-                },
-                title = { Text("Touch Mode Controls") },
-                text = {
-                    Text(
-                        "Quick tips:\n" +
-                            "• Select: pick walls/openings.\n" +
-                            "• Draw: tap start/end to create lines.\n" +
-                            "• Grab: pick up a wall, move it, tap to place.\n" +
-                            "• Center controls: zoom plus undo/redo.\n" +
-                            "• Cancel: exits current action/selection.\n" +
-                            "• Two fingers: pan and zoom the view."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showTouchModeQuickToolsTutorial = false
-                            settingsViewModel.setTouchModeQuickToolsTutorialSeen(true)
-                        }
-                    ) {
-                        Text("Got it")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            showTouchModeQuickToolsTutorial = false
-                            settingsViewModel.setTouchModeQuickToolsTutorialSeen(true)
-                        }
-                    ) {
-                        Text("Skip")
-                    }
-                }
-            )
-        }
-
         val clearOpeningPlacementTool = {
             pendingGrabSelection = false
             if (
@@ -2044,8 +2074,8 @@ fun BlueprintScreen(
 
         if (dualJoysticksEnabled) {
             DualJoystickOverlay(
-                leftVector = leftJoystickVector,
-                rightVector = rightJoystickVector,
+                leftVector = if (tutorialMode) tutorialLeftVector else leftJoystickVector,
+                rightVector = if (tutorialMode) tutorialRightVector else rightJoystickVector,
                 onLeftVectorChange = { leftJoystickVector = it },
                 onRightVectorChange = { rightJoystickVector = it },
                 onLeftPressChange = { rightJoystickPressed = it },
@@ -2056,11 +2086,20 @@ fun BlueprintScreen(
                 canRedo = uiState.canRedo,
                 canZoomIn = scale < MAX_BLUEPRINT_SCALE,
                 canZoomOut = scale > MIN_BLUEPRINT_SCALE,
-                onUndo = viewModel::undo,
-                onRedo = viewModel::redo,
-                onZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) },
-                onZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) },
+                onUndo = handleUndo,
+                onRedo = handleRedo,
+                onZoomIn = handleZoomIn,
+                onZoomOut = handleZoomOut,
                 controlStateLabel = controlStateLabel,
+                leftPadModifier = Modifier.onGloballyPositioned {
+                    tutorialLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                centerControlsModifier = Modifier.onGloballyPositioned {
+                    tutorialCenterControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                rightPadModifier = Modifier.onGloballyPositioned {
+                    tutorialRightControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -2164,11 +2203,20 @@ fun BlueprintScreen(
                 canRedo = uiState.canRedo,
                 canZoomIn = scale < MAX_BLUEPRINT_SCALE,
                 canZoomOut = scale > MIN_BLUEPRINT_SCALE,
-                onUndo = viewModel::undo,
-                onRedo = viewModel::redo,
-                onZoomIn = { scale = (scale * 1.15f).coerceAtMost(MAX_BLUEPRINT_SCALE) },
-                onZoomOut = { scale = (scale / 1.15f).coerceAtLeast(MIN_BLUEPRINT_SCALE) },
+                onUndo = handleUndo,
+                onRedo = handleRedo,
+                onZoomIn = handleZoomIn,
+                onZoomOut = handleZoomOut,
                 controlStateLabel = controlStateLabel,
+                leftToolsModifier = Modifier.onGloballyPositioned {
+                    tutorialLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                centerControlsModifier = Modifier.onGloballyPositioned {
+                    tutorialCenterControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                rightToolsModifier = Modifier.onGloballyPositioned {
+                    tutorialRightControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -2263,6 +2311,7 @@ fun BlueprintScreen(
 
         RailHelpPanel(
             expanded = showRailHelp,
+            dualJoysticksEnabled = dualJoysticksEnabled,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 12.dp, bottom = helpBottomPadding)
@@ -2271,6 +2320,29 @@ fun BlueprintScreen(
                     railHelpBounds = Rect(it.positionInRoot(), it.size.toSize())
                 }
         )
+        if (tutorialMode && currentTutorialStep != null) {
+            BlueprintControlTutorialOverlay(
+                modeLabel = tutorialModeLabel,
+                step = currentTutorialStep,
+                stepIndex = tutorialStepIndex,
+                totalSteps = controlTutorialSteps.size,
+                targetBounds = tutorialTargetBounds,
+                onBack = {
+                    tutorialStepIndex = (tutorialStepIndex - 1).coerceAtLeast(0)
+                },
+                onNext = {
+                    if (tutorialStepIndex >= controlTutorialSteps.lastIndex) {
+                        onExitTutorialMode()
+                    } else {
+                        tutorialStepIndex += 1
+                    }
+                },
+                onSkip = onExitTutorialMode,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(20f)
+            )
+        }
     }
     onFullscreenBlueprintChanged(true)
 }
@@ -2729,6 +2801,56 @@ internal fun isDraftEndpointIntersectingExistingGeometry(
                 BlueprintSnapMath.distanceMillimeters(drawingStart, projected) > startGuard
         }
     }
+}
+
+internal fun resolveDraftWallCommitEnd(
+    previewEnd: PointMm?,
+    snappedTap: PointMm,
+    walls: List<WallSegment>,
+    snapThresholdFeet: Double,
+    endpointSnappingEnabled: Boolean,
+    closureEnabled: Boolean,
+    chainOrigin: PointMm?
+): PointMm {
+    previewEnd?.let { return it }
+
+    var end = snappedTap
+    if (endpointSnappingEnabled) {
+        end = snapToNearestWallEndpoint(
+            candidate = end,
+            walls = walls,
+            thresholdMm = (Millimeters.fromFeet(snapThresholdFeet).value * 3L / 2L)
+                .coerceAtLeast(1L)
+        )
+    }
+    if (closureEnabled) {
+        chainOrigin?.let { origin ->
+            BlueprintSnapMath.roomClosureSnap(
+                candidateEnd = end,
+                roomStart = origin,
+                thresholdMm = Millimeters.fromFeet(snapThresholdFeet).value,
+                walls = walls
+            )?.let { end = it }
+        }
+    }
+    return end
+}
+
+internal fun resolveDraftBoxCommitEnd(
+    previewEnd: PointMm?,
+    snappedTap: PointMm,
+    walls: List<WallSegment>,
+    snapThresholdFeet: Double,
+    endpointSnappingEnabled: Boolean
+): PointMm {
+    previewEnd?.let { return it }
+    if (!endpointSnappingEnabled) return snappedTap
+    return snapToNearestWallEndpoint(
+        candidate = snappedTap,
+        walls = walls,
+        thresholdMm = (Millimeters.fromFeet(snapThresholdFeet).value * 3L / 2L)
+            .coerceAtLeast(1L)
+    )
 }
 
 internal fun closestGravelMaterialPreset(densityTonsPerYard: Double): GravelMaterialPreset {

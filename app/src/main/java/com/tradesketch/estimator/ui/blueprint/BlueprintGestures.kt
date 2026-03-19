@@ -150,6 +150,39 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 
 @Composable
+private fun ControlClusterShell(
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = if (compact) 10.dp else 12.dp,
+    verticalPadding: Dp = if (compact) 10.dp else 12.dp,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(if (compact) 24.dp else 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (compact) 10.dp else 14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                        )
+                    )
+                )
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
 internal fun DualJoystickOverlay(
     leftVector: Offset,
     rightVector: Offset,
@@ -169,6 +202,9 @@ internal fun DualJoystickOverlay(
     onZoomOut: () -> Unit,
     controlStateLabel: String?,
     belowHistoryContent: (@Composable () -> Unit)? = null,
+    leftPadModifier: Modifier = Modifier,
+    centerControlsModifier: Modifier = Modifier,
+    rightPadModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -209,13 +245,17 @@ internal fun DualJoystickOverlay(
                 padSize = joystickSize,
                 knobSize = knobSize,
                 labelFontSize = labelFontSize,
-                modifier = Modifier.align(Alignment.BottomStart)
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .then(leftPadModifier)
             )
-            Column(
+            ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(bottom = centerColumnBottom)
+                    .then(centerControlsModifier),
+                compact = compact,
+                horizontalPadding = if (compact) 10.dp else 14.dp
             ) {
                 CenteredOverlayControls(
                     canUndo = canUndo,
@@ -248,7 +288,9 @@ internal fun DualJoystickOverlay(
                 padSize = joystickSize,
                 knobSize = knobSize,
                 labelFontSize = labelFontSize,
-                modifier = Modifier.align(Alignment.BottomEnd)
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .then(rightPadModifier)
             )
         }
     }
@@ -271,9 +313,11 @@ private fun CenteredOverlayControls(
     zoomIconSize: Dp,
     historyButtonSize: Dp,
     historyIconSize: Dp,
-    belowHistoryContent: (@Composable () -> Unit)? = null
+    belowHistoryContent: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
     ) {
@@ -643,6 +687,9 @@ internal fun TouchModeQuickToolsOverlay(
     onZoomOut: () -> Unit,
     controlStateLabel: String?,
     belowHistoryContent: (@Composable () -> Unit)? = null,
+    leftToolsModifier: Modifier = Modifier,
+    centerControlsModifier: Modifier = Modifier,
+    rightToolsModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -672,39 +719,47 @@ internal fun TouchModeQuickToolsOverlay(
                 .fillMaxWidth()
                 .padding(horizontal = sidePadding)
         ) {
-            Column(
+            ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(bottom = 8.dp)
+                    .then(leftToolsModifier),
+                compact = compact,
+                horizontalPadding = if (compact) 8.dp else 10.dp
             ) {
-                TouchToolButton(
-                    icon = Icons.Filled.AdsClick,
-                    label = "Select",
-                    selected = selectedMode == TouchToolMode.SELECT,
-                    onClick = onSelectMode,
-                    buttonSize = toolButtonSize,
-                    iconSize = toolIconSize,
-                    labelFontSize = labelFontSize,
-                    verticalSpacing = verticalSpacing
-                )
-                TouchToolButton(
-                    icon = Icons.Filled.BorderColor,
-                    label = "Draw",
-                    selected = selectedMode == TouchToolMode.DRAW,
-                    onClick = onDrawMode,
-                    buttonSize = toolButtonSize,
-                    iconSize = toolIconSize,
-                    labelFontSize = labelFontSize,
-                    verticalSpacing = verticalSpacing
-                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    TouchToolButton(
+                        icon = Icons.Filled.AdsClick,
+                        label = "Select",
+                        selected = selectedMode == TouchToolMode.SELECT,
+                        onClick = onSelectMode,
+                        buttonSize = toolButtonSize,
+                        iconSize = toolIconSize,
+                        labelFontSize = labelFontSize,
+                        verticalSpacing = verticalSpacing
+                    )
+                    TouchToolButton(
+                        icon = Icons.Filled.BorderColor,
+                        label = "Draw",
+                        selected = selectedMode == TouchToolMode.DRAW,
+                        onClick = onDrawMode,
+                        buttonSize = toolButtonSize,
+                        iconSize = toolIconSize,
+                        labelFontSize = labelFontSize,
+                        verticalSpacing = verticalSpacing
+                    )
+                }
             }
-            Column(
+            ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(bottom = centerColumnBottom)
+                    .then(centerControlsModifier),
+                compact = compact,
+                horizontalPadding = if (compact) 10.dp else 14.dp
             ) {
                 CenteredOverlayControls(
                     canUndo = canUndo,
@@ -725,33 +780,39 @@ internal fun TouchModeQuickToolsOverlay(
                     belowHistoryContent = belowHistoryContent
                 )
             }
-            Column(
+            ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(bottom = 8.dp)
+                    .then(rightToolsModifier),
+                compact = compact,
+                horizontalPadding = if (compact) 8.dp else 10.dp
             ) {
-                TouchToolButton(
-                    icon = Icons.Filled.Workspaces,
-                    label = "Grab",
-                    selected = selectedMode == TouchToolMode.GRAB,
-                    onClick = onGrabMode,
-                    buttonSize = toolButtonSize,
-                    iconSize = toolIconSize,
-                    labelFontSize = labelFontSize,
-                    verticalSpacing = verticalSpacing
-                )
-                TouchToolButton(
-                    icon = Icons.Filled.Close,
-                    label = "Cancel",
-                    selected = false,
-                    onClick = onCancel,
-                    buttonSize = toolButtonSize,
-                    iconSize = toolIconSize,
-                    labelFontSize = labelFontSize,
-                    verticalSpacing = verticalSpacing
-                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    TouchToolButton(
+                        icon = Icons.Filled.Workspaces,
+                        label = "Grab",
+                        selected = selectedMode == TouchToolMode.GRAB,
+                        onClick = onGrabMode,
+                        buttonSize = toolButtonSize,
+                        iconSize = toolIconSize,
+                        labelFontSize = labelFontSize,
+                        verticalSpacing = verticalSpacing
+                    )
+                    TouchToolButton(
+                        icon = Icons.Filled.Close,
+                        label = "Cancel",
+                        selected = false,
+                        onClick = onCancel,
+                        buttonSize = toolButtonSize,
+                        iconSize = toolIconSize,
+                        labelFontSize = labelFontSize,
+                        verticalSpacing = verticalSpacing
+                    )
+                }
             }
         }
     }
@@ -776,18 +837,19 @@ private fun TouchToolButton(
             onClick = onClick,
             shape = CircleShape,
             color = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.94f)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.98f)
             } else {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f)
             },
             border = BorderStroke(
                 width = if (selected) 1.3.dp else 1.dp,
                 color = if (selected) {
-                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.88f)
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                 } else {
                     MaterialTheme.colorScheme.outline.copy(alpha = 0.42f)
                 }
             ),
+            shadowElevation = if (selected) 8.dp else 4.dp,
             modifier = Modifier
                 .size(buttonSize)
                 .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
@@ -800,7 +862,7 @@ private fun TouchToolButton(
                     imageVector = icon,
                     contentDescription = label,
                     tint = if (selected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
@@ -873,12 +935,14 @@ internal fun JoystickPad(
         onDispose { resetPointerState() }
     }
     val joystickAxisGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-    val joystickAxisLine = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-    val joystickLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    val joystickAxisLine = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+    val joystickLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
+    val joystickOuterRingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    val joystickTapGuideColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Surface(
             modifier = Modifier
@@ -986,17 +1050,30 @@ internal fun JoystickPad(
                     }
                 },
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.44f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.34f),
+            border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)),
+            shadowElevation = 8.dp
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val c = Offset(size.width / 2f, size.height / 2f)
                     val axisInset = size.minDimension * 0.08f
                     drawCircle(
+                        color = joystickOuterRingColor,
+                        radius = size.minDimension * 0.46f,
+                        center = c,
+                        style = Stroke(width = 2.5f)
+                    )
+                    drawCircle(
                         color = joystickAxisGlow,
                         radius = size.minDimension * 0.34f,
                         center = c
+                    )
+                    drawCircle(
+                        color = joystickTapGuideColor,
+                        radius = size.minDimension * tapZoneScale.coerceIn(0.24f, 0.88f) * 0.5f,
+                        center = c,
+                        style = Stroke(width = 1.5f)
                     )
                     drawLine(
                         color = joystickAxisLine,
@@ -1011,12 +1088,6 @@ internal fun JoystickPad(
                         strokeWidth = 1f
                     )
                 }
-                Text(
-                    text = insideLabel,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                    color = joystickLabelColor,
-                    modifier = Modifier.align(Alignment.Center)
-                )
                 Surface(
                     modifier = Modifier
                         .size(knobSize)
@@ -1028,10 +1099,25 @@ internal fun JoystickPad(
                             )
                         },
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.62f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)),
+                    shadowElevation = 8.dp
                 ) {}
             }
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
+            shadowElevation = 3.dp
+        ) {
+            Text(
+                text = insideLabel,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
+                color = joystickLabelColor,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+            )
         }
     }
 }

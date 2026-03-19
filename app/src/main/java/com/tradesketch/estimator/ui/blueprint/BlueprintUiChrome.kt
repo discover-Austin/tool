@@ -104,6 +104,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
@@ -148,6 +149,16 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 
 @Composable
+private fun blueprintHudContainerColor(alpha: Float = 0.94f): Color {
+    return MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = alpha)
+}
+
+@Composable
+private fun blueprintHudBorderColor(alpha: Float = 0.4f): Color {
+    return MaterialTheme.colorScheme.outline.copy(alpha = alpha)
+}
+
+@Composable
 internal fun BlueprintBottomBar(
     canDeleteSelection: Boolean,
     detachedWalls: Boolean,
@@ -170,15 +181,18 @@ internal fun BlueprintBottomBar(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor()),
+        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = 0.46f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .height(56.dp)
-                .padding(horizontal = 4.dp, vertical = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                .height(60.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SlimIconAction(
@@ -265,29 +279,30 @@ internal fun SlimIconToggle(
     modifier: Modifier = Modifier
 ) {
     val container = if (selected) {
-        MaterialTheme.colorScheme.secondaryContainer
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.96f)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
+        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.84f)
     }
     val tint = if (selected) {
-        MaterialTheme.colorScheme.onSecondaryContainer
+        MaterialTheme.colorScheme.onPrimaryContainer
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = container,
         border = BorderStroke(
             width = 1.dp,
             color = if (selected) {
-                MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
             } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                blueprintHudBorderColor(alpha = 0.3f)
             }
         ),
+        shadowElevation = if (selected) 6.dp else 1.dp,
         modifier = modifier
-            .size(26.dp)
+            .size(32.dp)
             .then(
                 if (minimumTouchTarget) {
                     Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
@@ -301,7 +316,7 @@ internal fun SlimIconToggle(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = tint,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(15.dp)
             )
         }
     }
@@ -319,9 +334,9 @@ internal fun SlimIconAction(
     modifier: Modifier = Modifier
 ) {
     val container = if (enabled) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)
+        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f)
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.36f)
+        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.44f)
     }
     val tint = if (enabled) {
         MaterialTheme.colorScheme.onSurfaceVariant
@@ -331,9 +346,10 @@ internal fun SlimIconAction(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = container,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = if (enabled) 0.34f else 0.22f)),
+        shadowElevation = if (enabled) 4.dp else 0.dp,
         modifier = modifier
             .size(buttonSize)
             .then(
@@ -363,26 +379,28 @@ internal fun ScopeSelector(
 ) {
     Surface(
         onClick = { onChangeScope(scope.next()) },
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.45f)),
-        modifier = modifier.widthIn(min = 96.dp).sizeIn(minHeight = 48.dp)
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.84f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.52f)),
+        shadowElevation = 5.dp,
+        modifier = modifier.widthIn(min = 102.dp).sizeIn(minHeight = 48.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = scope.icon(),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(10.dp)
+                modifier = Modifier.size(12.dp)
             )
             Text(
                 text = scope.railLabel(),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
@@ -405,26 +423,28 @@ internal fun ClearAllButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.26f)),
-        modifier = modifier.heightIn(min = 40.dp)
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.34f)),
+        shadowElevation = 8.dp,
+        modifier = modifier.heightIn(min = 44.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Clear all blueprint items",
                 tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(14.dp)
             )
             Text(
                 text = "Clear All",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.error
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
@@ -448,9 +468,10 @@ internal fun FloorLevelSwitcher(
     val groundPaddingVertical = if (compact) 3.dp else 4.dp
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+        shape = RoundedCornerShape(16.dp),
+        color = blueprintHudContainerColor(alpha = 0.96f),
+        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = 0.42f)),
+        shadowElevation = 10.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = horizontalPadding, vertical = verticalPadding),
@@ -458,9 +479,15 @@ internal fun FloorLevelSwitcher(
             verticalArrangement = Arrangement.spacedBy(innerSpacing)
         ) {
             Text(
+                text = "Floor",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
                 text = level.floorDisplayLabel(),
                 style = floorLabelStyle,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(innerSpacing),
@@ -485,9 +512,10 @@ internal fun FloorLevelSwitcher(
             }
             Surface(
                 onClick = { onSelect(FLOOR_GROUND_LEVEL) },
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f))
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.28f)),
+                shadowElevation = 2.dp
             ) {
                 Text(
                     text = groundButtonLabel,
@@ -520,9 +548,10 @@ internal fun GridScaleBadge(
     }
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)),
+        shape = RoundedCornerShape(14.dp),
+        color = blueprintHudContainerColor(alpha = 0.95f),
+        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = 0.4f)),
+        shadowElevation = 8.dp,
         modifier = modifier.height(badgeHeight)
     ) {
         Row(
@@ -548,7 +577,7 @@ internal fun GridScaleBadge(
                 text = badgeLabel,
                 style = textStyle,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
@@ -562,9 +591,10 @@ internal fun FloorCompactBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)),
+        shape = RoundedCornerShape(14.dp),
+        color = blueprintHudContainerColor(alpha = 0.95f),
+        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = 0.4f)),
+        shadowElevation = 8.dp,
         modifier = modifier.heightIn(min = 48.dp)
     ) {
         Row(
@@ -576,7 +606,7 @@ internal fun FloorCompactBadge(
                 text = "Floor: ${level.label()}",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1
             )
             SlimIconAction(
@@ -1169,6 +1199,7 @@ internal fun OpeningAddonsPanel(
 @Composable
 internal fun RailHelpPanel(
     expanded: Boolean,
+    dualJoysticksEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (!expanded) return
@@ -1210,19 +1241,31 @@ internal fun RailHelpPanel(
                 title = "Box",
                 detail = "Tap once to start a box, move to size, use side dials to rotate/expand, then tap again to finish."
             )
+            RailHelpLine(
+                title = "Control mode",
+                detail = if (dualJoysticksEnabled) {
+                    "Dual joysticks uses the left pad for pan and the right pad for cursor placement."
+                } else {
+                    "Touch mode uses the bottom quick tools for Select, Draw, Grab, and Cancel."
+                }
+            )
             RailHelpLine(title = "Trade", detail = "Cycles drywall, concrete, gravel, and paint.")
             RailHelpLine(title = "Chain", detail = "Continue from last clicked corner on each wall.")
             RailHelpLine(title = "Split", detail = "Detach next wall from the current chain.")
             RailHelpLine(title = "Doors/Windows/Stairs", detail = "Open panel, size it, and drag onto walls.")
             RailHelpLine(title = "Floor", detail = "Step floors up/down: Ground, 2, 3... and Basement levels.")
-            RailHelpLine(title = "Params", detail = "Toggles snaps, joystick behavior, and scope settings.")
+            RailHelpLine(title = "Params", detail = "Opens takeoff, snap, and scope settings for the current trade.")
             RailHelpLine(title = "Undo/Redo + Zoom", detail = "Left side of the top rail.")
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
             ) {
                 Text(
-                    text = "Tip: Right stick moves cursor + tap performs the primary action at cursor. Left stick pans + tap/press handles cancel, alt-select, and quick wall clear.",
+                    text = if (dualJoysticksEnabled) {
+                        "Tip: Right stick moves the cursor and confirms at the active point. Left stick pans, and left-pad tap/press handles cancel, alt-select, and quick wall clear."
+                    } else {
+                        "Tip: Use the quick tools to switch Select, Draw, and Grab. Two-finger gestures still pan and zoom the canvas."
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1391,56 +1434,92 @@ internal fun LiveOverlay(
     useMetric: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val floorNumberLabel = if (selectedFloor >= 0) {
-        "Floor ${selectedFloor + 1}"
-    } else {
-        "Floor $selectedFloor"
-    }
+    val compactHud = LocalConfiguration.current.screenWidthDp < 420
+    val floorNumberLabel = selectedFloor.floorDisplayLabel()
+    val compactFloorLabel = floorNumberLabel
+        .removePrefix("Floor: ")
+        .removePrefix("Floor ")
+        .replace("Ground", "Gnd")
     Card(
-        modifier = modifier.widthIn(max = 172.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.58f))
+        modifier = modifier.widthIn(max = if (compactHud) 112.dp else 172.dp),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor(alpha = 0.97f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.52f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            modifier = Modifier.padding(
+                horizontal = if (compactHud) 6.dp else 10.dp,
+                vertical = if (compactHud) 6.dp else 8.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (compactHud) 2.dp else 4.dp)
         ) {
-            Text(
-                text = floorNumberLabel,
-                color = MaterialTheme.colorScheme.secondary,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (compactHud) "TOTAL" else "PROJECT TOTAL",
+                    color = MaterialTheme.colorScheme.secondary,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip
+                )
+                Text(
+                    text = if (compactHud) compactFloorLabel else floorNumberLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip
+                )
+            }
             Text(
                 text = liveScopeQuantity.value,
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 8.sp else 10.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Clip
             )
             Text(
                 text = if (useMetric) {
-                    "Linear: ${formatLiveValue(linearFeet * 0.3048, 2)} m"
+                    if (compactHud) {
+                        "Lin ${formatLiveValue(linearFeet * 0.3048, 2)} m"
+                    } else {
+                        "Linear: ${formatLiveValue(linearFeet * 0.3048, 2)} m"
+                    }
                 } else {
-                    "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft"
+                    if (compactHud) {
+                        "Lin ${formatLiveValue(linearFeet, 1)} ft"
+                    } else {
+                        "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft"
+                    }
                 },
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
             Text(
                 text = if (useMetric) {
-                    "Area: ${formatLiveValue(squareFeet * 0.09290304, 2)} sq m"
+                    if (compactHud) {
+                        "Sq ${formatLiveValue(squareFeet * 0.09290304, 2)} m"
+                    } else {
+                        "Area: ${formatLiveValue(squareFeet * 0.09290304, 2)} sq m"
+                    }
                 } else {
-                    "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft"
+                    if (compactHud) {
+                        "Sq ${formatLiveValue(squareFeet, 1)} sf"
+                    } else {
+                        "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft"
+                    }
                 },
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -1478,9 +1557,10 @@ internal fun CursorCoordinateOverlay(
     val rotateIconSize = if (compact) 8.dp else 10.dp
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(cornerRadius),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f))
+        shape = RoundedCornerShape(cornerRadius + 2.dp),
+        color = blueprintHudContainerColor(alpha = 0.96f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.48f)),
+        shadowElevation = 8.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = horizontalPadding, vertical = verticalPadding),
@@ -1568,25 +1648,29 @@ internal fun ControlStateHud(
         animationSpec = tween(durationMillis = 180),
         label = "control-state-hud-emphasis"
     )
-    val (containerColor, borderColor, textColor) = when (stateLabel) {
-        "Draw" -> Triple(Color(0xD9B12822), Color(0xFFFF8B81), Color(0xFFFFF4F1))
-        "Box" -> Triple(Color(0xD9B12822), Color(0xFFFF8B81), Color(0xFFFFF4F1))
-        "Selected" -> Triple(Color(0xD9621C19), Color(0xFFFFB1AA), Color(0xFFFFF5F2))
-        "Picked Up" -> Triple(Color(0xD97A211D), Color(0xFFFFCDC8), Color(0xFFFFF7F5))
-        else -> Triple(Color(0xB9281717), Color(0x5AAF5F59), Color(0xFFF2C4BE))
+    val (accentColor, textColor) = when (stateLabel) {
+        "Draw" -> Pair(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer)
+        "Box" -> Pair(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimaryContainer)
+        "Selected" -> Pair(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onTertiaryContainer)
+        "Picked Up" -> Pair(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.onSecondaryContainer)
+        else -> Pair(MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.onSurface)
     }
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor.copy(alpha = 0.83f + (emphasis * 0.09f)),
-        border = BorderStroke((1f + (0.35f * emphasis)).dp, borderColor.copy(alpha = 0.72f + (emphasis * 0.28f)))
+        shape = RoundedCornerShape(12.dp),
+        color = blueprintHudContainerColor(alpha = 0.82f + (emphasis * 0.1f)),
+        border = BorderStroke(
+            (1f + (0.35f * emphasis)).dp,
+            accentColor.copy(alpha = 0.38f + (emphasis * 0.28f))
+        ),
+        shadowElevation = 7.dp
     ) {
         Text(
             text = stateLabel,
-            color = textColor,
+            color = textColor.copy(alpha = 0.94f),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
 }
