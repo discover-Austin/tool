@@ -72,7 +72,7 @@ internal fun blueprintControlTutorialSteps(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.BOTTOM_RAIL,
                 title = "Build Rail",
-                message = "Use this rail to open box mode, doors, windows, stairs, params, scope, and help."
+                message = "Use this rail to open box mode, circle mode, doors, windows, stairs, params, and help. Trade lives top-right."
             ),
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
@@ -102,7 +102,7 @@ internal fun blueprintControlTutorialSteps(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.BOTTOM_RAIL,
                 title = "Build Rail",
-                message = "Use this rail to open box mode, doors, windows, stairs, params, scope, and help."
+                message = "Use this rail to open box mode, circle mode, doors, windows, stairs, params, and help. Trade lives top-right."
             ),
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,

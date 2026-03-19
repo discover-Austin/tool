@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PanoramaFishEye
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Tune
@@ -164,13 +165,13 @@ internal fun BlueprintBottomBar(
     canDeleteSelection: Boolean,
     detachedWalls: Boolean,
     boxModeEnabled: Boolean,
-    scope: TakeoffScope,
+    circleModeEnabled: Boolean,
     activePanel: OpeningPanelType?,
     paramsExpanded: Boolean,
     onToggleDetached: () -> Unit,
     onToggleBoxMode: () -> Unit,
+    onToggleCircleMode: () -> Unit,
     onDeleteSelection: () -> Unit,
-    onChangeScope: (TakeoffScope) -> Unit,
     onToggleDoors: () -> Unit,
     onToggleWindows: () -> Unit,
     onToggleStairUp: () -> Unit,
@@ -185,11 +186,6 @@ internal fun BlueprintBottomBar(
     val actionIconSize = if (compactBottomBar) 11.dp else 12.dp
     val toggleButtonSize = if (compactBottomBar) 28.dp else 32.dp
     val toggleIconSize = if (compactBottomBar) 13.dp else 15.dp
-    val scopeMinWidth = if (compactBottomBar) 66.dp else 102.dp
-    val scopeMinHeight = if (compactBottomBar) 34.dp else 48.dp
-    val scopeHorizontalPadding = if (compactBottomBar) 7.dp else 10.dp
-    val scopeIconSize = if (compactBottomBar) 11.dp else 12.dp
-    val scopeLabelSize = if (compactBottomBar) 10.sp else 11.sp
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
@@ -227,6 +223,12 @@ internal fun BlueprintBottomBar(
                     contentDescription = "Box mode",
                     selected = boxModeEnabled,
                     onClick = onToggleBoxMode
+                ),
+                BlueprintIconToggleSpec(
+                    icon = Icons.Filled.PanoramaFishEye,
+                    contentDescription = "Circle mode",
+                    selected = circleModeEnabled,
+                    onClick = onToggleCircleMode
                 )
             ).forEach { toggle ->
                 SlimIconToggle(
@@ -286,15 +288,6 @@ internal fun BlueprintBottomBar(
                 minimumTouchTarget = false
             )
             BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
-            ScopeSelector(
-                scope = scope,
-                onChangeScope = onChangeScope,
-                minWidth = scopeMinWidth,
-                minHeight = scopeMinHeight,
-                horizontalPadding = scopeHorizontalPadding,
-                iconSize = scopeIconSize,
-                labelFontSize = scopeLabelSize
-            )
             SlimIconToggle(
                 icon = Icons.AutoMirrored.Filled.Help,
                 contentDescription = "Rail help",
@@ -469,30 +462,26 @@ internal fun ClearAllButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val compactButton = LocalConfiguration.current.screenWidthDp < 420
+    val buttonSize = if (compactButton) 34.dp else 38.dp
+    val iconSize = if (compactButton) 14.dp else 16.dp
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.98f),
         border = BorderStroke(1.1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
-        shadowElevation = 8.dp,
-        modifier = modifier.heightIn(min = 44.dp)
+        shadowElevation = 5.dp,
+        modifier = modifier.size(buttonSize)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Clear all blueprint items",
                 tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = "Clear All",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                fontWeight = FontWeight.SemiBold
+                modifier = Modifier.size(iconSize)
             )
         }
     }
@@ -879,13 +868,8 @@ internal fun ParamsPanel(
                         onClick = onSelectDrawArcTool,
                         label = { Text("Curved wall") }
                     )
-                    FilterChip(
-                        selected = activeTool == BlueprintDraftTool.DRAW_CIRCLE,
-                        onClick = onSelectDrawCircleTool,
-                        label = { Text("Circle") }
-                    )
                     Text(
-                        text = "Curve: tap start, end, then bend. Circle: tap center, then radius.",
+                        text = "Curve: tap start, end, then bend. Circle now lives on the build rail.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1324,13 +1308,14 @@ internal fun RailHelpPanel(
                     "Touch mode uses the bottom quick tools for Select, Draw, Grab, and Cancel."
                 }
             )
-            RailHelpLine(title = "Trade", detail = "Cycles drywall, concrete, gravel, and paint.")
+            RailHelpLine(title = "Trade", detail = "Top-right trade chip cycles drywall, concrete, gravel, and paint.")
             RailHelpLine(title = "Chain", detail = "Continue from last clicked corner on each wall.")
             RailHelpLine(title = "Split", detail = "Detach next wall from the current chain.")
+            RailHelpLine(title = "Circle", detail = "Use the rail circle icon for center-and-radius circles.")
             RailHelpLine(title = "Doors/Windows/Stairs", detail = "Open panel, size it, and drag onto walls.")
             RailHelpLine(title = "Floor", detail = "Step floors up/down: Ground, 2, 3... and Basement levels.")
-            RailHelpLine(title = "Params", detail = "Opens takeoff, snap, and scope settings for the current trade.")
-            RailHelpLine(title = "Undo/Redo + Zoom", detail = "Left side of the top rail.")
+            RailHelpLine(title = "Params", detail = "Opens takeoff and snap settings for the current trade.")
+            RailHelpLine(title = "Undo/Redo + Zoom", detail = "Bottom-center cluster above the rail.")
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)

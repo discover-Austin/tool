@@ -251,33 +251,28 @@ internal fun DualJoystickOverlay(
                     .padding(bottom = joystickBottomLift)
                     .then(leftPadModifier)
             )
-            ControlClusterShell(
+            CenteredOverlayControls(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                canZoomIn = canZoomIn,
+                canZoomOut = canZoomOut,
+                onUndo = onUndo,
+                onRedo = onRedo,
+                onZoomIn = onZoomIn,
+                onZoomOut = onZoomOut,
+                controlStateLabel = controlStateLabel,
+                compact = compact,
+                controlRowSpacing = controlRowSpacing,
+                zoomButtonSize = zoomButtonSize,
+                zoomIconSize = zoomIconSize,
+                historyButtonSize = historyButtonSize,
+                historyIconSize = historyIconSize,
+                belowHistoryContent = belowHistoryContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 10.dp else 14.dp
-            ) {
-                CenteredOverlayControls(
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    canZoomIn = canZoomIn,
-                    canZoomOut = canZoomOut,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onZoomIn = onZoomIn,
-                    onZoomOut = onZoomOut,
-                    controlStateLabel = controlStateLabel,
-                    compact = compact,
-                    controlRowSpacing = controlRowSpacing,
-                    zoomButtonSize = zoomButtonSize,
-                    zoomIconSize = zoomIconSize,
-                    historyButtonSize = historyButtonSize,
-                    historyIconSize = historyIconSize,
-                    belowHistoryContent = belowHistoryContent
-                )
-            }
+                    .then(centerControlsModifier)
+            )
             JoystickPad(
                 insideLabel = "Cursor / Select",
                 vector = rightVector,
@@ -807,33 +802,28 @@ internal fun TouchModeQuickToolsOverlay(
                     )
                 }
             }
-            ControlClusterShell(
+            CenteredOverlayControls(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                canZoomIn = canZoomIn,
+                canZoomOut = canZoomOut,
+                onUndo = onUndo,
+                onRedo = onRedo,
+                onZoomIn = onZoomIn,
+                onZoomOut = onZoomOut,
+                controlStateLabel = controlStateLabel,
+                compact = compact,
+                controlRowSpacing = controlRowSpacing,
+                zoomButtonSize = zoomButtonSize,
+                zoomIconSize = zoomIconSize,
+                historyButtonSize = historyButtonSize,
+                historyIconSize = historyIconSize,
+                belowHistoryContent = belowHistoryContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 10.dp else 14.dp
-            ) {
-                CenteredOverlayControls(
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    canZoomIn = canZoomIn,
-                    canZoomOut = canZoomOut,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onZoomIn = onZoomIn,
-                    onZoomOut = onZoomOut,
-                    controlStateLabel = controlStateLabel,
-                    compact = compact,
-                    controlRowSpacing = controlRowSpacing,
-                    zoomButtonSize = zoomButtonSize,
-                    zoomIconSize = zoomIconSize,
-                    historyButtonSize = historyButtonSize,
-                    historyIconSize = historyIconSize,
-                    belowHistoryContent = belowHistoryContent
-                )
-            }
+                    .then(centerControlsModifier)
+            )
             ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
