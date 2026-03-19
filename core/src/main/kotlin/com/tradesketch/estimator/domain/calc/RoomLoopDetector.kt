@@ -67,15 +67,15 @@ object RoomLoopDetector {
         var componentIndex = 0
         adjacencyDistinct.keys.forEach { startNode ->
             if (!visitedNodes.add(startNode)) return@forEach
-            val queue = ArrayDeque<Int>()
+            val queue = mutableListOf<Int>()
             queue.add(startNode)
             componentByNode[startNode] = componentIndex
             while (queue.isNotEmpty()) {
-                val node = queue.removeFirst()
+                val node = queue.removeAt(0)
                 adjacencyDistinct[node].orEmpty().forEach { neighbor ->
                     if (visitedNodes.add(neighbor)) {
                         componentByNode[neighbor] = componentIndex
-                        queue.addLast(neighbor)
+                        queue.add(neighbor)
                     }
                 }
             }

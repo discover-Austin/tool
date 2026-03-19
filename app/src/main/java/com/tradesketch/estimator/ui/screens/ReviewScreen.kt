@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,6 +25,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
@@ -86,10 +90,17 @@ fun ReviewScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Card(
+                colors = appCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
+            ) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Review", style = MaterialTheme.typography.titleLarge)
-                    Text("Current scope geometry with trade-specific quantity traces.")
+                    Text(
+                        "Current scope geometry with trade-specific quantity traces.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Text("Project: ${uiState.project?.name.orEmpty()}", fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -99,7 +110,11 @@ fun ReviewScreen(
             Text("Rooms", style = MaterialTheme.typography.titleMedium)
         }
         items(document.rooms, key = { it.id }) { room ->
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${room.name} (${room.id})", fontWeight = FontWeight.SemiBold)
                     Text("Area: ${"%.1f".format(room.areaSqFt())} sq ft")
@@ -119,7 +134,11 @@ fun ReviewScreen(
                 .filter { it.wallId == wall.id }
                 .sumOf { Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet() }
             val wallArea = Millimeters(wall.lengthMillimeters()).toFeet() * Millimeters(wall.heightMm).toFeet()
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Wall ${wall.id}", fontWeight = FontWeight.SemiBold)
                     Text("Length: ${"%.2f".format(Millimeters(wall.lengthMillimeters()).toFeet())} ft")
@@ -133,7 +152,11 @@ fun ReviewScreen(
             Text("Openings", style = MaterialTheme.typography.titleMedium)
         }
         items(document.openings, key = { it.id }) { opening ->
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${opening.type.name} ${opening.id}", fontWeight = FontWeight.SemiBold)
                     Text("Wall ID: ${opening.wallId} @ t=${"%.2f".format(opening.t)}")
@@ -165,7 +188,14 @@ private fun ReviewTradeCard(
     label: String,
     result: com.tradesketch.estimator.domain.model.TakeoffResult
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(
+        colors = appCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+        ),
+        elevation = appCardElevation()
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             result.items.forEach { item ->

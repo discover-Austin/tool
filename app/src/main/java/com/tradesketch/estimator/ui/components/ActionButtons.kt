@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 
 private val CompactActionMinHeight = 48.dp
 private val CompactActionContentPadding = PaddingValues(
-    horizontal = 12.dp,
+    horizontal = 14.dp,
     vertical = 10.dp
 )
 
@@ -38,10 +38,10 @@ fun PrimaryActionButton(
         onClick = onClick,
         modifier = modifier
             .defaultMinSize(minHeight = CompactActionMinHeight)
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.26f), MaterialTheme.shapes.medium),
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.42f), MaterialTheme.shapes.medium),
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 1.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp, pressedElevation = 1.5.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -68,11 +68,12 @@ fun SecondaryActionButton(
         border = BorderStroke(
             width = 1.dp,
             color = if (enabled) {
-                MaterialTheme.colorScheme.outline
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.88f)
             } else {
                 MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
             }
         ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, pressedElevation = 0.5.dp),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -95,7 +96,7 @@ fun QuietActionButton(
         onClick = onClick,
         modifier = modifier
             .defaultMinSize(minHeight = CompactActionMinHeight)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.72f), MaterialTheme.shapes.medium),
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.82f), MaterialTheme.shapes.medium),
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.textButtonColors(
@@ -119,10 +120,11 @@ fun DangerActionButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .defaultMinSize(minHeight = CompactActionMinHeight),
+            .defaultMinSize(minHeight = CompactActionMinHeight)
+            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f), MaterialTheme.shapes.medium),
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 1.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp, pressedElevation = 1.5.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.error,
             contentColor = MaterialTheme.colorScheme.onError,

@@ -51,6 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 
 @Composable
 fun AppTutorialScreen(
@@ -79,14 +82,11 @@ fun AppTutorialScreen(
                     .fillMaxWidth()
                     .widthIn(max = 700.dp)
                     .heightIn(max = cardMaxHeight),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                colors = appCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
             ) {
                 Column(
                     modifier = Modifier
@@ -319,7 +319,7 @@ private fun TutorialControlCard(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.84f),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.72f)
         )
     ) {
         Row(

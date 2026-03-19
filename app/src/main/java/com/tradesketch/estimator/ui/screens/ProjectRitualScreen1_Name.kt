@@ -16,10 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +30,10 @@ import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.R
 import com.tradesketch.estimator.ui.components.CenteredLabelTrailingIcon
 import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
+import com.tradesketch.estimator.ui.components.appOutlinedTextFieldColors
 
 @Composable
 fun ProjectRitualScreen1_Name(
@@ -60,14 +64,11 @@ fun ProjectRitualScreen1_Name(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 680.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                colors = appCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
             ) {
                 Column(
                     modifier = Modifier
@@ -75,11 +76,21 @@ fun ProjectRitualScreen1_Name(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.DriveFileRenameOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DriveFileRenameOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.project_setup_step_1),
                         style = MaterialTheme.typography.titleSmall,
@@ -100,6 +111,8 @@ fun ProjectRitualScreen1_Name(
                         onValueChange = onProjectNameChange,
                         label = { Text(stringResource(R.string.project_name_lower)) },
                         singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
+                        colors = appOutlinedTextFieldColors(),
                         modifier = Modifier.fillMaxWidth()
                     )
                     PrimaryActionButton(

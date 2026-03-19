@@ -3,6 +3,9 @@ package com.tradesketch.estimator.ui.screens
 import com.tradesketch.estimator.ui.components.PrimaryActionButton
 import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -257,7 +260,12 @@ fun ExportScreen(
             }
         }
 
-        Card(modifier = Modifier.animateContentSize()) {
+        Card(
+            modifier = Modifier.animateContentSize(),
+            colors = appCardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = appCardBorder(),
+            elevation = appCardElevation()
+        ) {
             Column(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -291,7 +299,12 @@ fun ExportScreen(
                 modifier = Modifier.animateContentSize()
             )
 
-            Card(modifier = Modifier.animateContentSize()) {
+            Card(
+                modifier = Modifier.animateContentSize(),
+                colors = appCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
+            ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -764,13 +777,11 @@ private fun ExportProjectHeaderCard(
         else -> null
     }
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        colors = appCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
+        border = appCardBorder(accented = true),
+        elevation = appCardElevation(raised = true)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -863,9 +874,11 @@ private fun ProfessionalPreviewDeck(
     val hasNext = pageIndex < EstimatePreviewPage.entries.lastIndex
 
     Card(
-        colors = CardDefaults.cardColors(
+        colors = appCardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer
         ),
+        border = appCardBorder(accented = true),
+        elevation = appCardElevation(raised = true),
         modifier = modifier
     ) {
         Column(
@@ -938,13 +951,11 @@ private fun ProfessionalPreviewDeck(
             }
 
             Card(
-                colors = CardDefaults.cardColors(
+                colors = appCardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                )
+                border = appCardBorder(),
+                elevation = appCardElevation()
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
