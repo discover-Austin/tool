@@ -668,7 +668,20 @@ private fun WorkspaceShell(
             }
 
             if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
-                val blueprintHeaderLanePadding = if (compactBlueprintHud) 100.dp else 128.dp
+                val blueprintHeaderLanePadding = when {
+                    compactBlueprintHud -> (configuration.screenWidthDp * 0.26f).dp.coerceIn(108.dp, 144.dp)
+                    else -> (configuration.screenWidthDp * 0.22f).dp.coerceIn(128.dp, 188.dp)
+                }
+                val blueprintHeaderButtonSize = if (compactBlueprintHud) 34.dp else 38.dp
+                val blueprintHeaderSpacing = if (compactBlueprintHud) 6.dp else 8.dp
+                val blueprintHeaderMinWidth = if (compactBlueprintHud) 104.dp else 132.dp
+                val blueprintHeaderMaxWidthCap = if (compactBlueprintHud) 144.dp else 188.dp
+                val blueprintHeaderMaxWidth = (
+                    configuration.screenWidthDp.dp -
+                        (blueprintHeaderLanePadding * 2) -
+                        blueprintHeaderButtonSize -
+                        blueprintHeaderSpacing
+                    ).coerceIn(blueprintHeaderMinWidth, blueprintHeaderMaxWidthCap)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -681,14 +694,14 @@ private fun WorkspaceShell(
                     contentAlignment = Alignment.TopCenter
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(if (compactBlueprintHud) 6.dp else 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(blueprintHeaderSpacing),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             modifier = Modifier
                                 .widthIn(
-                                    min = if (compactBlueprintHud) 108.dp else 132.dp,
-                                    max = if (compactBlueprintHud) 136.dp else 172.dp
+                                    min = blueprintHeaderMinWidth,
+                                    max = blueprintHeaderMaxWidth
                                 )
                                 .height(if (compactBlueprintHud) 52.dp else 56.dp),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
@@ -728,7 +741,7 @@ private fun WorkspaceShell(
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                             border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
                             shadowElevation = 6.dp,
-                            modifier = Modifier.size(if (compactBlueprintHud) 34.dp else 38.dp)
+                            modifier = Modifier.size(blueprintHeaderButtonSize)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(

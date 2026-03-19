@@ -1400,7 +1400,10 @@ internal fun AddonPresetCard(
 internal fun SelectionPanel(
     selectedWall: WallSegment?,
     selectedOpening: BlueprintOpening?,
+    circleSelection: CircleSelectionInfo?,
     useMetric: Boolean,
+    onCircleRadiusStep: (Int) -> Unit,
+    onCircleDiameterStep: (Int) -> Unit,
     onDeselect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1436,7 +1439,7 @@ internal fun SelectionPanel(
             when {
                 selectedWall != null -> {
                     Text(
-                        "Wall",
+                        if (circleSelection != null) "Circle" else "Wall",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -1448,8 +1451,61 @@ internal fun SelectionPanel(
                         "H: ${formatLengthDisplay(mm = selectedWall.height.value, useMetric = useMetric)}",
                         style = MaterialTheme.typography.labelSmall
                     )
+                    if (circleSelection != null) {
+                        Text(
+                            "R: ${formatLengthDisplay(mm = circleSelection.radiusMm, useMetric = useMetric)}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Text(
+                            "D: ${formatLengthDisplay(mm = circleSelection.diameterMm, useMetric = useMetric)}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Text(
+                            "Segments: ${circleSelection.segmentCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            TextButton(
+                                onClick = { onCircleRadiusStep(-1) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("R-", style = MaterialTheme.typography.labelSmall)
+                            }
+                            TextButton(
+                                onClick = { onCircleRadiusStep(1) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("R+", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            TextButton(
+                                onClick = { onCircleDiameterStep(-1) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("D-", style = MaterialTheme.typography.labelSmall)
+                            }
+                            TextButton(
+                                onClick = { onCircleDiameterStep(1) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("D+", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                     Text(
-                        "Delete from rail trash.",
+                        if (circleSelection != null) {
+                            "Resize with R/D controls. Delete from rail trash."
+                        } else {
+                            "Delete from rail trash."
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

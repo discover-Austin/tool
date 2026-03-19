@@ -413,6 +413,17 @@ fun BlueprintScreen(
     }
     val topOverlaySpacing = if (compactHeightWindow) 4.dp else 6.dp
     val topStackMaxHeight = if (compactHeightWindow) 220.dp else 320.dp
+    val compactHudTopStackWidth = when {
+        configuration.screenWidthDp < 400 -> 170.dp
+        configuration.screenWidthDp < 440 -> 182.dp
+        compactHeightWindow -> 198.dp
+        else -> 238.dp
+    }
+    val compactHudLiveWidth = when {
+        configuration.screenWidthDp < 400 -> 168.dp
+        configuration.screenWidthDp < 440 -> 178.dp
+        else -> 194.dp
+    }
     val stairWorkflowActive = scopedDoc.openings.any { it.type.isStair() } ||
         activeOpeningPanel == OpeningPanelType.STAIR_UP ||
         activeOpeningPanel == OpeningPanelType.STAIR_DOWN ||
@@ -433,6 +444,13 @@ fun BlueprintScreen(
     )
     val selectedWall = uiState.selectedWallId?.let { id -> renderedDoc.walls.find { it.id == id } }
     val selectedOpening = uiState.selectedOpeningId?.let { id -> renderedDoc.openings.find { it.id == id } }
+    val circleSelection = selectedWall?.let { wall ->
+        circleSelectionInfo(
+            document = doc,
+            selectedWallId = wall.id
+        )
+    }
+    val circleResizeStepMm = if (appSettings.useMetric) 150L else Millimeters.fromFeet(0.5).value
     LaunchedEffect(showParams) {
         if (!showParams) {
             paramsPanelBounds = null
@@ -1740,7 +1758,7 @@ fun BlueprintScreen(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 4.dp, top = overlayTopPadding)
-                .widthIn(max = 194.dp)
+                .widthIn(max = compactHudLiveWidth)
                 .heightIn(max = topStackMaxHeight)
                 .verticalScroll(rememberScrollState())
                 .onGloballyPositioned {
@@ -1759,7 +1777,30 @@ fun BlueprintScreen(
                 SelectionPanel(
                     selectedWall = selectedWall,
                     selectedOpening = selectedOpening,
+                    circleSelection = circleSelection,
                     useMetric = appSettings.useMetric,
+                    onCircleRadiusStep = { direction ->
+                        selectedWall?.id?.let { selectedId ->
+                            resizeSelectedCircle(
+                                document = doc,
+                                selectedWallId = selectedId,
+                                radiusDeltaMm = direction * circleResizeStepMm
+                            )?.let { updatedWalls ->
+                                viewModel.replaceWalls(updatedWalls)
+                            }
+                        }
+                    },
+                    onCircleDiameterStep = { direction ->
+                        selectedWall?.id?.let { selectedId ->
+                            resizeSelectedCircle(
+                                document = doc,
+                                selectedWallId = selectedId,
+                                radiusDeltaMm = direction * (circleResizeStepMm / 2L).coerceAtLeast(1L)
+                            )?.let { updatedWalls ->
+                                viewModel.replaceWalls(updatedWalls)
+                            }
+                        }
+                    },
                     onDeselect = {
                         viewModel.selectWall(null)
                         viewModel.selectOpening(null)
@@ -1775,7 +1816,7 @@ fun BlueprintScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(end = 8.dp, top = overlayTopPadding)
-                .widthIn(max = if (compactHeightWindow) 214.dp else 238.dp)
+                .widthIn(max = compactHudTopStackWidth)
                 .heightIn(max = topStackMaxHeight)
                 .verticalScroll(rememberScrollState())
                 .onGloballyPositioned {
@@ -3062,7 +3103,8 @@ private fun buildQuadraticBezierPointChain(
 private fun buildCirclePointChain(
     center: PointMm,
     edge: PointMm,
-    segmentCount: Int
+    segmentCount: Int,
+    snapSegments: Boolean = true
 ): List<PointMm> {
     val radiusMm = hypot(
         (edge.x - center.x).toDouble(),
@@ -3070,7 +3112,11 @@ private fun buildCirclePointChain(
     )
     if (radiusMm < MIN_GENERATED_CURVE_SEGMENT_MM.toDouble()) return emptyList()
     val startAngleRadians = Math.PI / 2.0
-    val safeSegments = snapCircleSegmentCount(segmentCount, MAX_PREVIEW_CURVE_SEGMENTS)
+    val safeSegments = if (snapSegments) {
+        snapCircleSegmentCount(segmentCount, MAX_PREVIEW_CURVE_SEGMENTS)
+    } else {
+        segmentCount.coerceIn(6, MAX_PREVIEW_CURVE_SEGMENTS)
+    }
     return (0 until safeSegments).map { index ->
         val angle = startAngleRadians + ((Math.PI * 2.0 * index) / safeSegments.toDouble())
         PointMm(
@@ -3078,6 +3124,99 @@ private fun buildCirclePointChain(
             y = (center.y + (sin(angle) * radiusMm)).roundToLong()
         )
     }
+}
+
+private fun circleSelectionInfo(
+    document: BlueprintDocument,
+    selectedWallId: String
+): CircleSelectionInfo? {
+    val selectedWall = document.walls.firstOrNull { wall -> wall.id == selectedWallId } ?: return null
+    if (CURVE_SHAPE_CIRCLE_TAG !in selectedWall.tags) return null
+    val groupTag = selectedWall.curveGroupTag() ?: return null
+    val groupWalls = document.walls.filter { wall -> wall.curveGroupTag() == groupTag }
+    if (groupWalls.size < 3) return null
+    val center = estimateCircleCenter(groupWalls)
+    val radiusMm = estimateCircleRadius(groupWalls, center)
+    return CircleSelectionInfo(
+        radiusMm = radiusMm,
+        diameterMm = radiusMm * 2L,
+        segmentCount = groupWalls.size
+    )
+}
+
+private fun resizeSelectedCircle(
+    document: BlueprintDocument,
+    selectedWallId: String,
+    radiusDeltaMm: Long
+): List<WallSegment>? {
+    val selectedWall = document.walls.firstOrNull { wall -> wall.id == selectedWallId } ?: return null
+    if (CURVE_SHAPE_CIRCLE_TAG !in selectedWall.tags) return null
+    val groupTag = selectedWall.curveGroupTag() ?: return null
+    val groupWalls = document.walls.filter { wall -> wall.curveGroupTag() == groupTag }
+    if (groupWalls.size < 3) return null
+    val center = estimateCircleCenter(groupWalls)
+    val currentRadiusMm = estimateCircleRadius(groupWalls, center)
+    val nextRadiusMm = (currentRadiusMm + radiusDeltaMm)
+        .coerceAtLeast(MIN_GENERATED_CURVE_SEGMENT_MM * 4L)
+    val orderedGroupWalls = groupWalls.sortedBy { wall ->
+        circlePointOrderRadians(
+            point = wall.start,
+            center = center
+        )
+    }
+    val updatedPoints = buildCirclePointChain(
+        center = center,
+        edge = PointMm(center.x, center.y + nextRadiusMm),
+        segmentCount = orderedGroupWalls.size,
+        snapSegments = false
+    )
+    val normalizedPoints = normalizeCurvePointChain(updatedPoints)
+    if (normalizedPoints.size != orderedGroupWalls.size) return null
+    val replacements = orderedGroupWalls.mapIndexed { index, wall ->
+        wall.copy(
+            start = normalizedPoints[index],
+            end = normalizedPoints[(index + 1) % normalizedPoints.size]
+        )
+    }.associateBy { wall -> wall.id }
+    return document.walls.map { wall ->
+        replacements[wall.id] ?: wall
+    }
+}
+
+private fun estimateCircleCenter(
+    walls: List<WallSegment>
+): PointMm {
+    val points = walls.map { wall -> wall.start }
+    val averageX = points.map { point -> point.x.toDouble() }.average().roundToLong()
+    val averageY = points.map { point -> point.y.toDouble() }.average().roundToLong()
+    return PointMm(averageX, averageY)
+}
+
+private fun estimateCircleRadius(
+    walls: List<WallSegment>,
+    center: PointMm
+): Long {
+    val points = walls.map { wall -> wall.start }
+    return points.map { point ->
+        hypot(
+            (point.x - center.x).toDouble(),
+            (point.y - center.y).toDouble()
+        )
+    }.average().roundToLong()
+}
+
+private fun circlePointOrderRadians(
+    point: PointMm,
+    center: PointMm
+): Double {
+    val angle = atan2(
+        (point.y - center.y).toDouble(),
+        (point.x - center.x).toDouble()
+    )
+    var relative = angle - (Math.PI / 2.0)
+    while (relative < 0.0) relative += Math.PI * 2.0
+    while (relative >= Math.PI * 2.0) relative -= Math.PI * 2.0
+    return relative
 }
 
 private fun approximateArcLengthMillimeters(
