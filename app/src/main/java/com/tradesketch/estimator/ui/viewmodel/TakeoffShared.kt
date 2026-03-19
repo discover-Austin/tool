@@ -172,7 +172,7 @@ internal fun projectBlueprintForType(
             includeDrywallCeilings = session.drywall.includeCeilings
         )
     } else {
-        project.authoritativeBlueprint()
+        project.authoritativeBlueprint().scopedToTakeoffScope(type.toTakeoffScope())
     }
 }
 
@@ -253,14 +253,16 @@ private fun manualBlueprintForType(
         TakeoffType.DRYWALL -> {
             manualWallFromArea(
                 id = "manual-drywall-wall",
-                areaSqFt = manualParams.drywallWallAreaSqFt
+                areaSqFt = manualParams.drywallWallAreaSqFt,
+                scope = type.toTakeoffScope()
             )?.let(walls::add)
 
             if (includeDrywallCeilings) {
                 manualSquareRoomFromArea(
                     id = "manual-drywall-ceiling",
                     areaSqFt = manualParams.drywallCeilingAreaSqFt,
-                    ceilingEnabled = true
+                    ceilingEnabled = true,
+                    scope = type.toTakeoffScope()
                 )?.let(rooms::add)
             }
         }
@@ -269,7 +271,8 @@ private fun manualBlueprintForType(
             manualSquareRoomFromArea(
                 id = "manual-concrete-area",
                 areaSqFt = manualParams.concreteAreaSqFt,
-                ceilingEnabled = false
+                ceilingEnabled = false,
+                scope = type.toTakeoffScope()
             )?.let(rooms::add)
         }
 
@@ -277,14 +280,16 @@ private fun manualBlueprintForType(
             manualSquareRoomFromArea(
                 id = "manual-gravel-area",
                 areaSqFt = manualParams.gravelAreaSqFt,
-                ceilingEnabled = false
+                ceilingEnabled = false,
+                scope = type.toTakeoffScope()
             )?.let(rooms::add)
         }
 
         TakeoffType.PAINT -> {
             manualWallFromArea(
                 id = "manual-paint-wall",
-                areaSqFt = manualParams.paintAreaSqFt
+                areaSqFt = manualParams.paintAreaSqFt,
+                scope = type.toTakeoffScope()
             )?.let(walls::add)
         }
     }
@@ -298,7 +303,8 @@ private fun manualBlueprintForType(
 
 private fun manualWallFromArea(
     id: String,
-    areaSqFt: Double
+    areaSqFt: Double,
+    scope: TakeoffScope
 ): WallSegment? {
     val normalizedArea = areaSqFt.coerceAtLeast(0.0)
     if (normalizedArea <= 0.0) return null
@@ -309,14 +315,15 @@ private fun manualWallFromArea(
         start = PointMm(x = 0L, y = 0L),
         end = PointMm(x = wallLengthMm, y = 0L),
         height = Millimeters.fromFeet(1.0),
-        tags = setOf("manual")
+        tags = setOf("manual", scope.tradeScopeTag())
     )
 }
 
 private fun manualSquareRoomFromArea(
     id: String,
     areaSqFt: Double,
-    ceilingEnabled: Boolean
+    ceilingEnabled: Boolean,
+    scope: TakeoffScope
 ): Room? {
     val normalizedArea = areaSqFt.coerceAtLeast(0.0)
     if (normalizedArea <= 0.0) return null
@@ -334,7 +341,7 @@ private fun manualSquareRoomFromArea(
         id = id,
         name = "Manual Area",
         polygon = polygon,
-        tags = setOf("manual"),
+        tags = setOf("manual", scope.tradeScopeTag()),
         ceiling = CeilingSpec(
             enabled = ceilingEnabled,
             height = Millimeters.fromFeet(1.0)

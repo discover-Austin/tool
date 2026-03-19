@@ -5,6 +5,7 @@ import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ExportFormatterTest {
@@ -91,5 +92,56 @@ class ExportFormatterTest {
         assertTrue(text.contains("Date: $formattedDate"))
         assertTrue(csv.contains("\"$formattedDate\""))
         assertTrue(json.contains("\"generatedAt\": \"$formattedDate\""))
+    }
+
+    @Test
+    fun exportFormats_hideZeroQuantityPlaceholders_whenNothingIsMeasured() {
+        val project = Project(
+            id = "project-2",
+            name = "Blank Job"
+        )
+        val settings = Settings()
+        val result = TakeoffResult(
+            items = listOf(
+                TakeoffLine(
+                    name = "Drywall sheets",
+                    quantity = 0.0,
+                    unit = "sheets",
+                    unitCost = 17.5
+                )
+            ),
+            totalCost = 0.0,
+            materialSubtotal = 0.0,
+            laborCost = 0.0,
+            markupCost = 0.0,
+            taxCost = 0.0
+        )
+
+        val text = ExportFormatter.formatAsText(
+            project = project,
+            settings = settings,
+            takeoffType = "Drywall",
+            result = result
+        )
+        val csv = ExportFormatter.formatAsCSV(
+            project = project,
+            settings = settings,
+            takeoffType = "Drywall",
+            result = result
+        )
+        val json = ExportFormatter.formatAsJson(
+            project = project,
+            settings = settings,
+            takeoffType = "Drywall",
+            result = result
+        )
+
+        assertTrue(text.contains("No measured quantities yet."))
+        assertFalse(text.contains("Drywall sheets: 0"))
+        assertFalse(text.contains("TOTAL COST:"))
+        assertFalse(csv.contains("Drywall sheets"))
+        assertTrue(json.contains("\"items\": ["))
+        assertFalse(json.contains("\"name\": \"Drywall sheets\""))
+        assertTrue(json.contains("\"total\": null"))
     }
 }

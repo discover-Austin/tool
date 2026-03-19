@@ -317,6 +317,77 @@ class BlueprintDocumentMathTest {
     }
 
     @Test
+    fun concreteTakeoff_detectsClosedWallLoopWhenRoomsMissing() {
+        val side = Millimeters.fromFeet(10.0).value
+        val document = BlueprintDocument(
+            projectId = "p1",
+            walls = listOf(
+                WallSegment("w1", PointMm(0, 0), PointMm(side, 0)),
+                WallSegment("w2", PointMm(side, 0), PointMm(side, side)),
+                WallSegment("w3", PointMm(side, side), PointMm(0, side)),
+                WallSegment("w4", PointMm(0, side), PointMm(0, 0))
+            )
+        )
+
+        val concrete = BlueprintTakeoffCalculator.concreteTakeoff(
+            document = document,
+            thicknessFeet = 0.54,
+            wastePercent = 0.0
+        )
+
+        assertEquals(2.0, concrete.items.first().quantity, 0.05)
+        assertTrue(concrete.traces.any { it.metric == "concrete_area" })
+    }
+
+    @Test
+    fun drywallCeilingTakeoff_detectsClosedWallLoopWhenRoomsMissing() {
+        val side = Millimeters.fromFeet(10.0).value
+        val wallHeight = Millimeters.fromFeet(9.0)
+        val document = BlueprintDocument(
+            projectId = "p1",
+            walls = listOf(
+                WallSegment("w1", PointMm(0, 0), PointMm(side, 0), height = wallHeight),
+                WallSegment("w2", PointMm(side, 0), PointMm(side, side), height = wallHeight),
+                WallSegment("w3", PointMm(side, side), PointMm(0, side), height = wallHeight),
+                WallSegment("w4", PointMm(0, side), PointMm(0, 0), height = wallHeight)
+            )
+        )
+
+        val drywall = BlueprintTakeoffCalculator.drywallTakeoff(
+            document = document,
+            sheetAreaSqFt = 100.0,
+            wastePercent = 0.0,
+            screwsPerSheet = 0,
+            mudGallonsPer100SqFt = 0.0,
+            includeCeilings = true
+        )
+
+        val ceilingTrace = drywall.traces.firstOrNull { it.metric == "ceiling_area" }
+
+        assertNotNull(ceilingTrace)
+        assertEquals(100.0, ceilingTrace.value, 0.2)
+    }
+
+    @Test
+    fun gravelTargetRooms_detectsClosedWallLoopWhenRoomsMissing() {
+        val side = Millimeters.fromFeet(10.0).value
+        val document = BlueprintDocument(
+            projectId = "p1",
+            walls = listOf(
+                WallSegment("w1", PointMm(0, 0), PointMm(side, 0)),
+                WallSegment("w2", PointMm(side, 0), PointMm(side, side)),
+                WallSegment("w3", PointMm(side, side), PointMm(0, side)),
+                WallSegment("w4", PointMm(0, side), PointMm(0, 0))
+            )
+        )
+
+        val targetRooms = BlueprintTakeoffCalculator.gravelTargetRooms(document)
+
+        assertEquals(1, targetRooms.size)
+        assertEquals(100.0, targetRooms.first().areaSqFt(), 0.2)
+    }
+
+    @Test
     fun openingAreaByWallId_ignoresStairOpenings() {
         val wall = WallSegment(
             id = "wall-1",
@@ -385,3 +456,4 @@ class BlueprintDocumentMathTest {
         assertEquals("room-tagged", targetRooms.first().id)
     }
 }
+

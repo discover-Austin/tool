@@ -55,17 +55,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
+import com.tradesketch.estimator.domain.model.nonZeroItems
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
+import com.tradesketch.estimator.ui.viewmodel.ExportActionResult
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
-import com.tradesketch.estimator.ui.viewmodel.ExportActionResult
 import com.tradesketch.estimator.utils.ExportStorage
-import com.tradesketch.estimator.utils.defaultDeviceSaveHint
 import com.tradesketch.estimator.utils.Formatters
+import com.tradesketch.estimator.utils.defaultDeviceSaveHint
 import kotlinx.coroutines.launch
 
 private enum class EstimatePreviewPage(
@@ -182,13 +185,19 @@ fun ExportScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        val sessionInputMode = uiState.project?.takeoffSession?.inputMode ?: TakeoffInputMode.BLUEPRINT
+        val hasBlueprintGeometry = uiState.previewBlueprint?.hasGeometry() == true
+        val hasMeasuredQuantities = uiState.result?.hasMeasuredQuantities() == true
         ExportProjectHeaderCard(
             projectName = uiState.project?.name.orEmpty(),
             businessName = uiState.settings.businessName.ifBlank { null },
             takeoffType = uiState.takeoffType.ifBlank {
                 uiState.selectedType?.displayLabel ?: "Choose a trade"
             },
-            result = uiState.result
+            result = uiState.result,
+            inputMode = sessionInputMode,
+            hasMeasuredQuantities = hasMeasuredQuantities,
+            hasBlueprintGeometry = hasBlueprintGeometry
         )
 
         TitledSectionCard(
@@ -271,9 +280,6 @@ fun ExportScreen(
         }
 
         uiState.result?.let { result ->
-            val hasBlueprintGeometry = uiState.previewBlueprint?.let { blueprint ->
-                blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty()
-            } == true
             ProfessionalPreviewDeck(
                 takeoffType = uiState.takeoffType.ifBlank {
                     uiState.selectedType?.displayLabel ?: "Estimate"
@@ -733,8 +739,30 @@ private fun ExportProjectHeaderCard(
     projectName: String,
     businessName: String?,
     takeoffType: String,
-    result: TakeoffResult?
+    result: TakeoffResult?,
+    inputMode: TakeoffInputMode,
+    hasMeasuredQuantities: Boolean,
+    hasBlueprintGeometry: Boolean
 ) {
+    val estimateSource = when {
+        inputMode == TakeoffInputMode.MANUAL -> "Manual quantities"
+        hasBlueprintGeometry -> "Blueprint geometry"
+        else -> "No measured scope yet"
+    }
+    val statusText = when {
+        result == null -> "Waiting for quantities"
+        hasMeasuredQuantities -> "Preview ready"
+        else -> "Needs measurements"
+    }
+    val statusNote = when {
+        inputMode == TakeoffInputMode.MANUAL && hasMeasuredQuantities ->
+            "This estimate is using manual quantities, so the blueprint can stay blank."
+        !hasMeasuredQuantities && hasBlueprintGeometry ->
+            "This project has geometry, but nothing matches the selected trade yet."
+        !hasMeasuredQuantities ->
+            "Draw in Blueprint or enter manual quantities in Materials & Pricing to generate an estimate."
+        else -> null
+    }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -766,6 +794,10 @@ private fun ExportProjectHeaderCard(
                 value = takeoffType
             )
             PreviewMetricRow(
+                label = "Estimate Source",
+                value = estimateSource
+            )
+            PreviewMetricRow(
                 label = "Generated",
                 value = Formatters.formatDateTime(System.currentTimeMillis()),
                 showDivider = false
@@ -782,22 +814,29 @@ private fun ExportProjectHeaderCard(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = if (result == null) "Waiting for quantities" else "Preview ready",
+                    text = statusText,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (result == null) {
+                    color = if (result == null || !hasMeasuredQuantities) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.primary
                     }
                 )
             }
+            statusNote?.let { note ->
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (result != null) {
                 PreviewMetricRow(
                     label = "Line Items",
-                    value = result.items.size.toString(),
-                    showDivider = result.totalCost != null
+                    value = result.nonZeroItems().size.toString(),
+                    showDivider = hasMeasuredQuantities && result.totalCost != null
                 )
-                result.totalCost?.let {
+                result.totalCost?.takeIf { hasMeasuredQuantities }?.let {
                     PreviewMetricRow(
                         label = "Estimated Total",
                         value = Formatters.formatMoney(it),
@@ -942,11 +981,20 @@ private fun ProfessionalPreviewDeck(
 
 @Composable
 private fun CostPreviewPage(result: TakeoffResult) {
+    val measuredItems = result.nonZeroItems()
     PreviewPageTitle(
         title = "Cost Sheet",
         subtitle = "Client-facing total and detailed cost breakout."
     )
-    PreviewMetricRow(label = "Line Items", value = result.items.size.toString())
+    PreviewMetricRow(label = "Line Items", value = measuredItems.size.toString())
+    if (!result.hasMeasuredQuantities()) {
+        Text(
+            text = "No measured quantities yet. Draw in Blueprint or enter manual quantities in Materials & Pricing.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
     result.materialSubtotal?.let {
         PreviewMetricRow(label = "Material Subtotal", value = Formatters.formatMoney(it))
     }
@@ -971,7 +1019,7 @@ private fun CostPreviewPage(result: TakeoffResult) {
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 
-    val pricedItems = result.items.filter { it.extendedCost != null }
+    val pricedItems = measuredItems.filter { it.extendedCost != null }
     if (pricedItems.isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -1002,13 +1050,14 @@ private fun CostPreviewPage(result: TakeoffResult) {
 
 @Composable
 private fun ShoppingListPreviewPage(result: TakeoffResult) {
+    val measuredItems = result.nonZeroItems()
     PreviewPageTitle(
         title = "Shopping List",
         subtitle = "Purchase-ready quantities based on this estimate."
     )
-    if (result.items.isEmpty()) {
+    if (measuredItems.isEmpty()) {
         Text(
-            text = "No line items yet. Generate quantities in Takeoff first.",
+            text = "No measured line items yet. Generate quantities in Blueprint or Materials first.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1018,11 +1067,11 @@ private fun ShoppingListPreviewPage(result: TakeoffResult) {
             middle = "Quantity",
             right = "Est. Cost"
         )
-        result.items.forEachIndexed { index, line ->
+        measuredItems.forEachIndexed { index, line ->
             PreviewShoppingLineRow(
                 line = line,
                 index = index + 1,
-                showDivider = index < result.items.lastIndex
+                showDivider = index < measuredItems.lastIndex
             )
         }
     }
@@ -1072,18 +1121,19 @@ private fun BlueprintPreviewPage(blueprint: BlueprintDocument?) {
 
 @Composable
 private fun CombinedNoBlueprintPreviewPage(result: TakeoffResult) {
+    val measuredItems = result.nonZeroItems()
     PreviewPageTitle(
         title = "Combined Estimate Sheet",
         subtitle = "Cost + Shopping List combined, blueprint intentionally excluded."
     )
-    result.totalCost?.let {
+    result.totalCost?.takeIf { result.hasMeasuredQuantities() }?.let {
         PreviewMetricRow(
             label = "Estimated Total",
             value = Formatters.formatMoney(it),
             emphasize = true
         )
     }
-    result.materialSubtotal?.let {
+    result.materialSubtotal?.takeIf { result.hasMeasuredQuantities() }?.let {
         PreviewMetricRow(label = "Materials", value = Formatters.formatMoney(it))
     }
     Spacer(modifier = Modifier.height(4.dp))
@@ -1092,9 +1142,9 @@ private fun CombinedNoBlueprintPreviewPage(result: TakeoffResult) {
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Medium
     )
-    if (result.items.isEmpty()) {
+    if (measuredItems.isEmpty()) {
         Text(
-            text = "No shopping list items available.",
+            text = "No measured shopping list items are available yet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1104,12 +1154,12 @@ private fun CombinedNoBlueprintPreviewPage(result: TakeoffResult) {
             middle = "Qty",
             right = "Unit"
         )
-        result.items.forEachIndexed { index, line ->
+        measuredItems.forEachIndexed { index, line ->
             PreviewShoppingLineRow(
                 line = line,
                 compact = true,
                 index = index + 1,
-                showDivider = index < result.items.lastIndex
+                showDivider = index < measuredItems.lastIndex
             )
         }
     }
@@ -1278,5 +1328,7 @@ private fun PreviewPageTitle(
     }
 }
 
-
+private fun BlueprintDocument.hasGeometry(): Boolean {
+    return walls.isNotEmpty() || rooms.isNotEmpty() || openings.isNotEmpty()
+}
 

@@ -43,6 +43,6 @@
     <string name="delete_project_message">Delete \"%1$s\" permanently?</string>
     <string name="delete">Delete</string>
     <string name="no_project_selected_title">No project selected</string>
-    <string name="no_project_selected_message">Create a starter project to begin estimating.</string>
-    <string name="create_starter_project">Create Starter Project</string>
+    <string name="no_project_selected_message">Create a blank project to begin estimating.</string>
+    <string name="create_starter_project">Create Project</string>
 </resources>

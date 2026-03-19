@@ -11,6 +11,8 @@ import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
+import com.tradesketch.estimator.domain.model.nonZeroItems
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -250,6 +252,7 @@ internal object EstimateExportManager {
             y += 28f
 
             val blueprint = blueprintDocument
+            val measuredItems = result.nonZeroItems()
             val hasBlueprintGeometry = blueprint != null && (
                 blueprint.walls.isNotEmpty() ||
                     blueprint.rooms.isNotEmpty() ||
@@ -286,42 +289,54 @@ internal object EstimateExportManager {
             val colUnitCost = margin + (contentWidth * 0.80f)
             val colTotal = margin + (contentWidth * 0.92f)
 
-            canvas.drawText("Item", colItem, y, bodyBoldPaint)
-            canvas.drawText("Qty", colQty, y, bodyBoldPaint)
-            canvas.drawText("Unit", colUnit, y, bodyBoldPaint)
-            canvas.drawText("Unit Cost", colUnitCost, y, bodyBoldPaint)
-            canvas.drawText("Total", colTotal, y, bodyBoldPaint)
-            y += 14f
-            canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
-            y += 24f
-
-            result.items.forEach { item ->
-                val rowHeight = estimateItemRowHeight(
-                    itemName = item.name,
-                    paint = bodyPaint,
-                    maxItemWidth = contentWidth * 0.52f
-                )
-                if (y + rowHeight > pageBottom - 90f) {
-                    startNewPage()
-                    ensureSpace(120f)
-                    canvas.drawText("Line Items (cont.)", margin, y, headingPaint)
-                    y += 28f
-                    canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
-                    y += 20f
+            if (measuredItems.isEmpty()) {
+                ensureSpace(56f)
+                wrapText(
+                    "No measured quantities yet. Draw in Blueprint or enter manual quantities in Materials & Pricing.",
+                    bodyPaint,
+                    contentWidth
+                ).forEach { line ->
+                    canvas.drawText(line, margin, y, bodyPaint)
+                    y += 22f
                 }
-                y = drawLineItemRow(
-                    canvas = canvas,
-                    item = item,
-                    y = y,
-                    maxItemWidth = contentWidth * 0.52f,
-                    colItem = colItem,
-                    colQty = colQty,
-                    colUnit = colUnit,
-                    colUnitCost = colUnitCost,
-                    colTotal = colTotal,
-                    bodyPaint = bodyPaint,
-                    linePaint = linePaint
-                )
+                y += 12f
+            } else {
+                canvas.drawText("Item", colItem, y, bodyBoldPaint)
+                canvas.drawText("Qty", colQty, y, bodyBoldPaint)
+                canvas.drawText("Unit", colUnit, y, bodyBoldPaint)
+                canvas.drawText("Unit Cost", colUnitCost, y, bodyBoldPaint)
+                canvas.drawText("Total", colTotal, y, bodyBoldPaint)
+                y += 14f
+                canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
+                y += 24f
+                measuredItems.forEach { item ->
+                    val rowHeight = estimateItemRowHeight(
+                        itemName = item.name,
+                        paint = bodyPaint,
+                        maxItemWidth = contentWidth * 0.52f
+                    )
+                    if (y + rowHeight > pageBottom - 90f) {
+                        startNewPage()
+                        ensureSpace(120f)
+                        canvas.drawText("Line Items (cont.)", margin, y, headingPaint)
+                        y += 28f
+                        canvas.drawLine(margin, y, pageWidth - margin, y, linePaint)
+                        y += 20f
+                    }
+                    y = drawLineItemRow(
+                        canvas = canvas,
+                        item = item,
+                        y = y,
+                        maxItemWidth = contentWidth * 0.52f,
+                        colItem = colItem,
+                        colQty = colQty,
+                        colUnit = colUnit,
+                        colUnitCost = colUnitCost,
+                        colTotal = colTotal,
+                        bodyPaint = bodyPaint,
+                        linePaint = linePaint
+                    )
+                }
             }
 
             y += 8f
@@ -331,18 +346,24 @@ internal object EstimateExportManager {
             canvas.drawText("Cost Summary", margin, y, headingPaint)
             y += 30f
 
-            y = drawSummaryLine(canvas, "Materials", result.materialSubtotal, y, margin, pageWidth.toFloat(), bodyPaint)
-            y = drawSummaryLine(canvas, "Labor", result.laborCost, y, margin, pageWidth.toFloat(), bodyPaint)
-            y = drawSummaryLine(canvas, "Markup", result.markupCost, y, margin, pageWidth.toFloat(), bodyPaint)
-            y = drawSummaryLine(canvas, "Tax", result.taxCost, y, margin, pageWidth.toFloat(), bodyPaint)
+            if (result.hasMeasuredQuantities()) {
+                y = drawSummaryLine(canvas, "Materials", result.materialSubtotal, y, margin, pageWidth.toFloat(), bodyPaint)
+                y = drawSummaryLine(canvas, "Labor", result.laborCost, y, margin, pageWidth.toFloat(), bodyPaint)
+                y = drawSummaryLine(canvas, "Markup", result.markupCost, y, margin, pageWidth.toFloat(), bodyPaint)
+                y = drawSummaryLine(canvas, "Tax", result.taxCost, y, margin, pageWidth.toFloat(), bodyPaint)
 
-            result.totalCost?.let { total ->
-                ensureSpace(36f)
-                canvas.drawText("TOTAL", margin, y, bodyBoldPaint)
-                val totalText = Formatters.formatMoney(total)
-                val totalWidth = bodyBoldPaint.measureText(totalText)
-                canvas.drawText(totalText, pageWidth - margin - totalWidth, y, bodyBoldPaint)
-                y += 30f
+                result.totalCost?.let { total ->
+                    ensureSpace(36f)
+                    canvas.drawText("TOTAL", margin, y, bodyBoldPaint)
+                    val totalText = Formatters.formatMoney(total)
+                    val totalWidth = bodyBoldPaint.measureText(totalText)
+                    canvas.drawText(totalText, pageWidth - margin - totalWidth, y, bodyBoldPaint)
+                    y += 30f
+                }
+            } else {
+                ensureSpace(32f)
+                canvas.drawText("Totals will appear after quantities are measured.", margin, y, bodyPaint)
+                y += 28f
             }
 
             y += 10f

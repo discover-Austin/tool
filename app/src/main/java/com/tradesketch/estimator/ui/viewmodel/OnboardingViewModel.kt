@@ -2,11 +2,7 @@ package com.tradesketch.estimator.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.PrimaryTrade
-import com.tradesketch.estimator.domain.model.Project
-import com.tradesketch.estimator.domain.model.defaultQuickStartTemplate
-import com.tradesketch.estimator.domain.model.defaultTakeoffScope
 import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
@@ -40,9 +36,10 @@ class OnboardingViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, error = null, completedProjectId = null) }
             runCatching {
                 val settings = getSettingsUseCase().first()
-                val template = trade.defaultQuickStartTemplate()
-                val baseProject = template.createProject(normalizedName)
-                val project = baseProject.withTradeScope(trade)
+                val project = createStarterProjectForTrade(
+                    trade = trade,
+                    name = normalizedName
+                )
                 saveProjectUseCase(project)
                 saveSettingsUseCase(
                     settings.copy(
@@ -78,22 +75,6 @@ class OnboardingViewModel @Inject constructor(
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
-}
-
-private fun Project.withTradeScope(trade: PrimaryTrade): Project {
-    val mappedScope = trade.defaultTakeoffScope(takeoffSession.selectedScope)
-    val blueprint = if (blueprintDocument.projectId == id) {
-        blueprintDocument
-    } else {
-        blueprintDocument.copy(projectId = id)
-    }
-    return copy(
-        takeoffSession = takeoffSession.copy(
-            selectedScope = mappedScope,
-            selectedPlaybook = trade.name
-        ),
-        blueprintDocument = blueprint
-    )
 }
 
 data class OnboardingUiState(

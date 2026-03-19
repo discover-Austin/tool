@@ -46,11 +46,13 @@ import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.TakeoffInputMode
-import com.tradesketch.estimator.domain.model.authoritativeBlueprint
+import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
+import com.tradesketch.estimator.domain.model.nonZeroItems
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
 import com.tradesketch.estimator.ui.displayLabel
+import com.tradesketch.estimator.ui.viewmodel.projectBlueprintForType
 import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.utils.Formatters
@@ -755,6 +757,8 @@ fun TakeoffScreen(
 
 
             uiState.result?.let { result ->
+                val measuredItems = result.nonZeroItems()
+                val hasMeasuredQuantities = result.hasMeasuredQuantities()
                 if (isMaterialsMode) {
                     item {
                         Card(
@@ -769,21 +773,29 @@ fun TakeoffScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Line items: ${result.items.size}",
+                                    text = "Line items: ${measuredItems.size}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                                result.materialSubtotal?.let { materials ->
+                                if (!hasMeasuredQuantities) {
                                     Text(
-                                        text = "Material subtotal: ${Formatters.formatMoney(materials)}",
+                                        text = "No measured quantities yet. Draw in Blueprint or enter manual quantities first.",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
-                                result.totalCost?.let { total ->
-                                    Text(
-                                        text = "Estimated total: ${Formatters.formatMoney(total)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                if (hasMeasuredQuantities) {
+                                    result.materialSubtotal?.let { materials ->
+                                        Text(
+                                            text = "Material subtotal: ${Formatters.formatMoney(materials)}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    result.totalCost?.let { total ->
+                                        Text(
+                                            text = "Estimated total: ${Formatters.formatMoney(total)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 SecondaryActionButton(
@@ -833,7 +845,13 @@ fun TakeoffScreen(
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    result.items.forEach { line ->
+                                    if (!hasMeasuredQuantities) {
+                                        Text(
+                                            text = "No measured quantities yet. Draw in Blueprint or enter manual quantities first.",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    measuredItems.forEach { line ->
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
@@ -889,13 +907,19 @@ fun TakeoffScreen(
                                 )
                                 Text(
                                     text = if (isManualMode) {
-                                        "${result.items.size} line item(s) derived from manual entries."
+                                        "${measuredItems.size} line item(s) derived from manual entries."
                                     } else {
-                                        "${result.items.size} line item(s) derived from the blueprint."
+                                        "${measuredItems.size} line item(s) derived from the blueprint."
                                     },
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                                result.items.forEach { line ->
+                                if (!hasMeasuredQuantities) {
+                                    Text(
+                                        text = "No measured quantities yet. Draw in Blueprint or enter manual quantities first.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                measuredItems.forEach { line ->
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1126,24 +1150,19 @@ private fun scopeSummaryForType(
         )
     }
 
-    val blueprint = project.authoritativeBlueprint()
+    val blueprint = projectBlueprintForType(project = project, type = type)
 
     return when (type) {
         TakeoffType.DRYWALL -> {
             val wallCount = blueprint.walls.size
-            val ceilingCount = if (includeDrywallCeilings) blueprint.rooms.size else 0
+            val eligibleCeilings = blueprint.rooms.filter { room -> room.ceiling.enabled }
+            val ceilingCount = if (includeDrywallCeilings) eligibleCeilings.size else 0
             val totalCount = wallCount + ceilingCount
 
-            val wallArea = blueprint.walls.sumOf {
-                val length = Millimeters(it.lengthMillimeters()).toFeet()
-                val height = Millimeters(it.heightMm).toFeet()
-                length * height
-            }
-            val openingArea = blueprint.openings.sumOf {
-                Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet()
-            }
+            val wallArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(blueprint).values.sum()
+            val openingArea = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(blueprint).values.sum()
             val ceilingArea = if (includeDrywallCeilings) {
-                blueprint.rooms.sumOf { it.areaSqFt() }
+                eligibleCeilings.sumOf { it.areaSqFt() }
             } else {
                 0.0
             }
@@ -1201,14 +1220,8 @@ private fun scopeSummaryForType(
         TakeoffType.PAINT -> {
             val wallCount = blueprint.walls.size
 
-            val wallArea = blueprint.walls.sumOf {
-                val length = Millimeters(it.lengthMillimeters()).toFeet()
-                val height = Millimeters(it.heightMm).toFeet()
-                length * height
-            }
-            val openingArea = blueprint.openings.sumOf {
-                Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet()
-            }
+            val wallArea = BlueprintTakeoffCalculator.wallAreaByIdSqFt(blueprint).values.sum()
+            val openingArea = BlueprintTakeoffCalculator.openingAreaByWallIdSqFt(blueprint).values.sum()
             val netArea = (wallArea - openingArea).coerceAtLeast(0.0)
 
             ScopeSummary(
@@ -1246,14 +1259,19 @@ private fun takeoffWarnings(
                 warnings += "Include Ceilings is enabled, but manual ceiling area is zero."
             }
         } else {
-            val hasCeilings = uiState.project?.authoritativeBlueprint()?.rooms?.any { it.ceiling.enabled } == true
+            val hasCeilings = uiState.project
+                ?.let { project -> projectBlueprintForType(project = project, type = selectedType) }
+                ?.rooms
+                ?.any { room -> room.ceiling.enabled } == true
             if (hasCeilings && !uiState.drywallParams.includeCeilings) {
                 warnings += "Room ceilings exist but are excluded from drywall totals."
             }
         }
     }
     if (uiState.inputMode == TakeoffInputMode.BLUEPRINT) {
-        val blueprint = uiState.project?.authoritativeBlueprint()
+        val blueprint = uiState.project?.let { project ->
+            projectBlueprintForType(project = project, type = selectedType)
+        }
         if (blueprint != null) {
             val floorTags = buildSet {
                 blueprint.walls.forEach { wall ->

@@ -23,12 +23,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.Millimeters
-import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
 import com.tradesketch.estimator.ui.viewmodel.calculateForType
+import com.tradesketch.estimator.ui.viewmodel.projectBlueprintForType
+import com.tradesketch.estimator.ui.viewmodel.toTakeoffType
 
 @Composable
 fun ReviewScreen(
@@ -42,9 +43,8 @@ fun ReviewScreen(
         viewModel.setProjectId(projectId)
     }
 
-    val document = uiState.document
     val project = uiState.project
-    if (uiState.isLoading || document == null || project == null) {
+    if (uiState.isLoading || project == null) {
         Column(
             modifier = modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -55,15 +55,25 @@ fun ReviewScreen(
         return
     }
 
+    val settings = uiState.settings
     val calculator = remember { CalculateTakeoffUseCase() }
-    val inputs = remember(project, uiState.project?.takeoffSession) {
-        buildTakeoffInputs(project = project, settings = Settings.DEFAULT)
+    val reviewType = remember(project.takeoffSession.selectedScope) {
+        project.takeoffSession.selectedScope.toTakeoffType()
+    }
+    val document = remember(project, reviewType) {
+        projectBlueprintForType(project = project, type = reviewType)
+    }
+    val inputs = remember(project, settings, uiState.project?.takeoffSession) {
+        buildTakeoffInputs(project = project, settings = settings)
     }
     val drywall = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.DRYWALL, inputs = inputs)
     }
     val concrete = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.CONCRETE, inputs = inputs)
+    }
+    val gravel = remember(project, inputs) {
+        calculator.calculateForType(project = project, type = TakeoffType.GRAVEL_MULCH, inputs = inputs)
     }
     val paint = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.PAINT, inputs = inputs)
@@ -79,7 +89,7 @@ fun ReviewScreen(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Review", style = MaterialTheme.typography.titleLarge)
-                    Text("Blueprint-derived quantities by room, wall, and opening IDs.")
+                    Text("Current scope geometry with trade-specific quantity traces.")
                     Text("Project: ${uiState.project?.name.orEmpty()}", fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -140,6 +150,9 @@ fun ReviewScreen(
         }
         item {
             ReviewTradeCard("Concrete", concrete)
+        }
+        item {
+            ReviewTradeCard("Gravel / Mulch", gravel)
         }
         item {
             ReviewTradeCard("Paint", paint)

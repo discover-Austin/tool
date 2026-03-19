@@ -38,3 +38,7 @@ data class TakeoffResult(
     val taxCost: Double? = null,
     val traces: List<TakeoffTrace> = emptyList()
 )
+
+fun TakeoffResult.nonZeroItems(): List<TakeoffLine> = items.filter { it.quantity > 0.0 }
+
+fun TakeoffResult.hasMeasuredQuantities(): Boolean = items.any { it.quantity > 0.0 }

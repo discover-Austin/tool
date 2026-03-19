@@ -15,6 +15,8 @@ import kotlin.math.ceil
  * All quantities are derived from blueprint geometry and params.
  */
 object BlueprintTakeoffCalculator {
+    private const val FLOOR_TAG_PREFIX = "floor:"
+    private const val DEFAULT_FLOOR_TAG = "${FLOOR_TAG_PREFIX}0"
 
     fun drywallTakeoff(
         document: BlueprintDocument,
@@ -27,6 +29,7 @@ object BlueprintTakeoffCalculator {
     ): TakeoffResult {
         val wallAreas = wallAreaByIdSqFt(document)
         val openingAreas = openingAreaByWallIdSqFt(document)
+        val ceilingRooms = resolvedRooms(document)
         val traces = mutableListOf<TakeoffTrace>()
 
         val netWallArea = wallAreas.entries.sumOf { (wallId, gross) ->
@@ -49,19 +52,19 @@ object BlueprintTakeoffCalculator {
         }
 
         val ceilingArea = if (includeCeilings) {
-            document.rooms
+            ceilingRooms
                 .asSequence()
                 .filter { room -> room.ceiling.enabled }
                 .sumOf { room ->
-                val area = room.areaSqFt()
-                traces += TakeoffTrace(
-                    metric = "ceiling_area",
-                    value = area,
-                    unit = "sq_ft",
-                    roomId = room.id
-                )
-                area
-            }
+                    val area = room.areaSqFt()
+                    traces += TakeoffTrace(
+                        metric = "ceiling_area",
+                        value = area,
+                        unit = "sq_ft",
+                        roomId = room.id
+                    )
+                    area
+                }
         } else {
             0.0
         }
@@ -97,7 +100,7 @@ object BlueprintTakeoffCalculator {
         costing: CostingInputs = CostingInputs.NONE
     ): TakeoffResult {
         val traces = mutableListOf<TakeoffTrace>()
-        val areaSqFt = document.rooms.sumOf { room ->
+        val areaSqFt = resolvedRooms(document).sumOf { room ->
             val area = room.areaSqFt()
             traces += TakeoffTrace(
                 metric = "concrete_area",
@@ -195,11 +198,12 @@ object BlueprintTakeoffCalculator {
     }
 
     fun gravelTargetRooms(document: BlueprintDocument): List<Room> {
-        return document.rooms
+        val rooms = resolvedRooms(document)
+        return rooms
             .filter { room ->
                 room.tags.any { tag -> tag == "gravel" || tag == "mulch" || tag == "bed" }
             }
-            .ifEmpty { document.rooms }
+            .ifEmpty { rooms }
     }
 
     fun openingAreaByWallIdSqFt(document: BlueprintDocument): Map<String, Double> {
@@ -216,6 +220,23 @@ object BlueprintTakeoffCalculator {
                     width.toFeet() * height.toFeet()
                 }
             }
+    }
+
+    private fun resolvedRooms(document: BlueprintDocument): List<Room> {
+        if (document.rooms.isNotEmpty()) return document.rooms
+        if (document.walls.isEmpty()) return emptyList()
+
+        return document.walls
+            .groupBy { wall -> wall.floorTag() }
+            .flatMap { (floorTag, walls) ->
+                RoomLoopDetector.detectRooms(walls).map { room ->
+                    room.copy(tags = room.tags + floorTag)
+                }
+            }
+    }
+
+    private fun com.tradesketch.estimator.domain.model.WallSegment.floorTag(): String {
+        return tags.firstOrNull { tag -> tag.startsWith(FLOOR_TAG_PREFIX) } ?: DEFAULT_FLOOR_TAG
     }
 
     private fun applyWaste(value: Double, wastePercent: Double): Double {
