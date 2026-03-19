@@ -1801,8 +1801,8 @@ internal fun DrawScope.drawCornerAngleLabel(
 ) {
     val labelWorld = labelPointInsideAngle(
         corner = hint.corner,
-        legA = hint.legA,
-        legB = hint.legB,
+        legA = hint.displayLegA,
+        legB = hint.displayLegB,
         scale = scale
     ) ?: return
     val labelScreen = worldToScreen(labelWorld)
@@ -2042,11 +2042,18 @@ internal fun collectCornerAngleHints(
             val wallB = walls[otherIndex]
             if (wallA.sameCurveGroupAs(wallB)) continue
             val shared = sharedCorner(wallA, wallB) ?: continue
-            val angle = cornerAngleDegrees(
+            val rawAngle = cornerAngleDegrees(
                 corner = shared.corner,
                 legA = shared.legA,
                 legB = shared.legB
             )
+            val displaySpec = displayAngleSpec(
+                corner = shared.corner,
+                legA = shared.legA,
+                legB = shared.legB,
+                rawAngleDegrees = rawAngle
+            )
+            val angle = displaySpec.angleDegrees
             if (angle <= 5.0 || angle >= 175.0) continue
             val cornerBucket = "${shared.corner.x / 5L}:${shared.corner.y / 5L}"
             val pairKey = if (wallA.id < wallB.id) {
@@ -2060,7 +2067,9 @@ internal fun collectCornerAngleHints(
                 legA = shared.legA,
                 legB = shared.legB,
                 angleDegrees = angle,
-                highlighted = wallA.id == highlightedWallId || wallB.id == highlightedWallId
+                highlighted = wallA.id == highlightedWallId || wallB.id == highlightedWallId,
+                displayLegA = displaySpec.displayLegA,
+                displayLegB = displaySpec.displayLegB
             )
         }
     }
@@ -2110,6 +2119,12 @@ internal data class SharedCorner(
     val legB: PointMm
 )
 
+internal data class DisplayAngleSpec(
+    val angleDegrees: Double,
+    val displayLegA: PointMm,
+    val displayLegB: PointMm
+)
+
 internal fun sharedCorner(a: WallSegment, b: WallSegment): SharedCorner? {
     fun mid(p: PointMm, q: PointMm): PointMm {
         return PointMm(
@@ -2117,11 +2132,49 @@ internal fun sharedCorner(a: WallSegment, b: WallSegment): SharedCorner? {
             y = ((p.y + q.y) / 2.0).roundToLong()
         )
     }
+    fun legFromCorner(
+        displayCorner: PointMm,
+        sharedPoint: PointMm,
+        wallEndPoint: PointMm
+    ): PointMm {
+        return PointMm(
+            x = displayCorner.x + (wallEndPoint.x - sharedPoint.x),
+            y = displayCorner.y + (wallEndPoint.y - sharedPoint.y)
+        )
+    }
     return when {
-        pointsNear(a.start, b.start) -> SharedCorner(mid(a.start, b.start), a.end, b.end)
-        pointsNear(a.start, b.end) -> SharedCorner(mid(a.start, b.end), a.end, b.start)
-        pointsNear(a.end, b.start) -> SharedCorner(mid(a.end, b.start), a.start, b.end)
-        pointsNear(a.end, b.end) -> SharedCorner(mid(a.end, b.end), a.start, b.start)
+        pointsNear(a.start, b.start) -> {
+            val corner = mid(a.start, b.start)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.start, a.end),
+                legB = legFromCorner(corner, b.start, b.end)
+            )
+        }
+        pointsNear(a.start, b.end) -> {
+            val corner = mid(a.start, b.end)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.start, a.end),
+                legB = legFromCorner(corner, b.end, b.start)
+            )
+        }
+        pointsNear(a.end, b.start) -> {
+            val corner = mid(a.end, b.start)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.end, a.start),
+                legB = legFromCorner(corner, b.start, b.end)
+            )
+        }
+        pointsNear(a.end, b.end) -> {
+            val corner = mid(a.end, b.end)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.end, a.start),
+                legB = legFromCorner(corner, b.end, b.start)
+            )
+        }
         else -> null
     }
 }
@@ -2146,9 +2199,40 @@ internal fun cornerAngleDegrees(
     val magA = hypot(ax, ay)
     val magB = hypot(bx, by)
     if (magA <= 0.0001 || magB <= 0.0001) return 180.0
-    val dot = (ax * bx) / (magA * magB)
+    val dot = ((ax * bx) + (ay * by)) / (magA * magB)
+    val clampedDot = dot.coerceIn(-1.0, 1.0)
     val cross = ((ax * by) - (ay * bx)) / (magA * magB)
-    return Math.toDegrees(abs(atan2(cross, dot)))
+    return Math.toDegrees(abs(atan2(cross, clampedDot)))
+}
+
+internal fun displayAngleSpec(
+    corner: PointMm,
+    legA: PointMm,
+    legB: PointMm,
+    rawAngleDegrees: Double
+): DisplayAngleSpec {
+    if (rawAngleDegrees <= 90.0) {
+        return DisplayAngleSpec(
+            angleDegrees = rawAngleDegrees,
+            displayLegA = legA,
+            displayLegB = legB
+        )
+    }
+    return DisplayAngleSpec(
+        angleDegrees = 180.0 - rawAngleDegrees,
+        displayLegA = mirroredLegAcrossCorner(corner, legA),
+        displayLegB = legB
+    )
+}
+
+internal fun mirroredLegAcrossCorner(
+    corner: PointMm,
+    leg: PointMm
+): PointMm {
+    return PointMm(
+        x = corner.x - (leg.x - corner.x),
+        y = corner.y - (leg.y - corner.y)
+    )
 }
 
 internal fun labelPointInsideAngle(

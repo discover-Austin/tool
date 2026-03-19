@@ -62,7 +62,9 @@ internal data class CornerAngleHint(
     val legA: PointMm,
     val legB: PointMm,
     val angleDegrees: Double,
-    val highlighted: Boolean
+    val highlighted: Boolean,
+    val displayLegA: PointMm = legA,
+    val displayLegB: PointMm = legB
 )
 
 internal data class LiveScopeQuantity(

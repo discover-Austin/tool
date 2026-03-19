@@ -112,4 +112,52 @@ class BlueprintCurveGeometryTest {
         assertTrue(kotlin.math.abs(hints.first().angleDegrees - 90.0) <= RIGHT_ANGLE_MARKER_TOLERANCE_DEG)
         assertFalse(walls[0].sameCurveGroupAs(walls[1]))
     }
+
+    @Test
+    fun `nearby shared endpoints still compute the true corner angle`() {
+        val walls = listOf(
+            WallSegment(
+                id = "wall-a",
+                start = PointMm(0, 0),
+                end = PointMm(1_000, 0)
+            ),
+            WallSegment(
+                id = "wall-b",
+                start = PointMm(1_020, 0),
+                end = PointMm(1_020, 1_000)
+            )
+        )
+
+        val hints = collectCornerAngleHints(
+            walls = walls,
+            highlightedWallId = null
+        )
+
+        assertEquals(1, hints.size)
+        assertEquals(90.0, hints.first().angleDegrees, 0.05)
+    }
+
+    @Test
+    fun `nearby shared endpoints preserve diagonal corner math`() {
+        val walls = listOf(
+            WallSegment(
+                id = "wall-a",
+                start = PointMm(0, 0),
+                end = PointMm(1_000, 0)
+            ),
+            WallSegment(
+                id = "wall-b",
+                start = PointMm(1_020, 0),
+                end = PointMm(2_020, 1_000)
+            )
+        )
+
+        val hints = collectCornerAngleHints(
+            walls = walls,
+            highlightedWallId = null
+        )
+
+        assertEquals(1, hints.size)
+        assertEquals(45.0, hints.first().angleDegrees, 0.05)
+    }
 }
