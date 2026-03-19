@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:04,000
+Sketch, measure, and estimate in one workspace.
+
+2
+00:00:04,000 --> 00:00:08,000
+Open Shape Tools.
+
+3
+00:00:08,000 --> 00:00:14,000
+Add curved walls with three taps.
+
+4
+00:00:14,000 --> 00:00:20,000
+Drop circles fast for pads and columns.
+
+5
+00:00:20,000 --> 00:00:25,000
+Update field quantities in Materials.
+
+6
+00:00:25,000 --> 00:00:30,000
+Finish in Export with a clean estimate summary.

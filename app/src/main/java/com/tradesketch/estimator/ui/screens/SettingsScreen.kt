@@ -41,6 +41,9 @@ import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
@@ -72,11 +75,16 @@ fun SettingsScreen(
     ) {
         item {
             Card(
-                colors = CardDefaults.cardColors(
+                colors = appCardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation()
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         text = "Settings",
                         style = MaterialTheme.typography.titleMedium

@@ -157,6 +157,11 @@ internal fun BlueprintCanvas(
     boxStart: PointMm?,
     boxPreview: PointMm?,
     boxRotationRadians: Double,
+    curveStart: PointMm?,
+    curveEnd: PointMm?,
+    curvePreviewPoint: PointMm?,
+    circleCenter: PointMm?,
+    circlePreviewEdge: PointMm?,
     selectedWallId: String?,
     selectedOpeningId: String?,
     movingWallActive: Boolean,
@@ -181,7 +186,9 @@ internal fun BlueprintCanvas(
     val selectionHighlightActive = selectedWallId != null || selectedOpeningId != null || movingWallActive
     val draftHighlightActive = draftIntersectionActive ||
         (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) ||
-        (tool == BlueprintDraftTool.DRAW_BOX && boxStart != null && boxPreview != null)
+        (tool == BlueprintDraftTool.DRAW_BOX && boxStart != null && boxPreview != null) ||
+        (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curvePreviewPoint != null) ||
+        (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null)
     val selectionPulse by animateFloatAsState(
         targetValue = if (selectionHighlightActive) 1f else 0f,
         animationSpec = tween(durationMillis = 180),
@@ -331,7 +338,11 @@ internal fun BlueprintCanvas(
                             draggedDistancePx += hypot(delta.x.toDouble(), delta.y.toDouble()).toFloat()
                         }
                         val aimed = aimedPosition(change.position)
-                        val drawingDraft = tool == BlueprintDraftTool.DRAW_WALL || tool == BlueprintDraftTool.DRAW_BOX
+                        val drawingDraft =
+                            tool == BlueprintDraftTool.DRAW_WALL ||
+                                tool == BlueprintDraftTool.DRAW_BOX ||
+                                tool == BlueprintDraftTool.DRAW_ARC ||
+                                tool == BlueprintDraftTool.DRAW_CIRCLE
                         drawWallPointerScreenPoint = if (drawingDraft && change.pressed) {
                             drawWallPointerHideAtMs = null
                             aimed
@@ -492,9 +503,26 @@ internal fun BlueprintCanvas(
         } else {
             emptyList()
         }
-        val wallsWithPreview = document.walls + listOfNotNull(previewWall) + previewBoxWalls
+        val previewArcWalls = if (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curvePreviewPoint != null) {
+            buildDraftArcPreviewWalls(
+                start = curveStart,
+                end = curveEnd,
+                previewPoint = curvePreviewPoint
+            )
+        } else {
+            emptyList()
+        }
+        val previewCircleWalls = if (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null) {
+            buildDraftCirclePreviewWalls(
+                center = circleCenter,
+                edge = circlePreviewEdge
+            )
+        } else {
+            emptyList()
+        }
+        val wallsForAngleHints = document.walls + listOfNotNull(previewWall) + previewBoxWalls
         val cornerAngleHints = collectCornerAngleHints(
-            walls = wallsWithPreview,
+            walls = wallsForAngleHints,
             highlightedWallId = previewWall?.id ?: previewBoxWalls.firstOrNull()?.id
         )
         val rightAngleCandidates = mutableListOf<RightAngleHint>()
@@ -643,6 +671,34 @@ internal fun BlueprintCanvas(
                 }
             }
         }
+        if (tool == BlueprintDraftTool.DRAW_ARC && previewArcWalls.isNotEmpty()) {
+            previewArcWalls.forEach { wall ->
+                val draftStart = worldToScreen(wall.start)
+                val draftEnd = worldToScreen(wall.end)
+                drawStyledWallSegment(
+                    start = draftStart,
+                    end = draftEnd,
+                    color = DRAFT_WALL_COLOR,
+                    strokeWidth = 4.8f,
+                    selected = true,
+                    pulse = snapPulse
+                )
+            }
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && previewCircleWalls.isNotEmpty()) {
+            previewCircleWalls.forEach { wall ->
+                val draftStart = worldToScreen(wall.start)
+                val draftEnd = worldToScreen(wall.end)
+                drawStyledWallSegment(
+                    start = draftStart,
+                    end = draftEnd,
+                    color = DRAFT_WALL_COLOR,
+                    strokeWidth = 4.6f,
+                    selected = true,
+                    pulse = snapPulse
+                )
+            }
+        }
         rightAngleHints.forEach { hint ->
             drawRightAngleHint(
                 hint = hint,
@@ -668,7 +724,12 @@ internal fun BlueprintCanvas(
         }
         val pointer = if (virtualPointerScreenPoint != null) {
             virtualPointerScreenPoint
-        } else if (tool == BlueprintDraftTool.DRAW_WALL || tool == BlueprintDraftTool.DRAW_BOX) {
+        } else if (
+            tool == BlueprintDraftTool.DRAW_WALL ||
+            tool == BlueprintDraftTool.DRAW_BOX ||
+            tool == BlueprintDraftTool.DRAW_ARC ||
+            tool == BlueprintDraftTool.DRAW_CIRCLE
+        ) {
             drawWallPointerScreenPoint
         } else {
             null
@@ -711,6 +772,24 @@ internal fun BlueprintCanvas(
                 maxRadius = 28f
             )
         }
+        if (tool == BlueprintDraftTool.DRAW_ARC && curvePreviewPoint != null) {
+            drawPrecisionPulse(
+                center = worldToScreen(curvePreviewPoint),
+                progress = snapPulse,
+                color = GEOMETRY_SNAP_PULSE,
+                baseRadius = 11f,
+                maxRadius = 28f
+            )
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && circlePreviewEdge != null) {
+            drawPrecisionPulse(
+                center = worldToScreen(circlePreviewEdge),
+                progress = snapPulse,
+                color = GEOMETRY_SNAP_PULSE,
+                baseRadius = 11f,
+                maxRadius = 28f
+            )
+        }
         if (selectedWallId != null || movingWallActive) {
             pointer?.let { currentPointer ->
                 drawPrecisionPulse(
@@ -726,6 +805,8 @@ internal fun BlueprintCanvas(
             movingWallActive -> CursorGlyph.GRAB
             tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> CursorGlyph.PENCIL
             tool == BlueprintDraftTool.DRAW_BOX && boxStart != null -> CursorGlyph.PENCIL
+            tool == BlueprintDraftTool.DRAW_ARC && curveStart != null -> CursorGlyph.PENCIL
+            tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null -> CursorGlyph.PENCIL
             selectedWallId != null -> CursorGlyph.HAND_POINTER
             else -> CursorGlyph.ARROW
         }
@@ -1717,6 +1798,7 @@ internal fun collectCornerAngleHints(
         val wallA = walls[index]
         for (otherIndex in index + 1 until walls.size) {
             val wallB = walls[otherIndex]
+            if (wallA.sameCurveGroupAs(wallB)) continue
             val shared = sharedCorner(wallA, wallB) ?: continue
             val angle = cornerAngleDegrees(
                 corner = shared.corner,

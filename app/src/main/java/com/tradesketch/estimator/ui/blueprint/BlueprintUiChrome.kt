@@ -113,6 +113,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
@@ -149,12 +150,12 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 
 @Composable
-private fun blueprintHudContainerColor(alpha: Float = 0.94f): Color {
-    return MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = alpha)
+private fun blueprintHudContainerColor(alpha: Float = 0.98f): Color {
+    return MaterialTheme.colorScheme.surface.copy(alpha = alpha)
 }
 
 @Composable
-private fun blueprintHudBorderColor(alpha: Float = 0.4f): Color {
+private fun blueprintHudBorderColor(alpha: Float = 0.82f): Color {
     return MaterialTheme.colorScheme.outline.copy(alpha = alpha)
 }
 
@@ -179,29 +180,41 @@ internal fun BlueprintBottomBar(
     onToggleHelp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val compactBottomBar = LocalConfiguration.current.screenWidthDp < 420
+    val actionButtonSize = if (compactBottomBar) 24.dp else 26.dp
+    val actionIconSize = if (compactBottomBar) 11.dp else 12.dp
+    val toggleButtonSize = if (compactBottomBar) 28.dp else 32.dp
+    val toggleIconSize = if (compactBottomBar) 13.dp else 15.dp
+    val scopeMinWidth = if (compactBottomBar) 66.dp else 102.dp
+    val scopeMinHeight = if (compactBottomBar) 34.dp else 48.dp
+    val scopeHorizontalPadding = if (compactBottomBar) 7.dp else 10.dp
+    val scopeIconSize = if (compactBottomBar) 11.dp else 12.dp
+    val scopeLabelSize = if (compactBottomBar) 10.sp else 11.sp
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor()),
-        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = 0.46f)),
+        border = BorderStroke(1.15.dp, blueprintHudBorderColor(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .height(60.dp)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                .height(if (compactBottomBar) 50.dp else 60.dp)
+                .padding(horizontal = if (compactBottomBar) 6.dp else 8.dp, vertical = if (compactBottomBar) 5.dp else 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compactBottomBar) 2.dp else 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SlimIconAction(
                 icon = Icons.Filled.Delete,
                 contentDescription = "Delete selected",
                 enabled = canDeleteSelection,
-                onClick = onDeleteSelection
+                onClick = onDeleteSelection,
+                buttonSize = actionButtonSize,
+                iconSize = actionIconSize,
+                minimumTouchTarget = false
             )
-            BarDivider()
+            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
             listOf(
                 BlueprintIconToggleSpec(
                     icon = Icons.AutoMirrored.Filled.CallSplit,
@@ -220,50 +233,76 @@ internal fun BlueprintBottomBar(
                     icon = toggle.icon,
                     contentDescription = toggle.contentDescription,
                     selected = toggle.selected,
-                    onClick = toggle.onClick
+                    onClick = toggle.onClick,
+                    buttonSize = toggleButtonSize,
+                    iconSize = toggleIconSize,
+                    minimumTouchTarget = false
                 )
             }
-            BarDivider()
+            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
             SlimIconToggle(
                 icon = Icons.Filled.DoorFront,
                 contentDescription = "Doors panel",
                 selected = activePanel == OpeningPanelType.DOORS,
-                onClick = onToggleDoors
+                onClick = onToggleDoors,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
             SlimIconToggle(
                 icon = Icons.Filled.Window,
                 contentDescription = "Windows panel",
                 selected = activePanel == OpeningPanelType.WINDOWS,
-                onClick = onToggleWindows
+                onClick = onToggleWindows,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
             SlimIconToggle(
                 icon = Icons.Filled.KeyboardArrowUp,
                 contentDescription = "Stair up panel",
                 selected = activePanel == OpeningPanelType.STAIR_UP,
-                onClick = onToggleStairUp
+                onClick = onToggleStairUp,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
             SlimIconToggle(
                 icon = Icons.Filled.KeyboardArrowDown,
                 contentDescription = "Stair down panel",
                 selected = activePanel == OpeningPanelType.STAIR_DOWN,
-                onClick = onToggleStairDown
+                onClick = onToggleStairDown,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
             SlimIconToggle(
                 icon = Icons.Filled.Tune,
                 contentDescription = "Params panel",
                 selected = paramsExpanded,
-                onClick = onToggleParams
+                onClick = onToggleParams,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
-            BarDivider()
+            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
             ScopeSelector(
                 scope = scope,
-                onChangeScope = onChangeScope
+                onChangeScope = onChangeScope,
+                minWidth = scopeMinWidth,
+                minHeight = scopeMinHeight,
+                horizontalPadding = scopeHorizontalPadding,
+                iconSize = scopeIconSize,
+                labelFontSize = scopeLabelSize
             )
             SlimIconToggle(
                 icon = Icons.AutoMirrored.Filled.Help,
                 contentDescription = "Rail help",
                 selected = showHelp,
-                onClick = onToggleHelp
+                onClick = onToggleHelp,
+                buttonSize = toggleButtonSize,
+                iconSize = toggleIconSize,
+                minimumTouchTarget = false
             )
         }
     }
@@ -275,13 +314,15 @@ internal fun SlimIconToggle(
     contentDescription: String,
     selected: Boolean,
     onClick: () -> Unit,
+    buttonSize: Dp = 32.dp,
+    iconSize: Dp = 15.dp,
     minimumTouchTarget: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val container = if (selected) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.96f)
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.99f)
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.84f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
     }
     val tint = if (selected) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -295,14 +336,14 @@ internal fun SlimIconToggle(
         border = BorderStroke(
             width = 1.dp,
             color = if (selected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.62f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.84f)
             } else {
-                blueprintHudBorderColor(alpha = 0.3f)
+                blueprintHudBorderColor(alpha = 0.92f)
             }
         ),
-        shadowElevation = if (selected) 6.dp else 1.dp,
+        shadowElevation = if (selected) 6.dp else 3.dp,
         modifier = modifier
-            .size(32.dp)
+            .size(buttonSize)
             .then(
                 if (minimumTouchTarget) {
                     Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
@@ -316,7 +357,7 @@ internal fun SlimIconToggle(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = tint,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(iconSize)
             )
         }
     }
@@ -334,9 +375,9 @@ internal fun SlimIconAction(
     modifier: Modifier = Modifier
 ) {
     val container = if (enabled) {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.44f)
+        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f)
     }
     val tint = if (enabled) {
         MaterialTheme.colorScheme.onSurfaceVariant
@@ -348,8 +389,8 @@ internal fun SlimIconAction(
         enabled = enabled,
         shape = RoundedCornerShape(12.dp),
         color = container,
-        border = BorderStroke(1.dp, blueprintHudBorderColor(alpha = if (enabled) 0.34f else 0.22f)),
-        shadowElevation = if (enabled) 4.dp else 0.dp,
+        border = BorderStroke(1.1.dp, blueprintHudBorderColor(alpha = if (enabled) 0.9f else 0.55f)),
+        shadowElevation = if (enabled) 5.dp else 1.dp,
         modifier = modifier
             .size(buttonSize)
             .then(
@@ -375,30 +416,35 @@ internal fun SlimIconAction(
 internal fun ScopeSelector(
     scope: TakeoffScope,
     onChangeScope: (TakeoffScope) -> Unit,
+    minWidth: Dp = 102.dp,
+    minHeight: Dp = 48.dp,
+    horizontalPadding: Dp = 10.dp,
+    iconSize: Dp = 12.dp,
+    labelFontSize: TextUnit = 11.sp,
     modifier: Modifier = Modifier
 ) {
     Surface(
         onClick = { onChangeScope(scope.next()) },
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.84f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.52f)),
-        shadowElevation = 5.dp,
-        modifier = modifier.widthIn(min = 102.dp).sizeIn(minHeight = 48.dp)
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.96f),
+        border = BorderStroke(1.1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.76f)),
+        shadowElevation = 6.dp,
+        modifier = modifier.widthIn(min = minWidth).sizeIn(minHeight = minHeight)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = scope.icon(),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(iconSize)
             )
             Text(
                 text = scope.railLabel(),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                 fontWeight = FontWeight.SemiBold
             )
@@ -407,12 +453,14 @@ internal fun ScopeSelector(
 }
 
 @Composable
-internal fun BarDivider() {
+internal fun BarDivider(
+    height: Dp = 22.dp
+) {
     Spacer(
         modifier = Modifier
-            .height(22.dp)
+            .height(height)
             .width(1.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.32f))
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.78f))
     )
 }
 
@@ -424,8 +472,8 @@ internal fun ClearAllButton(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.34f)),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.98f),
+        border = BorderStroke(1.1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.7f)),
         shadowElevation = 8.dp,
         modifier = modifier.heightIn(min = 44.dp)
     ) {
@@ -736,10 +784,14 @@ internal fun GridScaleEditorPanel(
 internal fun ParamsPanel(
     expanded: Boolean,
     scope: TakeoffScope,
+    activeTool: BlueprintDraftTool,
     params: BlueprintParams,
     takeoffSession: ProjectTakeoffSession,
     snapThresholdFeet: Double,
     useMetric: Boolean,
+    onSelectDrawWallTool: () -> Unit,
+    onSelectDrawArcTool: () -> Unit,
+    onSelectDrawCircleTool: () -> Unit,
     onParamsChange: (BlueprintParams) -> Unit,
     onWallHeightChange: (Long) -> Unit,
     onDrywallSheetAreaChange: (Double) -> Unit,
@@ -815,6 +867,29 @@ internal fun ParamsPanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text("Shape tools", style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = activeTool == BlueprintDraftTool.DRAW_WALL,
+                        onClick = onSelectDrawWallTool,
+                        label = { Text("Straight walls") }
+                    )
+                    FilterChip(
+                        selected = activeTool == BlueprintDraftTool.DRAW_ARC,
+                        onClick = onSelectDrawArcTool,
+                        label = { Text("Curved wall") }
+                    )
+                    FilterChip(
+                        selected = activeTool == BlueprintDraftTool.DRAW_CIRCLE,
+                        onClick = onSelectDrawCircleTool,
+                        label = { Text("Circle") }
+                    )
+                    Text(
+                        text = "Curve: tap start, end, then bend. Circle: tap center, then radius.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 when (scope) {
                     TakeoffScope.DRYWALL -> {
@@ -1441,7 +1516,7 @@ internal fun LiveOverlay(
         .removePrefix("Floor ")
         .replace("Ground", "Gnd")
     Card(
-        modifier = modifier.widthIn(max = if (compactHud) 112.dp else 172.dp),
+        modifier = modifier.widthIn(max = if (compactHud) 104.dp else 164.dp),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor(alpha = 0.97f)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.52f)),
@@ -1449,8 +1524,8 @@ internal fun LiveOverlay(
     ) {
         Column(
             modifier = Modifier.padding(
-                horizontal = if (compactHud) 6.dp else 10.dp,
-                vertical = if (compactHud) 6.dp else 8.dp
+                horizontal = if (compactHud) 5.dp else 10.dp,
+                vertical = if (compactHud) 5.dp else 8.dp
             ),
             verticalArrangement = Arrangement.spacedBy(if (compactHud) 2.dp else 4.dp)
         ) {
@@ -1658,10 +1733,10 @@ internal fun ControlStateHud(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = blueprintHudContainerColor(alpha = 0.82f + (emphasis * 0.1f)),
+        color = blueprintHudContainerColor(alpha = 0.92f + (emphasis * 0.06f)),
         border = BorderStroke(
             (1f + (0.35f * emphasis)).dp,
-            accentColor.copy(alpha = 0.38f + (emphasis * 0.28f))
+            accentColor.copy(alpha = 0.6f + (emphasis * 0.28f))
         ),
         shadowElevation = 7.dp
     ) {
@@ -1684,7 +1759,7 @@ internal fun ControlStateChip(
     val container = if (active) {
         MaterialTheme.colorScheme.secondary
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.78f)
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
     }
     val textColor = if (active) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(

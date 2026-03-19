@@ -41,8 +41,8 @@ class BlueprintEditorViewModel @Inject constructor(
 
     private var currentProjectId: String? = savedStateHandle["projectId"]
     private var observerJob: Job? = null
-    private val undoStack = ArrayDeque<BlueprintCommand>()
-    private val redoStack = ArrayDeque<BlueprintCommand>()
+    private val undoStack = mutableListOf<BlueprintCommand>()
+    private val redoStack = mutableListOf<BlueprintCommand>()
     private val saveMutex = Mutex()
 
     private val _uiState = MutableStateFlow(BlueprintEditorUiState())
@@ -297,9 +297,9 @@ class BlueprintEditorViewModel @Inject constructor(
     fun undo() {
         val currentDoc = _uiState.value.document ?: return
         if (undoStack.isEmpty()) return
-        val command = undoStack.removeLast()
+        val command = undoStack.removeAt(undoStack.lastIndex)
         val previous = command.undo(currentDoc)
-        redoStack.addLast(command)
+        redoStack.add(command)
         _uiState.update {
             val updatedProject = it.project?.copy(blueprintDocument = previous)
             it.copy(
@@ -315,9 +315,9 @@ class BlueprintEditorViewModel @Inject constructor(
     fun redo() {
         val currentDoc = _uiState.value.document ?: return
         if (redoStack.isEmpty()) return
-        val command = redoStack.removeLast()
+        val command = redoStack.removeAt(redoStack.lastIndex)
         val next = command.apply(currentDoc)
-        undoStack.addLast(command)
+        undoStack.add(command)
         _uiState.update {
             val updatedProject = it.project?.copy(blueprintDocument = next)
             it.copy(
@@ -492,7 +492,7 @@ class BlueprintEditorViewModel @Inject constructor(
             redoStack.clear()
         }
         if (trackUndo) {
-            undoStack.addLast(
+            undoStack.add(
                 BlueprintDocumentCommand(
                     label = label,
                     before = current,
@@ -500,7 +500,7 @@ class BlueprintEditorViewModel @Inject constructor(
                 )
             )
             if (undoStack.size > 100) {
-                undoStack.removeFirst()
+                undoStack.removeAt(0)
             }
         }
 
@@ -636,6 +636,8 @@ enum class BlueprintDraftTool {
     SELECT,
     DRAW_WALL,
     DRAW_BOX,
+    DRAW_ARC,
+    DRAW_CIRCLE,
     PLACE_DOOR,
     PLACE_WINDOW,
     PLACE_STAIR_UP,

@@ -2,8 +2,10 @@ package com.tradesketch.estimator
 
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.size
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -82,6 +86,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -97,6 +102,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.PrimaryTrade
@@ -122,7 +128,22 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                lightScrim = Color.Transparent.toArgb(),
+                darkScrim = Color.Transparent.toArgb()
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                lightScrim = Color.Transparent.toArgb(),
+                darkScrim = Color.Transparent.toArgb()
+            )
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
@@ -134,15 +155,15 @@ class MainActivity : ComponentActivity() {
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
-                                    Midnight950,
+                                    Color(0xFFDCE6F1),
                                     Midnight900,
-                                    Slate800.copy(alpha = 0.82f)
+                                    Slate800.copy(alpha = 0.96f)
                                 )
                             )
                         )
                 ) {
                     Surface(
-                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.90f),
+                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.97f),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         TradeSketchRoot()
@@ -160,12 +181,12 @@ private enum class RootStage {
     WORKSPACE
 }
 
-private val WorkspaceRailShell = Color(0xFFF4F8FD)
+private val WorkspaceRailShell = Color(0xFFEAF1F8)
 private val WorkspaceRailSurface = Color(0xFFFFFFFF)
-private val WorkspaceRailAccent = Color(0xFF2F6E9E)
-private val WorkspaceRailAccentBright = Color(0xFF4F89BB)
-private val WorkspaceRailAccentBorder = Color(0xFFC5D7E7)
-private val WorkspaceRailTextPrimary = Color(0xFF243240)
+private val WorkspaceRailAccent = Color(0xFF276997)
+private val WorkspaceRailAccentBright = Color(0xFF3F84B8)
+private val WorkspaceRailAccentBorder = Color(0xFF93A9BD)
+private val WorkspaceRailTextPrimary = Color(0xFF1B2A39)
 private val WorkspaceRailTextOnAccent = Color(0xFFFFFFFF)
 
 @Composable
@@ -444,6 +465,7 @@ private fun WorkspaceShell(
     var showSavedProjects by rememberSaveable { mutableStateOf(false) }
     var showNewProjectConfirm by rememberSaveable { mutableStateOf(false) }
     var leftRailCollapsed by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val activeProject = remember(selectedProjectId, projectsUiState.projects) {
         projectsUiState.projects.firstOrNull { it.id == selectedProjectId }
@@ -545,17 +567,35 @@ private fun WorkspaceShell(
     val railCompact = configuration.screenWidthDp < 600
     val railExpandedForLargeWindow = configuration.screenWidthDp >= 840
     val compactBlueprintHud = configuration.screenWidthDp < 420
-    val collapsedRailWidth = if (railCompact) 22.dp else 24.dp
+    val collapsedRailWidth = if (railCompact) 38.dp else 40.dp
     val expandedRailWidth = if (railExpandedForLargeWindow) 64.dp else 60.dp
     val leftBlueprintOverlayInset = 0.dp
     val dockRailForBlueprint = selectedTab == DetailTab.BLUEPRINT
-    val blueprintRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
-    val blueprintCollapsedRailTopPadding = if (configuration.screenHeightDp < 760) 56.dp else 68.dp
-    val blueprintRailBottomPadding = if (configuration.screenHeightDp < 760) 156.dp else 172.dp
+    val workspaceRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
+    val workspaceCollapsedRailTopPadding = if (configuration.screenHeightDp < 760) 56.dp else 68.dp
+    val workspaceRailBottomPadding = if (configuration.screenHeightDp < 760) 156.dp else 172.dp
+    val activeRailWidth = if (leftRailCollapsed) collapsedRailWidth else expandedRailWidth
+    val railAnchorTopPadding = if (leftRailCollapsed) {
+        workspaceCollapsedRailTopPadding
+    } else {
+        workspaceRailTopPadding
+    }
+    val savedProjectsPanelStartPadding = 4.dp + activeRailWidth + 10.dp
     val nonBlueprintContentStartPadding = if (dockRailForBlueprint) {
         0.dp
     } else {
         if (leftRailCollapsed) collapsedRailWidth + 8.dp else expandedRailWidth + 12.dp
+    }
+    val saveActiveProject: () -> Unit = saveProject@{
+        val project = activeProject ?: return@saveProject
+        projectsViewModel.recordTap("workspace_project_save")
+        projectsViewModel.renameProject(project.id, projectNameDraft)
+        focusManager.clearFocus()
+        Toast.makeText(
+            context,
+            context.getString(R.string.project_saved),
+            Toast.LENGTH_SHORT
+        ).show()
     }
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -628,47 +668,69 @@ private fun WorkspaceShell(
             }
 
             if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
-                Surface(
+                Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 6.dp)
-                        .widthIn(
-                            min = if (compactBlueprintHud) 132.dp else 156.dp,
-                            max = if (compactBlueprintHud) 176.dp else 232.dp
-                        )
-                        .height(58.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)),
-                    shadowElevation = 10.dp
+                        .offset(x = if (compactBlueprintHud) 12.dp else 0.dp)
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (compactBlueprintHud) 6.dp else 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = projectNameDraft,
-                        onValueChange = { projectNameDraft = it },
-                        label = {
-                            Text(
-                                stringResource(R.string.project_name_label),
-                                style = MaterialTheme.typography.labelSmall
+                    Surface(
+                        modifier = Modifier
+                            .widthIn(
+                                min = if (compactBlueprintHud) 118.dp else 136.dp,
+                                max = if (compactBlueprintHud) 148.dp else 184.dp
                             )
-                        },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                projectsViewModel.renameProject(activeProject.id, projectNameDraft)
-                                focusManager.clearFocus()
-                            }
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent
-                        ),
-                        modifier = Modifier.fillMaxSize()
-                    )
+                            .height(if (compactBlueprintHud) 46.dp else 50.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
+                        shadowElevation = 8.dp
+                    ) {
+                        OutlinedTextField(
+                            value = projectNameDraft,
+                            onValueChange = { projectNameDraft = it },
+                            placeholder = {
+                                Text(
+                                    stringResource(R.string.project_name_label),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { saveActiveProject() }),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent
+                            ),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Surface(
+                        onClick = saveActiveProject,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.size(if (compactBlueprintHud) 36.dp else 40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = stringResource(R.string.save_project),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(if (compactBlueprintHud) 16.dp else 18.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -692,8 +754,8 @@ private fun WorkspaceShell(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(
-                        start = if (dockRailForBlueprint) 10.dp else nonBlueprintContentStartPadding + 6.dp,
-                        top = 8.dp
+                        start = savedProjectsPanelStartPadding,
+                        top = railAnchorTopPadding
                     )
             )
 
@@ -740,12 +802,8 @@ private fun WorkspaceShell(
                     .fillMaxHeight()
                     .padding(
                         start = 4.dp,
-                        top = if (dockRailForBlueprint) {
-                            if (leftRailCollapsed) blueprintCollapsedRailTopPadding else blueprintRailTopPadding
-                        } else {
-                            0.dp
-                        },
-                        bottom = if (dockRailForBlueprint && !leftRailCollapsed) blueprintRailBottomPadding else 0.dp
+                        top = railAnchorTopPadding,
+                        bottom = if (!leftRailCollapsed) workspaceRailBottomPadding else 0.dp
                     )
                     .windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom)
@@ -756,7 +814,7 @@ private fun WorkspaceShell(
                     currentTab = selectedTab,
                     collapsed = leftRailCollapsed,
                     compact = railCompact,
-                    blueprintDocked = dockRailForBlueprint,
+                    blueprintDocked = true,
                     collapsedRailWidth = collapsedRailWidth,
                     expandedRailWidth = expandedRailWidth,
                     onSelectTab = navigateToTab,
@@ -813,28 +871,22 @@ private fun WorkspaceLeftRail(
         DetailTab.EXPORT
     )
     if (collapsed) {
-        val collapsedArrowTopPadding = when {
-            blueprintDocked && compact -> 12.dp
-            blueprintDocked -> 18.dp
-            else -> 0.dp
-        }
         Box(
             modifier = modifier
                 .width(collapsedRailWidth)
                 .padding(
-                    top = if (blueprintDocked) collapsedArrowTopPadding else 8.dp,
+                    top = if (compact) 12.dp else 14.dp,
                     bottom = 8.dp
                 ),
-            contentAlignment = if (blueprintDocked) Alignment.TopStart else Alignment.CenterStart
+            contentAlignment = Alignment.TopCenter
         ) {
             Surface(
                 onClick = onToggleCollapsed,
-                shape = MaterialTheme.shapes.small,
-                color = WorkspaceRailSurface.copy(alpha = 0.96f),
-                border = BorderStroke(1.dp, WorkspaceRailAccentBorder.copy(alpha = 0.92f)),
-                modifier = Modifier
-                    .size(36.dp)
-                    .padding(start = 2.dp)
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                color = WorkspaceRailSurface,
+                border = BorderStroke(1.25.dp, WorkspaceRailAccentBorder),
+                shadowElevation = 7.dp,
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -854,21 +906,21 @@ private fun WorkspaceLeftRail(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            color = WorkspaceRailShell.copy(alpha = 0.98f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+            color = WorkspaceRailShell,
             border = BorderStroke(
-                width = 1.dp,
-                color = WorkspaceRailAccentBorder.copy(alpha = 0.82f)
+                width = 1.3.dp,
+                color = WorkspaceRailAccentBorder
             ),
-            tonalElevation = 2.dp,
-            shadowElevation = 4.dp
+            tonalElevation = 3.dp,
+            shadowElevation = 10.dp
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                    .padding(horizontal = 5.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -883,65 +935,40 @@ private fun WorkspaceLeftRail(
                         modifier = Modifier.size(36.dp)
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    WorkspaceRailButton(
-                        label = stringResource(R.string.rail_new_plus),
-                        icon = Icons.Filled.Add,
-                        selected = false,
-                        iconOnly = true,
-                        onClick = onCreateNewProject,
-                        onLongPress = {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.new_project_toast),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(36.dp)
-                    )
-                    WorkspaceRailButton(
-                        label = stringResource(R.string.rail_saved),
-                        icon = Icons.Filled.Description,
-                        selected = showSavedProjects,
-                        iconOnly = true,
-                        onClick = onToggleSavedProjects,
-                        onLongPress = {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.saved_projects_toast),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(36.dp)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start
-                ) {
-                    WorkspaceRailButton(
-                        label = stringResource(R.string.rail_settings_short),
-                        icon = Icons.Filled.Settings,
-                        selected = currentTab == DetailTab.SETTINGS_ABOUT,
-                        iconOnly = true,
-                        onClick = onOpenSettings,
-                        onLongPress = {
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.rail_settings_short),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        },
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                WorkspaceRailButton(
+                    label = stringResource(R.string.rail_new_plus),
+                    icon = Icons.Filled.Add,
+                    selected = false,
+                    iconOnly = true,
+                    onClick = onCreateNewProject,
+                    onLongPress = {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.new_project_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                )
+                WorkspaceRailButton(
+                    label = stringResource(R.string.rail_saved),
+                    icon = Icons.Filled.Description,
+                    selected = showSavedProjects,
+                    iconOnly = true,
+                    onClick = onToggleSavedProjects,
+                    onLongPress = {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.saved_projects_toast),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                )
                 primaryTabs.forEach { tab ->
                     WorkspaceRailButton(
                         label = tab.railLabel(),
@@ -954,9 +981,39 @@ private fun WorkspaceLeftRail(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(38.dp)
+                            .height(40.dp)
                     )
                 }
+                Spacer(
+                    modifier = Modifier
+                        .height(if (compact) 20.dp else 28.dp)
+                )
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(WorkspaceRailAccentBorder.copy(alpha = 0.8f))
+                        
+                )
+                WorkspaceRailButton(
+                    label = stringResource(R.string.rail_settings_short),
+                    icon = Icons.Filled.Settings,
+                    selected = currentTab == DetailTab.SETTINGS_ABOUT,
+                    iconOnly = true,
+                    accented = true,
+                    onClick = onOpenSettings,
+                    onLongPress = {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.rail_settings_short),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .height(42.dp)
+                )
             }
         }
     }
@@ -967,27 +1024,44 @@ private fun WorkspaceRailButton(
     label: String,
     icon: ImageVector,
     selected: Boolean,
+    accented: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     iconOnly: Boolean = false,
     onLongPress: (() -> Unit)? = null
 ) {
-    val containerColor = if (selected) WorkspaceRailAccentBright else WorkspaceRailSurface
-    val contentColor = if (selected) WorkspaceRailTextOnAccent else WorkspaceRailTextPrimary
-    val borderColor = if (selected) Color(0xFFD8E7F5) else WorkspaceRailAccentBorder
+    val buttonShape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val containerColor = when {
+        accented && selected -> Color(0xFF356A8F)
+        accented -> Color(0xFF1F425C)
+        selected -> WorkspaceRailAccentBright
+        else -> WorkspaceRailSurface
+    }
+    val contentColor = when {
+        accented -> Color.White
+        selected -> WorkspaceRailTextOnAccent
+        else -> WorkspaceRailTextPrimary
+    }
+    val borderColor = when {
+        accented && selected -> Color(0xFFD2E5F4)
+        accented -> Color(0xFFA8C3D6)
+        selected -> Color(0xFFC6DCF0)
+        else -> WorkspaceRailAccentBorder
+    }
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
+        shape = buttonShape,
         color = containerColor,
         border = BorderStroke(
-            width = 1.dp,
+            width = if (accented) 1.3.dp else 1.1.dp,
             color = borderColor
         ),
+        shadowElevation = if (selected || accented) 6.dp else 2.dp,
         modifier = Modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = label
             }
-            .clip(MaterialTheme.shapes.medium)
+            .clip(buttonShape)
             .pointerInput(label) {
                 detectTapGestures(
                     onLongPress = { onLongPress?.invoke() }
@@ -1004,7 +1078,7 @@ private fun WorkspaceRailButton(
                     imageVector = icon,
                     contentDescription = label,
                     tint = contentColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(if (accented) 17.dp else 18.dp)
                 )
             } else {
                 Column(

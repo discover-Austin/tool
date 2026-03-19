@@ -17,9 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Workspaces
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,6 +31,9 @@ import com.tradesketch.estimator.R
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.ui.components.CenteredLabelTrailingIcon
 import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 
 @Composable
 fun ProjectRitualScreen2_EstimateType(
@@ -61,24 +64,31 @@ fun ProjectRitualScreen2_EstimateType(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 700.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                colors = appCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Workspaces,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Workspaces,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.project_setup_step_2),
                         style = MaterialTheme.typography.titleSmall,
@@ -105,24 +115,22 @@ fun ProjectRitualScreen2_EstimateType(
                             val selected = selectedTrade == option.trade
                             Card(
                                 onClick = { onSelectTrade(option.trade) },
-                                colors = CardDefaults.cardColors(
+                                colors = appCardColors(
                                     containerColor = if (selected) {
                                         MaterialTheme.colorScheme.primaryContainer
                                     } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
+                                        MaterialTheme.colorScheme.surfaceContainerLow
                                     }
                                 ),
                                 border = BorderStroke(
                                     width = if (selected) 2.dp else 1.dp,
                                     color = if (selected) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.84f)
                                     } else {
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.68f)
                                     }
                                 ),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = if (selected) 4.dp else 1.dp
-                                ),
+                                elevation = appCardElevation(raised = selected),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(

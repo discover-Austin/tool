@@ -3,6 +3,7 @@ package com.tradesketch.estimator.ui.screens
 import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,9 @@ import com.tradesketch.estimator.domain.model.nonZeroItems
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.projectBlueprintForType
 import com.tradesketch.estimator.ui.viewmodel.TakeoffViewModel
@@ -225,9 +229,11 @@ fun TakeoffScreen(
             val warnings = takeoffWarnings(uiState, type, scopeSummary)
             item {
                 Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    colors = appCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                     ),
+                    border = appCardBorder(),
+                    elevation = appCardElevation(),
                     modifier = Modifier.animateContentSize()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -295,9 +301,14 @@ fun TakeoffScreen(
             if (warnings.isNotEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(
+                        colors = appCardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.34f)
+                        ),
+                        elevation = appCardElevation(),
                         modifier = Modifier.animateContentSize()
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
@@ -1009,7 +1020,11 @@ private fun ParameterCard(
     description: String,
     fields: List<NumberFieldSpec>
 ) {
-    Card {
+    Card(
+        colors = appCardColors(),
+        border = appCardBorder(),
+        elevation = appCardElevation()
+    ) {
         Column(
             modifier = Modifier
                 .padding(16.dp)

@@ -29,8 +29,8 @@ android {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.0.11"
+        versionCode = 15
+        versionName = "1.0.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

@@ -40,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import com.tradesketch.estimator.R
 import com.tradesketch.estimator.ui.components.CenteredLabelTrailingIcon
 import com.tradesketch.estimator.ui.components.PrimaryActionButton
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 
 @Composable
 fun WelcomeScreenPro(
@@ -70,14 +73,11 @@ fun WelcomeScreenPro(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 760.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.96f)
+                colors = appCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
             ) {
                 if (wideLandscapeLayout) {
                     Row(
@@ -228,10 +228,10 @@ private fun WelcomeFeatureRow(
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.82f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
         )
     ) {
         Row(
@@ -241,7 +241,11 @@ private fun WelcomeFeatureRow(
         ) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                )
             ) {
                 Icon(
                     imageVector = icon,
