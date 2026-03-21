@@ -200,7 +200,8 @@ fun ExportScreen(
             result = uiState.result,
             inputMode = sessionInputMode,
             hasMeasuredQuantities = hasMeasuredQuantities,
-            hasBlueprintGeometry = hasBlueprintGeometry
+            hasBlueprintGeometry = hasBlueprintGeometry,
+            hasSelectedTradeGeometry = uiState.selectedTradeHasGeometry
         )
 
         TitledSectionCard(
@@ -325,6 +326,13 @@ fun ExportScreen(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
+                    if (uiState.presentTradeLabels.isNotEmpty()) {
+                        Text(
+                            text = "Full report, CSV, JSON, and blueprint exports include all present blueprint trades and skip empty ones. Estimate PDFs stay tied to the selected trade.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     PrimaryActionButton(
                         onClick = {
                             haptics.confirm()
@@ -341,7 +349,13 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Share Full Report")
+                        Text(
+                            if (uiState.presentTradeLabels.size > 1) {
+                                "Share Combined Report"
+                            } else {
+                                "Share Full Report"
+                            }
+                        )
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -370,7 +384,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Estimate PDF")
+                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Selected Trade PDF")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -439,7 +453,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Download Estimate PDF")
+                        Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Download Selected Trade PDF")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -493,7 +507,7 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save PDF As...")
+                        Text("Save Selected Trade PDF As...")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -635,7 +649,13 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save CSV")
+                        Text(
+                            if (uiState.presentTradeLabels.size > 1) {
+                                "Save Combined CSV"
+                            } else {
+                                "Save CSV"
+                            }
+                        )
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -661,7 +681,13 @@ fun ExportScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save JSON Backup")
+                        Text(
+                            if (uiState.presentTradeLabels.size > 1) {
+                                "Save Combined JSON Backup"
+                            } else {
+                                "Save JSON Backup"
+                            }
+                        )
                     }
                 }
             }
@@ -755,7 +781,8 @@ private fun ExportProjectHeaderCard(
     result: TakeoffResult?,
     inputMode: TakeoffInputMode,
     hasMeasuredQuantities: Boolean,
-    hasBlueprintGeometry: Boolean
+    hasBlueprintGeometry: Boolean,
+    hasSelectedTradeGeometry: Boolean
 ) {
     val estimateSource = when {
         inputMode == TakeoffInputMode.MANUAL -> "Manual quantities"
@@ -767,15 +794,12 @@ private fun ExportProjectHeaderCard(
         hasMeasuredQuantities -> "Preview ready"
         else -> "Needs measurements"
     }
-    val statusNote = when {
-        inputMode == TakeoffInputMode.MANUAL && hasMeasuredQuantities ->
-            "This estimate is using manual quantities, so the blueprint can stay blank."
-        !hasMeasuredQuantities && hasBlueprintGeometry ->
-            "This project has geometry, but nothing matches the selected trade yet."
-        !hasMeasuredQuantities ->
-            "Draw in Blueprint or enter manual quantities in Materials & Pricing to generate an estimate."
-        else -> null
-    }
+    val statusNote = exportStatusNote(
+        inputMode = inputMode,
+        hasMeasuredQuantities = hasMeasuredQuantities,
+        hasBlueprintGeometry = hasBlueprintGeometry,
+        hasSelectedTradeGeometry = hasSelectedTradeGeometry
+    )
     Card(
         colors = appCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -858,6 +882,23 @@ private fun ExportProjectHeaderCard(
             }
         }
     }
+}
+
+internal fun exportStatusNote(
+    inputMode: TakeoffInputMode,
+    hasMeasuredQuantities: Boolean,
+    hasBlueprintGeometry: Boolean,
+    hasSelectedTradeGeometry: Boolean
+): String? = when {
+    inputMode == TakeoffInputMode.MANUAL && hasMeasuredQuantities ->
+        "This estimate is using manual quantities, so the blueprint can stay blank."
+    !hasMeasuredQuantities && hasSelectedTradeGeometry ->
+        "This trade has blueprint geometry, but there are no measured quantities yet."
+    !hasMeasuredQuantities && hasBlueprintGeometry ->
+        "This project has geometry, but nothing matches the selected trade yet."
+    !hasMeasuredQuantities ->
+        "Draw in Blueprint or enter manual quantities in Materials & Pricing to generate an estimate."
+    else -> null
 }
 
 @Composable
