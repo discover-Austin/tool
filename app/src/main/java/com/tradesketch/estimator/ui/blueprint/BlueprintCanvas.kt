@@ -149,6 +149,11 @@ private const val CORNER_ANGLE_HIGHLIGHT_CORE_WIDTH_PX = 4.6f
 private val CIRCLE_GUIDE_RING_COLOR = Color(0xFF6CE8FF)
 private val CIRCLE_GUIDE_CORE_COLOR = Color(0xFFB5FBFF)
 private val CIRCLE_SEGMENT_ACCENT_COLOR = Color(0xFF7EE6F4)
+private val ARC_GUIDE_CHORD_COLOR = Color(0xFF6EE0FF)
+private val ARC_GUIDE_HANDLE_COLOR = Color(0xFFFFC86D)
+private val ARC_GUIDE_CORE_COLOR = Color(0xFFFFF3CC)
+private const val ARC_GUIDE_CHIP_TEXT_SP = 9.2f
+private const val ARC_GUIDE_CHIP_OFFSET_PX = 18f
 private const val CIRCLE_GUIDE_CHIP_TEXT_SP = 9.4f
 private const val CIRCLE_GUIDE_CHIP_OFFSET_PX = 18f
 private val CORNER_ANGLE_BUCKET_COLORS = mapOf(
@@ -562,12 +567,30 @@ internal fun BlueprintCanvas(
             }
         }
         val rightAngleHints = collapseRightAngleHints(rightAngleCandidates)
-        val scopeWallColor = scope.wallColor()
+        val roomWallsById = document.walls.associateBy { it.id }
+        document.rooms.forEach { room ->
+            val roomScope = resolveVisibleRoomTradeScope(
+                room = room,
+                wallsById = roomWallsById,
+                activeScope = scope
+            ) ?: return@forEach
+            val roomStyle = roomScope.roomFillStyle(active = roomScope == scope) ?: return@forEach
+            drawTradeRoomSurface(
+                polygon = room.polygon.map(::worldToScreen),
+                style = roomStyle
+            )
+        }
         val wallLengthLabels = mutableListOf<WallLengthLabelSpec>()
         document.walls.forEach { wall ->
             val isSelected = wall.id == selectedWallId
-            val wallColor = wall.scopeFromTag()?.wallColor() ?: scopeWallColor
-            val color = if (isSelected) GEOMETRY_SELECTION_COLOR else wallColor
+            val color = if (isSelected) {
+                GEOMETRY_SELECTION_COLOR
+            } else {
+                resolveWallDisplayColor(
+                    wall = wall,
+                    activeScope = scope
+                )
+            }
             val parallelMatch = wallHasParallelLengthMatch(wall, document.walls)
             val isCircleSegment = wall.tags.contains(CURVE_SHAPE_CIRCLE_TAG)
             val strokeWidth = if (isSelected) 6.4f else if (parallelMatch) 5.2f else 4.4f
@@ -714,6 +737,14 @@ internal fun BlueprintCanvas(
                     pulse = snapPulse
                 )
             }
+            if (curveStart != null && curveEnd == null && curvePreviewPoint != null) {
+                wallLengthLabels += WallLengthLabelSpec(
+                    start = worldToScreen(curveStart),
+                    end = worldToScreen(curvePreviewPoint),
+                    lengthFeet = Millimeters(BlueprintSnapMath.distanceMillimeters(curveStart, curvePreviewPoint)).toFeet(),
+                    color = WALL_LABEL_ACTIVE_COLOR
+                )
+            }
         }
         if (tool == BlueprintDraftTool.DRAW_CIRCLE && previewCircleWalls.isNotEmpty()) {
             previewCircleWalls.forEach { wall ->
@@ -753,6 +784,16 @@ internal fun BlueprintCanvas(
                 hint = hint,
                 worldToScreen = ::worldToScreen,
                 scale = scale
+            )
+        }
+        if (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null && curvePreviewPoint != null) {
+            drawArcDraftGuide(
+                start = curveStart,
+                end = curveEnd,
+                control = curvePreviewPoint,
+                worldToScreen = ::worldToScreen,
+                useMetric = useMetric,
+                pulse = snapPulse
             )
         }
         if (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null) {
@@ -973,6 +1014,105 @@ internal fun DrawScope.drawBlueprintTexturePattern() {
             y += dotSpacing
         }
         x += dotSpacing
+    }
+}
+
+internal fun DrawScope.drawTradeRoomSurface(
+    polygon: List<Offset>,
+    style: BlueprintRoomFillStyle
+) {
+    if (polygon.size < 3) return
+    val path = Path().apply {
+        moveTo(polygon.first().x, polygon.first().y)
+        polygon.drop(1).forEach { point ->
+            lineTo(point.x, point.y)
+        }
+        close()
+    }
+    val minX = polygon.minOf { it.x }
+    val minY = polygon.minOf { it.y }
+    val maxX = polygon.maxOf { it.x }
+    val maxY = polygon.maxOf { it.y }
+
+    drawPath(
+        path = path,
+        color = style.fillColor
+    )
+    when (style.pattern) {
+        BlueprintRoomFillPattern.CONCRETE_HATCH -> drawConcreteRoomPattern(
+            path = path,
+            minX = minX,
+            minY = minY,
+            maxX = maxX,
+            maxY = maxY,
+            color = style.patternColor
+        )
+        BlueprintRoomFillPattern.GRAVEL_PEBBLES -> drawGravelRoomPattern(
+            path = path,
+            minX = minX,
+            minY = minY,
+            maxX = maxX,
+            maxY = maxY,
+            color = style.patternColor
+        )
+    }
+    drawPath(
+        path = path,
+        color = style.outlineColor,
+        style = Stroke(width = 1.8f)
+    )
+}
+
+internal fun DrawScope.drawConcreteRoomPattern(
+    path: Path,
+    minX: Float,
+    minY: Float,
+    maxX: Float,
+    maxY: Float,
+    color: Color
+) {
+    val roomHeight = (maxY - minY).coerceAtLeast(1f)
+    clipPath(path) {
+        var x = minX - roomHeight
+        while (x <= maxX + roomHeight) {
+            drawLine(
+                color = color,
+                start = Offset(x, minY - 6f),
+                end = Offset(x + roomHeight + 12f, maxY + 6f),
+                strokeWidth = 1.1f
+            )
+            x += 24f
+        }
+    }
+}
+
+internal fun DrawScope.drawGravelRoomPattern(
+    path: Path,
+    minX: Float,
+    minY: Float,
+    maxX: Float,
+    maxY: Float,
+    color: Color
+) {
+    clipPath(path) {
+        var row = 0
+        var y = minY - 8f
+        while (y <= maxY + 8f) {
+            var column = 0
+            var x = minX - 10f + if (row % 2 == 0) 0f else 11f
+            while (x <= maxX + 10f) {
+                val largePebble = (row + column) % 3 == 0
+                drawCircle(
+                    color = if (largePebble) color else color.copy(alpha = color.alpha * 0.8f),
+                    radius = if (largePebble) 2.2f else 1.45f,
+                    center = Offset(x, y)
+                )
+                x += 20f
+                column += 1
+            }
+            y += 18f
+            row += 1
+        }
     }
 }
 
@@ -1997,6 +2137,140 @@ internal fun DrawScope.drawCircleDraftGuide(
         drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color(0x8C07131F).toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+        }
+        drawText(labelText, labelPoint.x + 0.6f, baselineY + 0.6f, shadowPaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+internal fun DrawScope.drawArcDraftGuide(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    val projection = projectArcDraftControl(
+        start = start,
+        end = end,
+        control = control
+    ) ?: return
+    val measurements = measureArcDraft(
+        start = start,
+        end = end,
+        control = control
+    )
+    if (measurements.spanMm < MIN_DRAW_WALL_LENGTH_MM) return
+    val startScreen = worldToScreen(start)
+    val endScreen = worldToScreen(end)
+    val controlScreen = worldToScreen(control)
+    val axisScreen = worldToScreen(projection.axisPoint)
+    val handleDx = controlScreen.x - axisScreen.x
+    val handleDy = controlScreen.y - axisScreen.y
+    val handleMagnitude = hypot(handleDx.toDouble(), handleDy.toDouble()).toFloat()
+    val chordDx = endScreen.x - startScreen.x
+    val chordDy = endScreen.y - startScreen.y
+    val chordMagnitude = hypot(chordDx.toDouble(), chordDy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val labelNormalX = if (handleMagnitude > 0.001f) {
+        -handleDy / handleMagnitude
+    } else {
+        -chordDy / chordMagnitude
+    }
+    val labelNormalY = if (handleMagnitude > 0.001f) {
+        handleDx / handleMagnitude
+    } else {
+        chordDx / chordMagnitude
+    }
+    val labelAnchor = Offset(
+        x = (axisScreen.x + controlScreen.x) / 2f,
+        y = (axisScreen.y + controlScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = labelAnchor.x + (labelNormalX * ARC_GUIDE_CHIP_OFFSET_PX),
+        y = labelAnchor.y + (labelNormalY * ARC_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = buildString {
+        append("Arc ")
+        append(formatLengthDisplay(mm = measurements.arcLengthMm, useMetric = useMetric))
+        append(" | Span ")
+        append(formatLengthDisplay(mm = measurements.spanMm, useMetric = useMetric))
+        append(" | Bend ")
+        append(formatLengthDisplay(mm = measurements.bendMm, useMetric = useMetric))
+    }
+
+    drawLine(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.22f + (0.10f * pulse)),
+        start = startScreen,
+        end = endScreen,
+        strokeWidth = 2.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.28f + (0.14f * pulse)),
+        start = axisScreen,
+        end = controlScreen,
+        strokeWidth = 8.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        start = axisScreen,
+        end = controlScreen,
+        strokeWidth = 2.4f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.88f),
+        radius = 3.8f,
+        center = axisScreen
+    )
+    drawCircle(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.9f),
+        radius = 5.8f + pulse,
+        center = controlScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        radius = 4.2f,
+        center = controlScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = ARC_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.56f
+        val padYTop = textSizePx * 0.96f
+        val padYBottom = textSizePx * 0.34f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.56f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xDE201106).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.84f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0x8C120A05).toArgb()
             textAlign = Paint.Align.CENTER
             textSize = textSizePx
         }

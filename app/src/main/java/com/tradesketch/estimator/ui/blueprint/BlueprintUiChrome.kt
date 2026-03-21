@@ -44,7 +44,6 @@ import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdsClick
-import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.CropSquare
@@ -165,11 +164,13 @@ internal fun BlueprintBottomBar(
     canDeleteSelection: Boolean,
     detachedWalls: Boolean,
     boxModeEnabled: Boolean,
+    curveModeEnabled: Boolean,
     circleModeEnabled: Boolean,
     activePanel: OpeningPanelType?,
     paramsExpanded: Boolean,
     onToggleDetached: () -> Unit,
     onToggleBoxMode: () -> Unit,
+    onToggleCurveMode: () -> Unit,
     onToggleCircleMode: () -> Unit,
     onDeleteSelection: () -> Unit,
     onToggleDoors: () -> Unit,
@@ -213,7 +214,7 @@ internal fun BlueprintBottomBar(
             BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
             listOf(
                 BlueprintIconToggleSpec(
-                    icon = Icons.AutoMirrored.Filled.CallSplit,
+                    icon = Icons.Filled.Workspaces,
                     contentDescription = "Detached walls",
                     selected = detachedWalls,
                     onClick = onToggleDetached
@@ -223,6 +224,12 @@ internal fun BlueprintBottomBar(
                     contentDescription = "Box mode",
                     selected = boxModeEnabled,
                     onClick = onToggleBoxMode
+                ),
+                BlueprintIconToggleSpec(
+                    icon = Icons.AutoMirrored.Filled.CallSplit,
+                    contentDescription = "Curved wall mode",
+                    selected = curveModeEnabled,
+                    onClick = onToggleCurveMode
                 ),
                 BlueprintIconToggleSpec(
                     icon = Icons.Filled.PanoramaFishEye,
@@ -779,8 +786,6 @@ internal fun ParamsPanel(
     snapThresholdFeet: Double,
     useMetric: Boolean,
     onSelectDrawWallTool: () -> Unit,
-    onSelectDrawArcTool: () -> Unit,
-    onSelectDrawCircleTool: () -> Unit,
     onParamsChange: (BlueprintParams) -> Unit,
     onWallHeightChange: (Long) -> Unit,
     onDrywallSheetAreaChange: (Double) -> Unit,
@@ -856,20 +861,15 @@ internal fun ParamsPanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text("Shape tools", style = MaterialTheme.typography.labelLarge)
+                Text("Draw mode", style = MaterialTheme.typography.labelLarge)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
                         selected = activeTool == BlueprintDraftTool.DRAW_WALL,
                         onClick = onSelectDrawWallTool,
                         label = { Text("Straight walls") }
                     )
-                    FilterChip(
-                        selected = activeTool == BlueprintDraftTool.DRAW_ARC,
-                        onClick = onSelectDrawArcTool,
-                        label = { Text("Curved wall") }
-                    )
                     Text(
-                        text = "Curve: tap start, end, then bend. Circle now lives on the build rail.",
+                        text = "Box, curve, and circle live on the build rail. Draw mode stays straight-wall by default.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1299,6 +1299,10 @@ internal fun RailHelpPanel(
             RailHelpLine(
                 title = "Box",
                 detail = "Tap once to start a box, move to size, use side dials to rotate/expand, then tap again to finish."
+            )
+            RailHelpLine(
+                title = "Curve",
+                detail = "Use the rail curve icon, tap start and end, then bend the wall. The side dials fine-tune span, shift, and bend."
             )
             RailHelpLine(
                 title = "Control mode",

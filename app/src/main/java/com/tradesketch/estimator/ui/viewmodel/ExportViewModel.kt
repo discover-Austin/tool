@@ -17,13 +17,13 @@ import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.authoritativeBlueprint
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
 import com.tradesketch.estimator.ui.defaultTakeoffTypeForTrade
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.utils.BlueprintExportManager
 import com.tradesketch.estimator.utils.EstimateExportManager
 import com.tradesketch.estimator.utils.EstimateIdentity
-import com.tradesketch.estimator.utils.ExportFormatter
 import com.tradesketch.estimator.utils.ExportResult
 import com.tradesketch.estimator.utils.ExportStorage
 import com.tradesketch.estimator.utils.SavedExport
@@ -133,13 +133,18 @@ class ExportViewModel @Inject constructor(
             val exportSnapshot = runCatching {
                 withContext(Dispatchers.Default) {
                     val inputs = buildTakeoffInputs(project = project, settings = settings)
-                    val previewBlueprint = projectBlueprintForType(
+                    val previewBlueprint = project.authoritativeBlueprint()
+                    val selectedTradeBlueprint = projectBlueprintForType(
                         project = project,
                         type = selectedType
                     )
                     val result = calculateTakeoffUseCase.calculateForType(
                         project = project,
                         type = selectedType,
+                        inputs = inputs
+                    )
+                    val presentTradeSections = buildPresentTradeExportSections(
+                        project = project,
                         inputs = inputs
                     )
                     val label = selectedType.displayLabel
@@ -151,38 +156,36 @@ class ExportViewModel @Inject constructor(
                     ExportComputation(
                         result = result,
                         previewBlueprint = previewBlueprint,
+                        selectedTradeHasGeometry = selectedTradeBlueprint.hasGeometry(),
+                        presentTradeLabels = presentTradeSections.map(CombinedExportSection::takeoffTypeLabel),
                         takeoffType = label,
                         estimateId = estimateId,
                         generatedAtMillis = generatedAtMillis,
-                        textContent = ExportFormatter.formatAsText(
+                        textContent = CombinedExportFormatter.formatAsText(
                             project = project,
                             settings = settings,
-                            takeoffType = label,
-                            result = result,
+                            sections = presentTradeSections,
                             generatedAtMillis = generatedAtMillis,
                             estimateId = estimateId
                         ),
-                        summaryContent = ExportFormatter.formatAsSummary(
+                        summaryContent = CombinedExportFormatter.formatAsSummary(
                             project = project,
                             settings = settings,
-                            takeoffType = label,
-                            result = result,
+                            sections = presentTradeSections,
                             generatedAtMillis = generatedAtMillis,
                             estimateId = estimateId
                         ),
-                        csvContent = ExportFormatter.formatAsCSV(
+                        csvContent = CombinedExportFormatter.formatAsCSV(
                             project = project,
                             settings = settings,
-                            takeoffType = label,
-                            result = result,
+                            sections = presentTradeSections,
                             generatedAtMillis = generatedAtMillis,
                             estimateId = estimateId
                         ),
-                        jsonContent = ExportFormatter.formatAsJson(
+                        jsonContent = CombinedExportFormatter.formatAsJson(
                             project = project,
                             settings = settings,
-                            takeoffType = label,
-                            result = result,
+                            sections = presentTradeSections,
                             generatedAtMillis = generatedAtMillis,
                             estimateId = estimateId
                         )
@@ -199,6 +202,8 @@ class ExportViewModel @Inject constructor(
                 it.copy(
                     result = exportSnapshot.result,
                     previewBlueprint = exportSnapshot.previewBlueprint,
+                    selectedTradeHasGeometry = exportSnapshot.selectedTradeHasGeometry,
+                    presentTradeLabels = exportSnapshot.presentTradeLabels,
                     takeoffType = exportSnapshot.takeoffType,
                     estimateId = exportSnapshot.estimateId,
                     generatedAtMillis = exportSnapshot.generatedAtMillis,
@@ -255,7 +260,13 @@ class ExportViewModel @Inject constructor(
         }
         val state = _uiState.value
         val content = if (shareCsv) state.csvContent else state.textContent
-        val subjectSuffix = if (shareCsv) "CSV" else state.takeoffType
+        val subjectSuffix = if (shareCsv) {
+            "CSV"
+        } else if (state.presentTradeLabels.size > 1) {
+            "All Present Trades"
+        } else {
+            state.takeoffType
+        }
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, "${state.project?.name} - $subjectSuffix")
@@ -575,9 +586,8 @@ class ExportViewModel @Inject constructor(
     private fun buildBlueprintExportPayload(): BlueprintExportPayload? {
         val state = _uiState.value
         val project = state.project ?: return null
-        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
         val blueprint = state.previewBlueprint
-            ?: projectBlueprintForType(project = project, type = selectedType)
+            ?: project.authoritativeBlueprint()
         val hasGeometry = blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty()
         if (!hasGeometry) return null
         return BlueprintExportPayload(
@@ -626,6 +636,8 @@ class ExportViewModel @Inject constructor(
             it.copy(
                 result = null,
                 previewBlueprint = null,
+                selectedTradeHasGeometry = false,
+                presentTradeLabels = emptyList(),
                 takeoffType = "",
                 estimateId = "",
                 generatedAtMillis = null,
@@ -658,11 +670,33 @@ class ExportViewModel @Inject constructor(
             false
         }
     }
+
+    private fun buildPresentTradeExportSections(
+        project: Project,
+        inputs: TakeoffCalculationInputs
+    ): List<CombinedExportSection> {
+        return TakeoffType.entries.mapNotNull { type ->
+            val blueprint = projectBlueprintForType(project = project, type = type)
+            if (!blueprint.hasGeometry()) {
+                return@mapNotNull null
+            }
+            CombinedExportSection(
+                takeoffTypeLabel = type.displayLabel,
+                result = calculateTakeoffUseCase.calculateForType(
+                    project = project,
+                    type = type,
+                    inputs = inputs
+                )
+            )
+        }
+    }
 }
 
 private data class ExportComputation(
     val result: TakeoffResult,
     val previewBlueprint: BlueprintDocument,
+    val selectedTradeHasGeometry: Boolean,
+    val presentTradeLabels: List<String>,
     val takeoffType: String,
     val estimateId: String,
     val generatedAtMillis: Long,
@@ -703,10 +737,12 @@ data class ExportUiState(
     val settings: Settings = Settings.DEFAULT,
     val selectedType: TakeoffType? = null,
     val takeoffType: String = "",
+    val presentTradeLabels: List<String> = emptyList(),
     val estimateId: String = "",
     val generatedAtMillis: Long? = null,
     val result: TakeoffResult? = null,
     val previewBlueprint: BlueprintDocument? = null,
+    val selectedTradeHasGeometry: Boolean = false,
     val textContent: String = "",
     val summaryContent: String = "",
     val csvContent: String = "",
@@ -716,3 +752,7 @@ data class ExportUiState(
     val error: String? = null,
     val isLoading: Boolean = true
 )
+
+private fun BlueprintDocument.hasGeometry(): Boolean {
+    return walls.isNotEmpty() || rooms.isNotEmpty() || openings.isNotEmpty()
+}

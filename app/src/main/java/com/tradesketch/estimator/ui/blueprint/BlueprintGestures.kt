@@ -385,6 +385,12 @@ internal fun DrawLineEdgeDialsOverlay(
     dualJoysticksEnabled: Boolean,
     controlsBottomPadding: Dp,
     leftInset: Dp = 0.dp,
+    angleCaption: String = "Angle",
+    angleLabel: String = "±1°",
+    lengthCaption: String = "Length",
+    lengthLabel: String = "±1in",
+    angleDialModifier: Modifier = Modifier,
+    lengthDialModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -433,8 +439,8 @@ internal fun DrawLineEdgeDialsOverlay(
                 .padding(bottom = dialBottomPadding)
         ) {
             EdgeTickDial(
-                caption = "Angle",
-                label = "±1°",
+                caption = angleCaption,
+                label = angleLabel,
                 onTicks = onAngleTicks,
                 onInteractionChanged = onInteractionChanged,
                 pxPerTick = pxPerTick,
@@ -447,10 +453,11 @@ internal fun DrawLineEdgeDialsOverlay(
                     .padding(start = dialHorizontalInset)
                     .width(dialWidth)
                     .height(dialTouchHeight)
+                    .then(angleDialModifier)
             )
             EdgeTickDial(
-                caption = "Length",
-                label = "±1in",
+                caption = lengthCaption,
+                label = lengthLabel,
                 onTicks = onLengthTicks,
                 onInteractionChanged = onInteractionChanged,
                 pxPerTick = pxPerTick,
@@ -463,6 +470,7 @@ internal fun DrawLineEdgeDialsOverlay(
                     .padding(end = rightDialHorizontalInset)
                     .width(dialWidth)
                     .height(dialTouchHeight)
+                    .then(lengthDialModifier)
             )
         }
     }

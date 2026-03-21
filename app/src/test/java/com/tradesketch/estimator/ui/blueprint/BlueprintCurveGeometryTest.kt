@@ -5,6 +5,7 @@ import com.tradesketch.estimator.domain.model.WallSegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BlueprintCurveGeometryTest {
@@ -25,6 +26,45 @@ class BlueprintCurveGeometryTest {
         assertEquals(start, previewWalls.first().start)
         assertEquals(end, previewWalls.last().end)
         assertTrue(previewWalls.any { wall -> wall.start.y != 0L || wall.end.y != 0L })
+    }
+
+    @Test
+    fun `arc dial projection round trips the control point`() {
+        val start = PointMm(0, 0)
+        val end = PointMm(1_600, 0)
+        val control = PointMm(1_050, 450)
+
+        val projection = projectArcDraftControl(
+            start = start,
+            end = end,
+            control = control
+        )
+
+        assertNotNull(projection)
+        assertEquals(250.0, projection.shiftMm, 0.6)
+        assertEquals(450.0, projection.bendMm, 0.6)
+        assertEquals(
+            control,
+            pointFromArcDraftControl(
+                start = start,
+                end = end,
+                shiftMm = projection.shiftMm,
+                bendMm = projection.bendMm
+            )
+        )
+    }
+
+    @Test
+    fun `arc draft measurements report span bend and longer than chord arc length`() {
+        val measurements = measureArcDraft(
+            start = PointMm(0, 0),
+            end = PointMm(1_600, 0),
+            control = PointMm(800, 600)
+        )
+
+        assertEquals(1_600L, measurements.spanMm)
+        assertEquals(600L, measurements.bendMm)
+        assertTrue(measurements.arcLengthMm > measurements.spanMm)
     }
 
     @Test
