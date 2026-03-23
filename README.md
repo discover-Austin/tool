@@ -1,11 +1,11 @@
 # TradeSketch Estimator
 
-Offline-first estimator and blueprint maker for drywall, concrete, paint, and gravel/mulch workflows.
+Offline-first estimator and blueprint maker for drywall, concrete, paint, and gravel/mulch workflows, including dedicated `Measured Arc` and `Sketch Curve` blueprint tools.
 
 ## Current Release Snapshot
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.11` (`versionCode = 13`)
+- Version: `1.0.16` (`versionCode = 18`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Authoritative release status: `RELEASE_STATUS.md`
 

@@ -127,6 +127,8 @@ import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
+import com.tradesketch.estimator.ui.viewmodel.isCurveDraftTool
+import com.tradesketch.estimator.ui.viewmodel.isMeasuredArcTool
 import com.tradesketch.estimator.ui.viewmodel.scopedToTakeoffScope
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
@@ -142,6 +144,7 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 fun BlueprintScreen(
@@ -227,6 +230,17 @@ fun BlueprintScreen(
     var canvasRoot by remember { mutableStateOf(Offset.Zero) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var bottomRailBounds by remember { mutableStateOf<Rect?>(null) }
+    var detachedButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var boxButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var measuredArcButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var sketchCurveButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var circleButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var doorsButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var windowsButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var stairUpButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var stairDownButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var paramsButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var helpButtonBounds by remember { mutableStateOf<Rect?>(null) }
     var gridScaleBadgeBounds by remember { mutableStateOf<Rect?>(null) }
     var paramsPanelBounds by remember { mutableStateOf<Rect?>(null) }
     var openingPanelBounds by remember { mutableStateOf<Rect?>(null) }
@@ -241,6 +255,10 @@ fun BlueprintScreen(
     var tutorialLeftControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialCenterControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialRightControlsBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTouchSelectBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTouchDrawBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTouchGrabBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTouchCancelBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialAngleDialBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialLengthDialBounds by remember { mutableStateOf<Rect?>(null) }
     var dualJoysticksEnabled by rememberSaveable(projectId) {
@@ -288,6 +306,17 @@ fun BlueprintScreen(
         circleCenter = null
         circlePreviewEdge = null
     }
+    val normalizeMeasuredArcPreviewPoint: (PointMm, PointMm, PointMm) -> PointMm = { start, end, preview ->
+        pointFromMeasuredArcRise(
+            start = start,
+            end = end,
+            riseMm = measuredArcRiseFromControl(
+                start = start,
+                end = end,
+                control = preview
+            )
+        )
+    }
     val rootView = LocalView.current
     val recordBlueprintMetric: (BlueprintMetricAction) -> Unit = { action ->
         settingsViewModel.recordTap(blueprintMetricKey(action, currentControlMode))
@@ -296,6 +325,9 @@ fun BlueprintScreen(
         blueprintControlTutorialSteps(dualJoysticksEnabled)
     }
     val currentTutorialStep = controlTutorialSteps.getOrNull(tutorialStepIndex)
+    val tutorialGuideWalls = remember(currentTutorialStep) {
+        currentTutorialStep?.resolvedPlacementWalls().orEmpty()
+    }
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
     LaunchedEffect(projectId, currentControlMode) {
@@ -361,23 +393,31 @@ fun BlueprintScreen(
     }
     LaunchedEffect(tutorialMode, currentTutorialStep) {
         if (!tutorialMode) return@LaunchedEffect
-        showGridScaleEditor = false
+        showGridScaleEditor = currentTutorialStep?.showGridScaleEditor == true
         showClearAllConfirm = false
         showRailHelp = currentTutorialStep?.showHelpPanel == true
         showParams = currentTutorialStep?.showParamsPanel == true
         activeOpeningPanel = currentTutorialStep?.demoOpeningPanel
-        currentTutorialStep?.demoTool?.let { tutorialTool ->
-            pendingGrabSelection = false
+        currentTutorialStep?.let { tutorialStep ->
+            val tutorialTool = tutorialStep.resolvedTutorialTool()
+            pendingGrabSelection = tutorialStep.demoPendingGrabSelection
             movingWallPreview = null
-            drawingStart = null
-            drawingPreview = null
-            chainOrigin = null
-            boxStart = null
-            boxPreview = null
-            boxRotationRadians = 0.0
-            resetCurveDraft()
-            resetCircleDraft()
             tool = tutorialTool
+            drawingStart = tutorialStep.demoDrawingStart
+            drawingPreview = tutorialStep.demoDrawingPreview
+            chainOrigin = tutorialStep.demoDrawingStart
+            boxStart = tutorialStep.demoBoxStart
+            boxPreview = tutorialStep.demoBoxPreview
+            boxRotationRadians = tutorialStep.demoBoxRotationRadians
+            curveStart = tutorialStep.demoCurveStart
+            curveEnd = tutorialStep.demoCurveEnd
+            curvePreviewPoint = tutorialStep.demoCurvePreview
+            circleCenter = tutorialStep.demoCircleCenter
+            circlePreviewEdge = tutorialStep.demoCircleEdge
+            openingPointerWorld = tutorialStep.demoPointerWorld
+                ?: tutorialStep.demoDrawingPreview
+                ?: tutorialStep.demoCurvePreview
+                ?: tutorialStep.demoCircleEdge
         }
     }
     LaunchedEffect(appSettings.blueprintCursorVisible) {
@@ -415,7 +455,7 @@ fun BlueprintScreen(
             boxPreview = null
             boxRotationRadians = 0.0
         }
-        if (tool != BlueprintDraftTool.DRAW_ARC) {
+        if (!tool.isCurveDraftTool()) {
             resetCurveDraft()
         }
         if (tool != BlueprintDraftTool.DRAW_CIRCLE) {
@@ -477,6 +517,13 @@ fun BlueprintScreen(
             selectedWallId = wall.id
         )
     }
+    val arcSelection = selectedWall?.let { wall ->
+        arcSelectionInfo(
+            document = doc,
+            selectedWallId = wall.id
+        )
+    }
+    val selectedMeasuredArcGuide = arcSelection?.takeIf { it.kind == CurveSelectionKind.MEASURED_ARC }
     val circleResizeStepMm = if (appSettings.useMetric) 150L else Millimeters.fromFeet(0.5).value
     LaunchedEffect(showParams) {
         if (!showParams) {
@@ -560,7 +607,7 @@ fun BlueprintScreen(
     }
     val placementThresholdMm = Millimeters.fromFeet(snapSettings.thresholdFeet * 2).value.coerceAtLeast(1L)
     val findPlacementCandidate: (PointMm, OpeningPreset) -> OpeningPlacementCandidate? = { worldPoint, preset ->
-        renderedDoc.walls
+        (renderedDoc.walls + tutorialGuideWalls)
             .map { wall ->
                 val t = BlueprintSnapMath.projectToWallT(worldPoint, wall).coerceIn(0.0, 1.0)
                 val distance = BlueprintSnapMath.pointToWallDistanceMm(worldPoint, wall)
@@ -727,7 +774,7 @@ fun BlueprintScreen(
             (
                 (drawingStart != null && tool == BlueprintDraftTool.DRAW_WALL) ||
                     (boxStart != null && tool == BlueprintDraftTool.DRAW_BOX) ||
-                    (curveStart != null && tool == BlueprintDraftTool.DRAW_ARC)
+                    (curveStart != null && tool.isCurveDraftTool())
                 )
         ) {
             return@pointer
@@ -767,7 +814,7 @@ fun BlueprintScreen(
             }
             boxPreview = previewCorner
         }
-        if (curveStart != null && tool == BlueprintDraftTool.DRAW_ARC) {
+        if (curveStart != null && tool.isCurveDraftTool()) {
             if (curveEnd == null) {
                 var previewEnd = pointer
                 if (draftSnapSettings.endpointEnabled) {
@@ -780,7 +827,11 @@ fun BlueprintScreen(
                 }
                 curvePreviewPoint = previewEnd
             } else {
-                curvePreviewPoint = pointer
+                curvePreviewPoint = if (tool.isMeasuredArcTool()) {
+                    normalizeMeasuredArcPreviewPoint(curveStart!!, curveEnd!!, pointer)
+                } else {
+                    pointer
+                }
             }
         }
         if (circleCenter != null && tool == BlueprintDraftTool.DRAW_CIRCLE) {
@@ -853,6 +904,7 @@ fun BlueprintScreen(
                             if (start != null) {
                                 val end = resolveDraftWallCommitEnd(
                                     previewEnd = drawingPreview,
+                                    untouchedPreviewPoint = start,
                                     snappedTap = snappedTap,
                                     walls = draftSnapWalls,
                                     snapThresholdFeet = draftSnapSettings.thresholdFeet,
@@ -915,6 +967,7 @@ fun BlueprintScreen(
                     if (start != null) {
                         val end = resolveDraftBoxCommitEnd(
                             previewEnd = boxPreview,
+                            untouchedPreviewPoint = start,
                             snappedTap = snappedTap,
                             walls = draftSnapWalls,
                             snapThresholdFeet = boxDraftSnapSettings.thresholdFeet,
@@ -939,7 +992,7 @@ fun BlueprintScreen(
                     boxPreview = null
                 }
             }
-            BlueprintDraftTool.DRAW_ARC -> {
+            BlueprintDraftTool.DRAW_MEASURED_ARC -> {
                 val snappedTap = BlueprintSnapMath.applySnapping(
                     rawPoint = tap,
                     drawingStart = curveStart,
@@ -965,6 +1018,7 @@ fun BlueprintScreen(
                         if (start != null) {
                             val end = resolveDraftWallCommitEnd(
                                 previewEnd = curvePreviewPoint,
+                                untouchedPreviewPoint = start,
                                 snappedTap = snappedTap,
                                 walls = draftSnapWalls,
                                 snapThresholdFeet = draftSnapSettings.thresholdFeet,
@@ -984,7 +1038,94 @@ fun BlueprintScreen(
                         val start = curveStart
                         val end = curveEnd
                         if (start != null && end != null) {
-                            val control = curvePreviewPoint ?: tap
+                            val control = resolveCurveCommitControlPoint(
+                                start = start,
+                                end = end,
+                                previewPoint = curvePreviewPoint,
+                                tap = tap,
+                                measuredArc = true
+                            )
+                            val walls = buildMeasuredArcWalls(
+                                document = renderedDoc,
+                                start = start,
+                                end = end,
+                                riseMm = measuredArcRiseFromControl(
+                                    start = start,
+                                    end = end,
+                                    control = control
+                                ),
+                                scale = scale,
+                                wallHeightMm = doc.params.wallHeightMm,
+                                wallThicknessMm = doc.params.defaultWallThicknessMm,
+                                tags = setOf(
+                                    "drawn",
+                                    CURVE_SHAPE_ARC_TAG,
+                                    currentScope.wallScopeTag(),
+                                    selectedFloor.floorTag()
+                                )
+                            )
+                            if (walls.isNotEmpty()) {
+                                viewModel.addWalls(walls)
+                                recordBlueprintMetric(BlueprintMetricAction.WALL_PLACED)
+                            }
+                        }
+                        resetCurveDraft()
+                    }
+                }
+            }
+            BlueprintDraftTool.DRAW_SKETCH_CURVE -> {
+                val snappedTap = BlueprintSnapMath.applySnapping(
+                    rawPoint = tap,
+                    drawingStart = curveStart,
+                    settings = draftSnapSettings,
+                    walls = draftSnapWalls
+                )
+                when {
+                    curveStart == null -> {
+                        val startPoint = resolveDraftStartFromTap(
+                            tap = tap,
+                            snappedTap = snappedTap,
+                            walls = draftSnapWalls,
+                            scale = scale,
+                            snapThresholdFeet = draftSnapSettings.thresholdFeet,
+                            endpointSnappingEnabled = draftSnapSettings.endpointEnabled
+                        )
+                        curveStart = startPoint
+                        curveEnd = null
+                        curvePreviewPoint = startPoint
+                    }
+                    curveEnd == null -> {
+                        val start = curveStart
+                        if (start != null) {
+                            val end = resolveDraftWallCommitEnd(
+                                previewEnd = curvePreviewPoint,
+                                untouchedPreviewPoint = start,
+                                snappedTap = snappedTap,
+                                walls = draftSnapWalls,
+                                snapThresholdFeet = draftSnapSettings.thresholdFeet,
+                                endpointSnappingEnabled = draftSnapSettings.endpointEnabled,
+                                closureEnabled = false,
+                                chainOrigin = null
+                            )
+                            if (canAddDraftedWall(document = renderedDoc, start = start, end = end, scale = scale)) {
+                                curveEnd = end
+                                curvePreviewPoint = midpointBetween(start, end)
+                            } else {
+                                resetCurveDraft()
+                            }
+                        }
+                    }
+                    else -> {
+                        val start = curveStart
+                        val end = curveEnd
+                        if (start != null && end != null) {
+                            val control = resolveCurveCommitControlPoint(
+                                start = start,
+                                end = end,
+                                previewPoint = curvePreviewPoint,
+                                tap = tap,
+                                measuredArc = false
+                            )
                             val walls = buildDraftArcWalls(
                                 document = renderedDoc,
                                 start = start,
@@ -1029,7 +1170,11 @@ fun BlueprintScreen(
                 } else {
                     val center = circleCenter
                     if (center != null) {
-                        val edge = circlePreviewEdge ?: tap
+                        val edge = resolveCircleCommitEdge(
+                            center = center,
+                            previewEdge = circlePreviewEdge,
+                            tap = tap
+                        )
                         val walls = buildDraftCircleWalls(
                             document = renderedDoc,
                             center = center,
@@ -1121,7 +1266,7 @@ fun BlueprintScreen(
                 pendingGrabSelection = false
                 tool = BlueprintDraftTool.DRAW_WALL
             }
-            tool == BlueprintDraftTool.DRAW_ARC -> {
+            tool.isCurveDraftTool() -> {
                 resetCurveDraft()
                 pendingGrabSelection = false
                 tool = BlueprintDraftTool.DRAW_WALL
@@ -1470,7 +1615,8 @@ fun BlueprintScreen(
         movingWallPreview != null -> "Picked Up"
         tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> "Draw"
         tool == BlueprintDraftTool.DRAW_BOX && boxStart != null -> "Box"
-        tool == BlueprintDraftTool.DRAW_ARC && curveStart != null -> "Curve"
+        tool == BlueprintDraftTool.DRAW_MEASURED_ARC && curveStart != null -> "Arc"
+        tool == BlueprintDraftTool.DRAW_SKETCH_CURVE && curveStart != null -> "Sketch"
         tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null -> "Circle"
         selectedWall != null -> "Selected"
         else -> null
@@ -1480,7 +1626,7 @@ fun BlueprintScreen(
         tutorialWantsEdgeDials ||
             (tool == BlueprintDraftTool.DRAW_WALL && (drawingStart != null || movingWallPreview != null)) ||
             tool == BlueprintDraftTool.DRAW_BOX ||
-            (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null)
+            (tool.isCurveDraftTool() && curveStart != null)
     LaunchedEffect(showEdgeDials) {
         if (!showEdgeDials) {
             edgeDialActiveTouchCount = 0
@@ -1511,11 +1657,19 @@ fun BlueprintScreen(
         }
     }
     val updateCurvePreviewFromDial: (PointMm) -> Unit = { preview ->
-        curvePreviewPoint = preview
-        openingPointerWorld = preview
+        curvePreviewPoint = if (
+            tool.isMeasuredArcTool() &&
+            curveStart != null &&
+            curveEnd != null
+        ) {
+            normalizeMeasuredArcPreviewPoint(curveStart!!, curveEnd!!, preview)
+        } else {
+            preview
+        }
+        openingPointerWorld = curvePreviewPoint ?: preview
         if (dualJoysticksEnabled) {
             worldPointToCanvasLocal(
-                worldPoint = preview,
+                worldPoint = curvePreviewPoint ?: preview,
                 canvasSize = canvasSize,
                 scale = scale,
                 pan = pan
@@ -1559,9 +1713,28 @@ fun BlueprintScreen(
         tutorialAngleDialBounds,
         tutorialLengthDialBounds
     ).reduceOrNull(::mergeTutorialRects)
+    val tutorialTooltipTopClearance = with(density) {
+        ((listOfNotNull(topStartStackBounds, topEndStackBounds).maxOfOrNull { it.bottom } ?: 0f).toDp() + 12.dp)
+            .coerceAtLeast(12.dp)
+    }
     val tutorialTargetBounds = when (currentTutorialStep?.target) {
         BlueprintControlTutorialTarget.BOTTOM_RAIL -> bottomRailBounds
         BlueprintControlTutorialTarget.CANVAS -> tutorialCanvasBounds
+        BlueprintControlTutorialTarget.DETACHED_BUTTON -> detachedButtonBounds
+        BlueprintControlTutorialTarget.BOX_BUTTON -> boxButtonBounds
+        BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON -> measuredArcButtonBounds
+        BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON -> sketchCurveButtonBounds
+        BlueprintControlTutorialTarget.CIRCLE_BUTTON -> circleButtonBounds
+        BlueprintControlTutorialTarget.DOORS_BUTTON -> doorsButtonBounds
+        BlueprintControlTutorialTarget.WINDOWS_BUTTON -> windowsButtonBounds
+        BlueprintControlTutorialTarget.STAIR_UP_BUTTON -> stairUpButtonBounds
+        BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON -> stairDownButtonBounds
+        BlueprintControlTutorialTarget.PARAMS_BUTTON -> paramsButtonBounds
+        BlueprintControlTutorialTarget.HELP_BUTTON -> helpButtonBounds
+        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON -> tutorialTouchSelectBounds
+        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON -> tutorialTouchDrawBounds
+        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> tutorialTouchGrabBounds
+        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON -> tutorialTouchCancelBounds
         BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
         BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD -> tutorialLeftControlsBounds
         BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
@@ -1631,7 +1804,7 @@ fun BlueprintScreen(
                     edgeDialCurveShiftMm = null
                     edgeDialCurveBendMm = null
                 }
-                tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd == null -> {
+                tool.isCurveDraftTool() && curveStart != null && curveEnd == null -> {
                     val start = curveStart
                     if (start != null) {
                         val current = curvePreviewPoint ?: start
@@ -1649,20 +1822,35 @@ fun BlueprintScreen(
                         edgeDialCurveBendMm = null
                     }
                 }
-                tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null -> {
+                tool.isCurveDraftTool() && curveStart != null && curveEnd != null -> {
                     val start = curveStart
                     val end = curveEnd
                     val control = curvePreviewPoint
                     if (start != null && end != null && control != null) {
-                        val draftControl = projectArcDraftControl(
-                            start = start,
-                            end = end,
-                            control = control
-                        )
                         edgeDialAngleRadians = null
                         edgeDialLengthMm = null
-                        edgeDialCurveShiftMm = draftControl?.shiftMm ?: 0.0
-                        edgeDialCurveBendMm = draftControl?.bendMm ?: 0.0
+                        if (tool.isMeasuredArcTool()) {
+                            val riseMm = measuredArcRiseFromControl(
+                                start = start,
+                                end = end,
+                                control = control
+                            )
+                            val measurements = measureMeasuredArcDraft(
+                                start = start,
+                                end = end,
+                                riseMm = riseMm
+                            )
+                            edgeDialCurveShiftMm = measurements.sweepDegrees
+                            edgeDialCurveBendMm = measurements.riseMm.toDouble()
+                        } else {
+                            val draftControl = projectArcDraftControl(
+                                start = start,
+                                end = end,
+                                control = control
+                            )
+                            edgeDialCurveShiftMm = draftControl?.shiftMm ?: 0.0
+                            edgeDialCurveBendMm = draftControl?.bendMm ?: 0.0
+                        }
                     }
                 }
             }
@@ -1729,7 +1917,7 @@ fun BlueprintScreen(
                 )
                 updateDraftPreviewFromDial(adjusted)
             }
-            tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd == null -> {
+            tool.isCurveDraftTool() && curveStart != null && curveEnd == null -> {
                 val start = curveStart ?: return@ticks
                 val baseAngle = edgeDialAngleRadians ?: run {
                     val current = curvePreviewPoint ?: start
@@ -1757,33 +1945,66 @@ fun BlueprintScreen(
                 )
                 updateCurvePreviewFromDial(adjusted)
             }
-            tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null -> {
+            tool.isCurveDraftTool() && curveStart != null && curveEnd != null -> {
                 val start = curveStart ?: return@ticks
                 val end = curveEnd ?: return@ticks
                 val control = curvePreviewPoint ?: return@ticks
-                val baseProjection = projectArcDraftControl(
-                    start = start,
-                    end = end,
-                    control = control
-                ) ?: return@ticks
-                val nextShift = (
-                    (edgeDialCurveShiftMm ?: baseProjection.shiftMm) +
-                        (tickCount * DRAW_EDGE_DIAL_LENGTH_STEP_MM)
-                    ).coerceIn(
-                        -DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble(),
-                        DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble()
-                    )
-                val bend = edgeDialCurveBendMm ?: baseProjection.bendMm
-                edgeDialCurveShiftMm = nextShift
-                edgeDialCurveBendMm = bend
-                updateCurvePreviewFromDial(
-                    pointFromArcDraftControl(
+                if (tool.isMeasuredArcTool()) {
+                    val baseRise = measuredArcRiseFromControl(
                         start = start,
                         end = end,
-                        shiftMm = nextShift,
-                        bendMm = bend
+                        control = control
                     )
-                )
+                    val measurements = measureMeasuredArcDraft(
+                        start = start,
+                        end = end,
+                        riseMm = baseRise
+                    )
+                    val riseSign = if (baseRise < 0.0) -1.0 else 1.0
+                    val nextSweepDegrees = (
+                        (edgeDialCurveShiftMm ?: measurements.sweepDegrees) +
+                            (tickCount * DRAW_EDGE_DIAL_ANGLE_STEP_DEGREES)
+                        ).coerceIn(1.0, 179.0)
+                    val nextRiseMm = riseFromMeasuredArcSweepDegrees(
+                        start = start,
+                        end = end,
+                        sweepDegrees = nextSweepDegrees,
+                        riseSign = riseSign
+                    )
+                    edgeDialCurveShiftMm = nextSweepDegrees
+                    edgeDialCurveBendMm = nextRiseMm
+                    updateCurvePreviewFromDial(
+                        pointFromMeasuredArcRise(
+                            start = start,
+                            end = end,
+                            riseMm = nextRiseMm
+                        )
+                    )
+                } else {
+                    val baseProjection = projectArcDraftControl(
+                        start = start,
+                        end = end,
+                        control = control
+                    ) ?: return@ticks
+                    val nextShift = (
+                        (edgeDialCurveShiftMm ?: baseProjection.shiftMm) +
+                            (tickCount * DRAW_EDGE_DIAL_LENGTH_STEP_MM)
+                        ).coerceIn(
+                            -DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble(),
+                            DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble()
+                        )
+                    val bend = edgeDialCurveBendMm ?: baseProjection.bendMm
+                    edgeDialCurveShiftMm = nextShift
+                    edgeDialCurveBendMm = bend
+                    updateCurvePreviewFromDial(
+                        pointFromArcDraftControl(
+                            start = start,
+                            end = end,
+                            shiftMm = nextShift,
+                            bendMm = bend
+                        )
+                    )
+                }
             }
         }
     }
@@ -1844,7 +2065,7 @@ fun BlueprintScreen(
                 )
                 updateDraftPreviewFromDial(adjusted)
             }
-            tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd == null -> {
+            tool.isCurveDraftTool() && curveStart != null && curveEnd == null -> {
                 val start = curveStart ?: return@ticks
                 val baseAngle = edgeDialAngleRadians ?: run {
                     val current = curvePreviewPoint ?: start
@@ -1876,33 +2097,67 @@ fun BlueprintScreen(
                 )
                 updateCurvePreviewFromDial(adjusted)
             }
-            tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null -> {
+            tool.isCurveDraftTool() && curveStart != null && curveEnd != null -> {
                 val start = curveStart ?: return@ticks
                 val end = curveEnd ?: return@ticks
                 val control = curvePreviewPoint ?: return@ticks
-                val baseProjection = projectArcDraftControl(
-                    start = start,
-                    end = end,
-                    control = control
-                ) ?: return@ticks
-                val shift = edgeDialCurveShiftMm ?: baseProjection.shiftMm
-                val nextBend = (
-                    (edgeDialCurveBendMm ?: baseProjection.bendMm) +
-                        (tickCount * DRAW_EDGE_DIAL_LENGTH_STEP_MM)
-                    ).coerceIn(
-                        -DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble(),
-                        DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble()
-                    )
-                edgeDialCurveShiftMm = shift
-                edgeDialCurveBendMm = nextBend
-                updateCurvePreviewFromDial(
-                    pointFromArcDraftControl(
+                if (tool.isMeasuredArcTool()) {
+                    val baseRise = measuredArcRiseFromControl(
                         start = start,
                         end = end,
-                        shiftMm = shift,
-                        bendMm = nextBend
+                        control = control
                     )
-                )
+                    val nextRise = (
+                        (edgeDialCurveBendMm ?: baseRise) +
+                            (tickCount * DRAW_EDGE_DIAL_LENGTH_STEP_MM)
+                        ).coerceIn(
+                            -DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble(),
+                            DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble()
+                        )
+                    val adjustedRise = when {
+                        nextRise > 0.0 && nextRise < 1.0 -> 1.0
+                        nextRise < 0.0 && nextRise > -1.0 -> -1.0
+                        else -> nextRise
+                    }
+                    val measurements = measureMeasuredArcDraft(
+                        start = start,
+                        end = end,
+                        riseMm = adjustedRise
+                    )
+                    edgeDialCurveShiftMm = measurements.sweepDegrees
+                    edgeDialCurveBendMm = adjustedRise
+                    updateCurvePreviewFromDial(
+                        pointFromMeasuredArcRise(
+                            start = start,
+                            end = end,
+                            riseMm = adjustedRise
+                        )
+                    )
+                } else {
+                    val baseProjection = projectArcDraftControl(
+                        start = start,
+                        end = end,
+                        control = control
+                    ) ?: return@ticks
+                    val shift = edgeDialCurveShiftMm ?: baseProjection.shiftMm
+                    val nextBend = (
+                        (edgeDialCurveBendMm ?: baseProjection.bendMm) +
+                            (tickCount * DRAW_EDGE_DIAL_LENGTH_STEP_MM)
+                        ).coerceIn(
+                            -DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble(),
+                            DRAW_EDGE_DIAL_MAX_LENGTH_MM.toDouble()
+                        )
+                    edgeDialCurveShiftMm = shift
+                    edgeDialCurveBendMm = nextBend
+                    updateCurvePreviewFromDial(
+                        pointFromArcDraftControl(
+                            start = start,
+                            end = end,
+                            shiftMm = shift,
+                            bendMm = nextBend
+                        )
+                    )
+                }
             }
         }
     }
@@ -1939,6 +2194,7 @@ fun BlueprintScreen(
             circlePreviewEdge = circlePreviewEdge,
             selectedWallId = uiState.selectedWallId,
             selectedOpeningId = uiState.selectedOpeningId,
+            selectedMeasuredArc = selectedMeasuredArcGuide,
             movingWallActive = movingWallPreview != null,
             cursorVisible = cursorVisible,
             cursorSizeScale = cursorScale,
@@ -1946,6 +2202,7 @@ fun BlueprintScreen(
             useMetric = appSettings.useMetric,
             lineSnappingEnabled = lineSnappingEnabledForDraft,
             dragPreview = dragPreview,
+            tutorialGuideWalls = tutorialGuideWalls,
             onPanScaleChange = { updatedPan, updatedScale ->
                 val panDelta = updatedPan - pan
                 val transformed = panDelta.getDistance() > 0.5f || kotlin.math.abs(updatedScale - scale) > 0.001f
@@ -1979,7 +2236,7 @@ fun BlueprintScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 4.dp, top = overlayTopPadding)
+                .padding(start = 6.dp, top = overlayTopPadding)
                 .widthIn(max = compactHudLiveWidth)
                 .heightIn(max = topStackMaxHeight)
                 .verticalScroll(rememberScrollState())
@@ -2000,6 +2257,7 @@ fun BlueprintScreen(
                     selectedWall = selectedWall,
                     selectedOpening = selectedOpening,
                     circleSelection = circleSelection,
+                    arcSelection = arcSelection,
                     useMetric = appSettings.useMetric,
                     onCircleRadiusStep = { direction ->
                         selectedWall?.id?.let { selectedId ->
@@ -2037,7 +2295,7 @@ fun BlueprintScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(end = 8.dp, top = overlayTopPadding)
+                .padding(end = 6.dp, top = overlayTopPadding)
                 .widthIn(max = compactHudTopStackWidth)
                 .heightIn(max = topStackMaxHeight)
                 .verticalScroll(rememberScrollState())
@@ -2047,12 +2305,26 @@ fun BlueprintScreen(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(topOverlaySpacing)
         ) {
-            ClearAllButton(
-                onClick = { showClearAllConfirm = true },
-                modifier = Modifier.onGloballyPositioned {
-                    clearAllButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
-                }
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(topOverlaySpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ScopeSelector(
+                    scope = currentScope,
+                    onChangeScope = viewModel::updateTakeoffScope,
+                    minWidth = if (compactHeightWindow) 56.dp else 62.dp,
+                    minHeight = if (compactHeightWindow) 28.dp else 34.dp,
+                    horizontalPadding = if (compactHeightWindow) 6.dp else 8.dp,
+                    iconSize = if (compactHeightWindow) 10.dp else 11.dp,
+                    labelFontSize = if (compactHeightWindow) 9.sp else 10.sp
+                )
+                ClearAllButton(
+                    onClick = { showClearAllConfirm = true },
+                    modifier = Modifier.onGloballyPositioned {
+                        clearAllButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+                    }
+                )
+            }
 
             if (!dualJoysticksEnabled) {
                 GridScaleBadge(
@@ -2077,16 +2349,6 @@ fun BlueprintScreen(
                         }
                 )
             }
-
-            ScopeSelector(
-                scope = currentScope,
-                onChangeScope = viewModel::updateTakeoffScope,
-                minWidth = if (compactHeightWindow) 70.dp else 78.dp,
-                minHeight = if (compactHeightWindow) 32.dp else 36.dp,
-                horizontalPadding = if (compactHeightWindow) 7.dp else 8.dp,
-                iconSize = if (compactHeightWindow) 11.dp else 12.dp,
-                labelFontSize = if (compactHeightWindow) 9.5.sp else 10.5.sp
-            )
 
             if (activeOpeningPanel != null) {
                 OpeningAddonsPanel(
@@ -2403,7 +2665,7 @@ fun BlueprintScreen(
                 BlueprintDraftTool.DRAW_BOX
             }
         }
-        val toggleCurveMode = {
+        val toggleMeasuredArcMode = {
             pendingGrabSelection = false
             movingWallPreview = null
             drawingStart = null
@@ -2418,10 +2680,31 @@ fun BlueprintScreen(
             activeOpeningPanel = null
             showParams = false
             showRailHelp = false
-            tool = if (tool == BlueprintDraftTool.DRAW_ARC) {
+            tool = if (tool == BlueprintDraftTool.DRAW_MEASURED_ARC) {
                 BlueprintDraftTool.DRAW_WALL
             } else {
-                BlueprintDraftTool.DRAW_ARC
+                BlueprintDraftTool.DRAW_MEASURED_ARC
+            }
+        }
+        val toggleSketchCurveMode = {
+            pendingGrabSelection = false
+            movingWallPreview = null
+            drawingStart = null
+            drawingPreview = null
+            resetCurveDraft()
+            resetCircleDraft()
+            chainOrigin = null
+            restartLineFromNearestWallStart = false
+            boxStart = null
+            boxPreview = null
+            boxRotationRadians = 0.0
+            activeOpeningPanel = null
+            showParams = false
+            showRailHelp = false
+            tool = if (tool == BlueprintDraftTool.DRAW_SKETCH_CURVE) {
+                BlueprintDraftTool.DRAW_WALL
+            } else {
+                BlueprintDraftTool.DRAW_SKETCH_CURVE
             }
         }
         val toggleCircleMode = {
@@ -2508,7 +2791,8 @@ fun BlueprintScreen(
             canDeleteSelection = selectedWall != null || selectedOpening != null,
             detachedWalls = detachedWalls,
             boxModeEnabled = tool == BlueprintDraftTool.DRAW_BOX,
-            curveModeEnabled = tool == BlueprintDraftTool.DRAW_ARC,
+            measuredArcModeEnabled = tool == BlueprintDraftTool.DRAW_MEASURED_ARC,
+            sketchCurveModeEnabled = tool == BlueprintDraftTool.DRAW_SKETCH_CURVE,
             circleModeEnabled = tool == BlueprintDraftTool.DRAW_CIRCLE,
             activePanel = activeOpeningPanel,
             paramsExpanded = showParams,
@@ -2516,7 +2800,8 @@ fun BlueprintScreen(
                 detachedWalls = !detachedWalls
             },
             onToggleBoxMode = toggleBoxMode,
-            onToggleCurveMode = toggleCurveMode,
+            onToggleMeasuredArcMode = toggleMeasuredArcMode,
+            onToggleSketchCurveMode = toggleSketchCurveMode,
             onToggleCircleMode = toggleCircleMode,
             onDeleteSelection = {
                 when {
@@ -2538,6 +2823,39 @@ fun BlueprintScreen(
                     activeOpeningPanel = null
                     clearOpeningPlacementTool()
                 }
+            },
+            detachedButtonModifier = Modifier.onGloballyPositioned {
+                detachedButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            boxButtonModifier = Modifier.onGloballyPositioned {
+                boxButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            measuredArcButtonModifier = Modifier.onGloballyPositioned {
+                measuredArcButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            sketchCurveButtonModifier = Modifier.onGloballyPositioned {
+                sketchCurveButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            circleButtonModifier = Modifier.onGloballyPositioned {
+                circleButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            doorsButtonModifier = Modifier.onGloballyPositioned {
+                doorsButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            windowsButtonModifier = Modifier.onGloballyPositioned {
+                windowsButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            stairUpButtonModifier = Modifier.onGloballyPositioned {
+                stairUpButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            stairDownButtonModifier = Modifier.onGloballyPositioned {
+                stairDownButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            paramsButtonModifier = Modifier.onGloballyPositioned {
+                paramsButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
+            },
+            helpButtonModifier = Modifier.onGloballyPositioned {
+                helpButtonBounds = Rect(it.positionInRoot(), it.size.toSize())
             },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -2664,7 +2982,7 @@ fun BlueprintScreen(
                             pendingGrabSelection = false
                             tool = BlueprintDraftTool.DRAW_WALL
                         }
-                        tool == BlueprintDraftTool.DRAW_ARC -> {
+                        tool.isCurveDraftTool() -> {
                             resetCurveDraft()
                             pendingGrabSelection = false
                             tool = BlueprintDraftTool.DRAW_WALL
@@ -2712,6 +3030,18 @@ fun BlueprintScreen(
                 rightToolsModifier = Modifier.onGloballyPositioned {
                     tutorialRightControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
+                selectToolModifier = Modifier.onGloballyPositioned {
+                    tutorialTouchSelectBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                drawToolModifier = Modifier.onGloballyPositioned {
+                    tutorialTouchDrawBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                grabToolModifier = Modifier.onGloballyPositioned {
+                    tutorialTouchGrabBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                cancelToolModifier = Modifier.onGloballyPositioned {
+                    tutorialTouchCancelBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -2723,6 +3053,38 @@ fun BlueprintScreen(
                     .navigationBarsPadding()
             )
         }
+        val activeSketchCurveProjection = if (
+            tool == BlueprintDraftTool.DRAW_SKETCH_CURVE &&
+            curveStart != null &&
+            curveEnd != null &&
+            curvePreviewPoint != null
+        ) {
+            projectArcDraftControl(
+                start = curveStart!!,
+                end = curveEnd!!,
+                control = curvePreviewPoint!!
+            )
+        } else {
+            null
+        }
+        val activeMeasuredArcMeasurements = if (
+            tool == BlueprintDraftTool.DRAW_MEASURED_ARC &&
+            curveStart != null &&
+            curveEnd != null &&
+            curvePreviewPoint != null
+        ) {
+            measureMeasuredArcDraft(
+                start = curveStart!!,
+                end = curveEnd!!,
+                riseMm = measuredArcRiseFromControl(
+                    start = curveStart!!,
+                    end = curveEnd!!,
+                    control = curvePreviewPoint!!
+                )
+            )
+        } else {
+            null
+        }
         if (showEdgeDials) {
             DrawLineEdgeDialsOverlay(
                 onAngleTicks = onAngleDialTicks,
@@ -2731,22 +3093,43 @@ fun BlueprintScreen(
                 dualJoysticksEnabled = dualJoysticksEnabled,
                 controlsBottomPadding = sharedBottomControlsPadding,
                 leftInset = leftControlsInset,
-                angleCaption = if (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null) {
+                angleCaption = if (tool == BlueprintDraftTool.DRAW_MEASURED_ARC && curveStart != null && curveEnd != null) {
+                    "Sweep"
+                } else if (tool == BlueprintDraftTool.DRAW_SKETCH_CURVE && curveStart != null && curveEnd != null) {
                     "Shift"
                 } else {
                     "Angle"
                 },
-                angleLabel = if (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null) {
-                    "±1in"
+                angleLabel = if (tool == BlueprintDraftTool.DRAW_MEASURED_ARC && curveStart != null && curveEnd != null) {
+                    formatAngleLabel(activeMeasuredArcMeasurements?.sweepDegrees ?: 0.0)
+                } else if (tool == BlueprintDraftTool.DRAW_SKETCH_CURVE && curveStart != null && curveEnd != null) {
+                    formatArcDraftDialValue(
+                        mmValue = activeSketchCurveProjection?.shiftMm,
+                        useMetric = appSettings.useMetric
+                    )
                 } else {
                     "±1°"
                 },
-                lengthCaption = if (tool == BlueprintDraftTool.DRAW_ARC && curveStart != null && curveEnd != null) {
+                lengthCaption = if (tool == BlueprintDraftTool.DRAW_MEASURED_ARC && curveStart != null && curveEnd != null) {
+                    "Rise"
+                } else if (tool == BlueprintDraftTool.DRAW_SKETCH_CURVE && curveStart != null && curveEnd != null) {
                     "Bend"
                 } else {
                     "Length"
                 },
-                lengthLabel = "±1in",
+                lengthLabel = if (tool == BlueprintDraftTool.DRAW_MEASURED_ARC && curveStart != null && curveEnd != null) {
+                    formatArcDraftDialValue(
+                        mmValue = activeMeasuredArcMeasurements?.riseMm?.toDouble(),
+                        useMetric = appSettings.useMetric
+                    )
+                } else if (tool == BlueprintDraftTool.DRAW_SKETCH_CURVE && curveStart != null && curveEnd != null) {
+                    formatArcDraftDialValue(
+                        mmValue = activeSketchCurveProjection?.bendMm,
+                        useMetric = appSettings.useMetric
+                    )
+                } else {
+                    "±1in"
+                },
                 angleDialModifier = Modifier.onGloballyPositioned {
                     tutorialAngleDialBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
@@ -2826,6 +3209,7 @@ fun BlueprintScreen(
                 stepIndex = tutorialStepIndex,
                 totalSteps = controlTutorialSteps.size,
                 targetBounds = tutorialTargetBounds,
+                minimumTopClearance = tutorialTooltipTopClearance,
                 onBack = {
                     tutorialStepIndex = (tutorialStepIndex - 1).coerceAtLeast(0)
                 },
@@ -2973,6 +3357,14 @@ internal fun formatSignedLengthDisplay(mm: Long, useMetric: Boolean): String {
         "${formatLiveValue(absMm / 10.0, 1)} cm"
     }
     return sign + value
+}
+
+internal fun formatArcDraftDialValue(
+    mmValue: Double?,
+    useMetric: Boolean
+): String {
+    val rounded = mmValue?.roundToLong() ?: return "±1in"
+    return formatSignedLengthDisplay(mm = rounded, useMetric = useMetric)
 }
 
 internal fun defaultDraftDialLengthMm(scale: Float): Double {
@@ -3200,6 +3592,17 @@ internal fun buildDraftBoxPreviewWalls(
 internal const val CURVE_GROUP_TAG_PREFIX = "curve_group:"
 internal const val CURVE_SHAPE_ARC_TAG = "curve_shape:arc"
 internal const val CURVE_SHAPE_CIRCLE_TAG = "curve_shape:circle"
+internal const val CURVE_ARC_SHIFT_MM_TAG_PREFIX = "curve_arc_shift_mm:"
+internal const val CURVE_ARC_BEND_MM_TAG_PREFIX = "curve_arc_bend_mm:"
+internal const val CURVE_ARC_SPAN_MM_TAG_PREFIX = "curve_arc_span_mm:"
+internal const val CURVE_ARC_LENGTH_MM_TAG_PREFIX = "curve_arc_length_mm:"
+internal const val CURVE_ARC_TURN_TENTHS_TAG_PREFIX = "curve_arc_turn_tenths:"
+internal const val CURVE_MEASURED_ARC_RISE_MM_TAG_PREFIX = "curve_measured_arc_rise_mm:"
+internal const val CURVE_MEASURED_ARC_RADIUS_MM_TAG_PREFIX = "curve_measured_arc_radius_mm:"
+internal const val CURVE_MEASURED_ARC_SWEEP_TENTHS_TAG_PREFIX = "curve_measured_arc_sweep_tenths:"
+internal const val CURVE_MEASURED_ARC_CHORD_MM_TAG_PREFIX = "curve_measured_arc_chord_mm:"
+internal const val CURVE_KIND_MEASURED_ARC_TAG = "curve_kind:measured_arc"
+internal const val CURVE_KIND_SKETCH_TAG = "curve_kind:sketch"
 
 private const val MIN_GENERATED_CURVE_SEGMENT_MM = 35L
 private const val ARC_PREVIEW_TARGET_SEGMENT_MM = 240.0
@@ -3227,7 +3630,42 @@ internal data class ArcDraftControlProjection(
 internal data class ArcDraftMeasurements(
     val spanMm: Long,
     val arcLengthMm: Long,
-    val bendMm: Long
+    val bendMm: Long,
+    val turnDegrees: Double
+)
+
+internal data class StoredArcDraftMeasurements(
+    val shiftMm: Long,
+    val bendMm: Long,
+    val spanMm: Long,
+    val arcLengthMm: Long,
+    val turnDegrees: Double
+)
+
+internal data class MeasuredArcDraftGeometry(
+    val chordLengthMm: Double,
+    val riseMm: Double,
+    val radiusMm: Double,
+    val sweepRadians: Double,
+    val midpoint: PointMm,
+    val arcMidpoint: PointMm,
+    val center: PointMm
+)
+
+internal data class MeasuredArcDraftMeasurements(
+    val chordMm: Long,
+    val riseMm: Long,
+    val radiusMm: Long,
+    val arcLengthMm: Long,
+    val sweepDegrees: Double
+)
+
+internal data class StoredMeasuredArcDraftMeasurements(
+    val chordMm: Long,
+    val riseMm: Long,
+    val radiusMm: Long,
+    val arcLengthMm: Long,
+    val sweepDegrees: Double
 )
 
 internal fun projectArcDraftControl(
@@ -3296,7 +3734,382 @@ internal fun measureArcDraft(
     return ArcDraftMeasurements(
         spanMm = BlueprintSnapMath.distanceMillimeters(start, end),
         arcLengthMm = approximateArcLengthMillimeters(start, end, control).roundToLong(),
-        bendMm = abs(projection?.bendMm ?: 0.0).roundToLong()
+        bendMm = abs(projection?.bendMm ?: 0.0).roundToLong(),
+        turnDegrees = measureArcDraftTurnDegrees(
+            start = start,
+            end = end,
+            control = control
+        )
+    )
+}
+
+internal fun measureArcDraftTurnDegrees(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm
+): Double {
+    val startDx = (control.x - start.x).toDouble()
+    val startDy = (control.y - start.y).toDouble()
+    val endDx = (end.x - control.x).toDouble()
+    val endDy = (end.y - control.y).toDouble()
+    if (hypot(startDx, startDy) <= 0.0001 || hypot(endDx, endDy) <= 0.0001) {
+        return 0.0
+    }
+    val startAngle = Math.toDegrees(atan2(startDy, startDx))
+    val endAngle = Math.toDegrees(atan2(endDy, endDx))
+    return abs(normalizedAngleDeltaDegrees(from = startAngle, to = endAngle))
+}
+
+internal fun buildArcDraftMeasurementTags(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm
+): Set<String> {
+    val projection = projectArcDraftControl(
+        start = start,
+        end = end,
+        control = control
+    ) ?: return emptySet()
+    val measurements = measureArcDraft(
+        start = start,
+        end = end,
+        control = control
+    )
+    return setOf(
+        "${CURVE_ARC_SHIFT_MM_TAG_PREFIX}${projection.shiftMm.roundToLong()}",
+        "${CURVE_ARC_BEND_MM_TAG_PREFIX}${projection.bendMm.roundToLong()}",
+        "${CURVE_ARC_SPAN_MM_TAG_PREFIX}${measurements.spanMm}",
+        "${CURVE_ARC_LENGTH_MM_TAG_PREFIX}${measurements.arcLengthMm}",
+        "${CURVE_ARC_TURN_TENTHS_TAG_PREFIX}${(measurements.turnDegrees * 10.0).roundToLong()}"
+    )
+}
+
+internal fun Set<String>.curveArcDraftMeasurements(): StoredArcDraftMeasurements? {
+    val shiftMm = tagLongValue(CURVE_ARC_SHIFT_MM_TAG_PREFIX) ?: return null
+    val bendMm = tagLongValue(CURVE_ARC_BEND_MM_TAG_PREFIX) ?: return null
+    val spanMm = tagLongValue(CURVE_ARC_SPAN_MM_TAG_PREFIX) ?: return null
+    val arcLengthMm = tagLongValue(CURVE_ARC_LENGTH_MM_TAG_PREFIX) ?: return null
+    val turnTenths = tagLongValue(CURVE_ARC_TURN_TENTHS_TAG_PREFIX) ?: return null
+    return StoredArcDraftMeasurements(
+        shiftMm = shiftMm,
+        bendMm = bendMm,
+        spanMm = spanMm,
+        arcLengthMm = arcLengthMm,
+        turnDegrees = turnTenths / 10.0
+    )
+}
+
+internal fun Set<String>.tagLongValue(prefix: String): Long? {
+    return firstOrNull { tag -> tag.startsWith(prefix) }
+        ?.removePrefix(prefix)
+        ?.toLongOrNull()
+}
+
+internal fun resolveCurveCommitControlPoint(
+    start: PointMm,
+    end: PointMm,
+    previewPoint: PointMm?,
+    tap: PointMm,
+    measuredArc: Boolean
+): PointMm {
+    val defaultPreviewPoint = midpointBetween(start, end)
+    val control = if (previewPoint == null || previewPoint == defaultPreviewPoint) {
+        tap
+    } else {
+        previewPoint
+    }
+    return if (measuredArc) {
+        pointFromMeasuredArcRise(
+            start = start,
+            end = end,
+            riseMm = measuredArcRiseFromControl(
+                start = start,
+                end = end,
+                control = control
+            )
+        )
+    } else {
+        control
+    }
+}
+
+internal fun measuredArcRiseFromControl(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm
+): Double {
+    val chordDx = (end.x - start.x).toDouble()
+    val chordDy = (end.y - start.y).toDouble()
+    val chordLengthMm = hypot(chordDx, chordDy)
+    if (chordLengthMm <= 0.0001) return 0.0
+    val normalX = -(chordDy / chordLengthMm)
+    val normalY = chordDx / chordLengthMm
+    val midpointX = (start.x + end.x) / 2.0
+    val midpointY = (start.y + end.y) / 2.0
+    val offsetX = control.x - midpointX
+    val offsetY = control.y - midpointY
+    return (offsetX * normalX) + (offsetY * normalY)
+}
+
+internal fun pointFromMeasuredArcRise(
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double
+): PointMm {
+    val chordDx = (end.x - start.x).toDouble()
+    val chordDy = (end.y - start.y).toDouble()
+    val chordLengthMm = hypot(chordDx, chordDy)
+    if (chordLengthMm <= 0.0001) return midpointBetween(start, end)
+    val normalX = -(chordDy / chordLengthMm)
+    val normalY = chordDx / chordLengthMm
+    val midpointX = (start.x + end.x) / 2.0
+    val midpointY = (start.y + end.y) / 2.0
+    return PointMm(
+        x = (midpointX + (normalX * riseMm)).roundToLong(),
+        y = (midpointY + (normalY * riseMm)).roundToLong()
+    )
+}
+
+private fun positiveAngleDeltaRadians(deltaRadians: Double): Double {
+    val fullTurn = Math.PI * 2.0
+    var normalized = deltaRadians % fullTurn
+    if (normalized < 0.0) normalized += fullTurn
+    return normalized
+}
+
+internal fun measureMeasuredArcGeometry(
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double
+): MeasuredArcDraftGeometry? {
+    val chordDx = (end.x - start.x).toDouble()
+    val chordDy = (end.y - start.y).toDouble()
+    val chordLengthMm = hypot(chordDx, chordDy)
+    val absRiseMm = abs(riseMm)
+    if (chordLengthMm <= 0.0001 || absRiseMm <= 0.0001) return null
+    val normalX = -(chordDy / chordLengthMm)
+    val normalY = chordDx / chordLengthMm
+    val midpointX = (start.x + end.x) / 2.0
+    val midpointY = (start.y + end.y) / 2.0
+    val arcMidpointX = midpointX + (normalX * riseMm)
+    val arcMidpointY = midpointY + (normalY * riseMm)
+    val radiusMm = ((chordLengthMm * chordLengthMm) / (8.0 * absRiseMm)) + (absRiseMm / 2.0)
+    val riseSign = if (riseMm >= 0.0) 1.0 else -1.0
+    val centerOffsetMm = riseMm - (riseSign * radiusMm)
+    val centerX = midpointX + (normalX * centerOffsetMm)
+    val centerY = midpointY + (normalY * centerOffsetMm)
+    val startAngle = atan2(start.y - centerY, start.x - centerX)
+    val endAngle = atan2(end.y - centerY, end.x - centerX)
+    val positiveDelta = positiveAngleDeltaRadians(endAngle - startAngle)
+    val negativeDelta = positiveDelta - (Math.PI * 2.0)
+    fun midpointError(deltaRadians: Double): Double {
+        val angle = startAngle + (deltaRadians / 2.0)
+        val pointX = centerX + (cos(angle) * radiusMm)
+        val pointY = centerY + (sin(angle) * radiusMm)
+        return hypot(pointX - arcMidpointX, pointY - arcMidpointY)
+    }
+    val sweepRadians = if (midpointError(positiveDelta) <= midpointError(negativeDelta)) {
+        positiveDelta
+    } else {
+        negativeDelta
+    }
+    return MeasuredArcDraftGeometry(
+        chordLengthMm = chordLengthMm,
+        riseMm = riseMm,
+        radiusMm = radiusMm,
+        sweepRadians = sweepRadians,
+        midpoint = PointMm(midpointX.roundToLong(), midpointY.roundToLong()),
+        arcMidpoint = PointMm(arcMidpointX.roundToLong(), arcMidpointY.roundToLong()),
+        center = PointMm(centerX.roundToLong(), centerY.roundToLong())
+    )
+}
+
+internal fun measureMeasuredArcDraft(
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double
+): MeasuredArcDraftMeasurements {
+    val chordMm = BlueprintSnapMath.distanceMillimeters(start, end)
+    val geometry = measureMeasuredArcGeometry(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    )
+    return if (geometry == null) {
+        MeasuredArcDraftMeasurements(
+            chordMm = chordMm,
+            riseMm = riseMm.roundToLong(),
+            radiusMm = 0L,
+            arcLengthMm = chordMm,
+            sweepDegrees = 0.0
+        )
+    } else {
+        MeasuredArcDraftMeasurements(
+            chordMm = chordMm,
+            riseMm = geometry.riseMm.roundToLong(),
+            radiusMm = geometry.radiusMm.roundToLong(),
+            arcLengthMm = (abs(geometry.sweepRadians) * geometry.radiusMm).roundToLong(),
+            sweepDegrees = abs(Math.toDegrees(geometry.sweepRadians))
+        )
+    }
+}
+
+internal fun riseFromMeasuredArcSweepDegrees(
+    start: PointMm,
+    end: PointMm,
+    sweepDegrees: Double,
+    riseSign: Double
+): Double {
+    val chordMm = BlueprintSnapMath.distanceMillimeters(start, end).toDouble()
+    if (chordMm <= 0.0001) return 0.0
+    val clampedSweepDegrees = sweepDegrees.coerceIn(1.0, 179.0)
+    val halfSweepRadians = Math.toRadians(clampedSweepDegrees) / 2.0
+    val radiusMm = chordMm / (2.0 * sin(halfSweepRadians).coerceAtLeast(0.0001))
+    val halfChordMm = chordMm / 2.0
+    val riseMagnitude = radiusMm - sqrt((radiusMm * radiusMm) - (halfChordMm * halfChordMm))
+    return (if (riseSign < 0.0) -1.0 else 1.0) * riseMagnitude
+}
+
+internal fun buildMeasuredArcMeasurementTags(
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double
+): Set<String> {
+    val measurements = measureMeasuredArcDraft(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    )
+    return setOf(
+        CURVE_KIND_MEASURED_ARC_TAG,
+        "${CURVE_MEASURED_ARC_CHORD_MM_TAG_PREFIX}${measurements.chordMm}",
+        "${CURVE_MEASURED_ARC_RISE_MM_TAG_PREFIX}${measurements.riseMm}",
+        "${CURVE_MEASURED_ARC_RADIUS_MM_TAG_PREFIX}${measurements.radiusMm}",
+        "${CURVE_ARC_LENGTH_MM_TAG_PREFIX}${measurements.arcLengthMm}",
+        "${CURVE_MEASURED_ARC_SWEEP_TENTHS_TAG_PREFIX}${(measurements.sweepDegrees * 10.0).roundToLong()}"
+    )
+}
+
+internal fun Set<String>.measuredArcDraftMeasurements(): StoredMeasuredArcDraftMeasurements? {
+    val chordMm = tagLongValue(CURVE_MEASURED_ARC_CHORD_MM_TAG_PREFIX) ?: return null
+    val riseMm = tagLongValue(CURVE_MEASURED_ARC_RISE_MM_TAG_PREFIX) ?: return null
+    val radiusMm = tagLongValue(CURVE_MEASURED_ARC_RADIUS_MM_TAG_PREFIX) ?: return null
+    val arcLengthMm = tagLongValue(CURVE_ARC_LENGTH_MM_TAG_PREFIX) ?: return null
+    val sweepTenths = tagLongValue(CURVE_MEASURED_ARC_SWEEP_TENTHS_TAG_PREFIX) ?: return null
+    return StoredMeasuredArcDraftMeasurements(
+        chordMm = chordMm,
+        riseMm = riseMm,
+        radiusMm = radiusMm,
+        arcLengthMm = arcLengthMm,
+        sweepDegrees = sweepTenths / 10.0
+    )
+}
+
+private fun buildMeasuredArcPointChain(
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double,
+    segmentCount: Int
+): List<PointMm> {
+    val geometry = measureMeasuredArcGeometry(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    ) ?: return listOf(start, end)
+    val safeSegments = segmentCount.coerceIn(1, MAX_PREVIEW_CURVE_SEGMENTS)
+    val startAngle = atan2(
+        start.y - geometry.center.y.toDouble(),
+        start.x - geometry.center.x.toDouble()
+    )
+    return (0..safeSegments).map { index ->
+        val t = index.toDouble() / safeSegments.toDouble()
+        val angle = startAngle + (geometry.sweepRadians * t)
+        PointMm(
+            x = (geometry.center.x + (cos(angle) * geometry.radiusMm)).roundToLong(),
+            y = (geometry.center.y + (sin(angle) * geometry.radiusMm)).roundToLong()
+        )
+    }
+}
+
+internal fun buildMeasuredArcPreviewWalls(
+    start: PointMm,
+    end: PointMm?,
+    previewPoint: PointMm
+): List<WallSegment> {
+    val previewPoints = if (end == null) {
+        listOf(start, previewPoint)
+    } else {
+        val riseMm = measuredArcRiseFromControl(
+            start = start,
+            end = end,
+            control = previewPoint
+        )
+        val measurements = measureMeasuredArcDraft(
+            start = start,
+            end = end,
+            riseMm = riseMm
+        )
+        buildMeasuredArcPointChain(
+            start = start,
+            end = end,
+            riseMm = riseMm,
+            segmentCount = estimateCurveSegmentCount(
+                curveLengthMm = measurements.arcLengthMm.toDouble(),
+                targetSegmentMm = ARC_PREVIEW_TARGET_SEGMENT_MM,
+                minSegments = 2,
+                maxSegments = MAX_PREVIEW_CURVE_SEGMENTS
+            )
+        )
+    }
+    return buildPreviewWallsFromPointChain(
+        idPrefix = "measured_arc",
+        points = previewPoints,
+        closed = false
+    )
+}
+
+internal fun buildMeasuredArcWalls(
+    document: BlueprintDocument,
+    start: PointMm,
+    end: PointMm,
+    riseMm: Double,
+    scale: Float,
+    wallHeightMm: Long,
+    wallThicknessMm: Long,
+    tags: Set<String>
+): List<WallSegment> {
+    val measurements = measureMeasuredArcDraft(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    )
+    if (measurements.radiusMm <= 0L || measurements.sweepDegrees <= 0.01) return emptyList()
+    val pointChain = buildMeasuredArcPointChain(
+        start = start,
+        end = end,
+        riseMm = riseMm,
+        segmentCount = estimateCurveSegmentCount(
+            curveLengthMm = measurements.arcLengthMm.toDouble(),
+            targetSegmentMm = ARC_COMMIT_TARGET_SEGMENT_MM,
+            minSegments = 2,
+            maxSegments = MAX_COMMIT_CURVE_SEGMENTS
+        )
+    )
+    return buildCommittedCurveWallsFromPointChain(
+        document = document,
+        points = pointChain,
+        closed = false,
+        scale = scale,
+        wallHeightMm = wallHeightMm,
+        wallThicknessMm = wallThicknessMm,
+        tags = tags +
+            CURVE_KIND_MEASURED_ARC_TAG +
+            "${CURVE_GROUP_TAG_PREFIX}${UUID.randomUUID()}" +
+            buildMeasuredArcMeasurementTags(
+                start = start,
+                end = end,
+                riseMm = riseMm
+            )
     )
 }
 
@@ -3355,7 +4168,14 @@ internal fun buildDraftArcWalls(
         scale = scale,
         wallHeightMm = wallHeightMm,
         wallThicknessMm = wallThicknessMm,
-        tags = tags + "${CURVE_GROUP_TAG_PREFIX}${UUID.randomUUID()}"
+        tags = tags +
+            CURVE_KIND_SKETCH_TAG +
+            "${CURVE_GROUP_TAG_PREFIX}${UUID.randomUUID()}" +
+            buildArcDraftMeasurementTags(
+                start = start,
+                end = end,
+                control = control
+            )
     )
 }
 
@@ -3474,6 +4294,54 @@ private fun circleSelectionInfo(
         radiusMm = radiusMm,
         diameterMm = radiusMm * 2L,
         segmentCount = groupWalls.size
+    )
+}
+
+internal fun arcSelectionInfo(
+    document: BlueprintDocument,
+    selectedWallId: String
+): ArcSelectionInfo? {
+    val selectedWall = document.walls.firstOrNull { wall -> wall.id == selectedWallId } ?: return null
+    if (CURVE_SHAPE_ARC_TAG !in selectedWall.tags) return null
+    val groupTag = selectedWall.curveGroupTag() ?: return null
+    val groupWalls = document.walls.filter { wall -> wall.curveGroupTag() == groupTag }
+    if (groupWalls.size < 2) return null
+    val firstWall = groupWalls.firstOrNull() ?: return null
+    val lastWall = groupWalls.lastOrNull() ?: return null
+    val measuredArc = groupWalls
+        .firstNotNullOfOrNull { wall -> wall.tags.measuredArcDraftMeasurements() }
+    if (measuredArc != null) {
+        val geometry = measureMeasuredArcGeometry(
+            start = firstWall.start,
+            end = lastWall.end,
+            riseMm = measuredArc.riseMm.toDouble()
+        )
+        return ArcSelectionInfo(
+            kind = CurveSelectionKind.MEASURED_ARC,
+            spanMm = measuredArc.chordMm,
+            arcLengthMm = measuredArc.arcLengthMm,
+            turnDegrees = measuredArc.sweepDegrees,
+            segmentCount = groupWalls.size,
+            riseMm = measuredArc.riseMm,
+            radiusMm = measuredArc.radiusMm,
+            guideChordStart = firstWall.start,
+            guideChordEnd = lastWall.end,
+            guideChordMidpoint = geometry?.midpoint,
+            guideArcMidpoint = geometry?.arcMidpoint,
+            guideCenter = geometry?.center
+        )
+    }
+    val sketchCurve = groupWalls
+        .firstNotNullOfOrNull { wall -> wall.tags.curveArcDraftMeasurements() }
+        ?: return null
+    return ArcSelectionInfo(
+        kind = CurveSelectionKind.SKETCH_CURVE,
+        spanMm = sketchCurve.spanMm,
+        arcLengthMm = sketchCurve.arcLengthMm,
+        turnDegrees = sketchCurve.turnDegrees,
+        segmentCount = groupWalls.size,
+        shiftMm = sketchCurve.shiftMm,
+        bendMm = sketchCurve.bendMm
     )
 }
 
@@ -3836,6 +4704,7 @@ internal fun isDraftEndpointIntersectingExistingGeometry(
 
 internal fun resolveDraftWallCommitEnd(
     previewEnd: PointMm?,
+    untouchedPreviewPoint: PointMm? = null,
     snappedTap: PointMm,
     walls: List<WallSegment>,
     snapThresholdFeet: Double,
@@ -3843,7 +4712,9 @@ internal fun resolveDraftWallCommitEnd(
     closureEnabled: Boolean,
     chainOrigin: PointMm?
 ): PointMm {
-    previewEnd?.let { return it }
+    previewEnd
+        ?.takeUnless { it == untouchedPreviewPoint }
+        ?.let { return it }
 
     var end = snappedTap
     if (endpointSnappingEnabled) {
@@ -3869,12 +4740,15 @@ internal fun resolveDraftWallCommitEnd(
 
 internal fun resolveDraftBoxCommitEnd(
     previewEnd: PointMm?,
+    untouchedPreviewPoint: PointMm? = null,
     snappedTap: PointMm,
     walls: List<WallSegment>,
     snapThresholdFeet: Double,
     endpointSnappingEnabled: Boolean
 ): PointMm {
-    previewEnd?.let { return it }
+    previewEnd
+        ?.takeUnless { it == untouchedPreviewPoint }
+        ?.let { return it }
     if (!endpointSnappingEnabled) return snappedTap
     return snapToNearestWallEndpoint(
         candidate = snappedTap,
@@ -3882,6 +4756,18 @@ internal fun resolveDraftBoxCommitEnd(
         thresholdMm = (Millimeters.fromFeet(snapThresholdFeet).value * 3L / 2L)
             .coerceAtLeast(1L)
     )
+}
+
+internal fun resolveCircleCommitEdge(
+    center: PointMm,
+    previewEdge: PointMm?,
+    tap: PointMm
+): PointMm {
+    return if (previewEdge == null || previewEdge == center) {
+        tap
+    } else {
+        previewEdge
+    }
 }
 
 internal fun closestGravelMaterialPreset(densityTonsPerYard: Double): GravelMaterialPreset {

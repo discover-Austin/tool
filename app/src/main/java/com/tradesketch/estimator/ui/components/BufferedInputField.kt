@@ -19,7 +19,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.delay
 
-private const val INPUT_COMMIT_DEBOUNCE_MS = 220L
 private const val INPUT_EXTERNAL_SYNC_DELAY_MS = 320L
 
 @Composable
@@ -43,13 +42,6 @@ fun BufferedInputField(
             text = initialValue
             lastCommittedValue = initialValue
         }
-    }
-    LaunchedEffect(text, isFocused) {
-        if (!isFocused || text == lastCommittedValue) return@LaunchedEffect
-        delay(INPUT_COMMIT_DEBOUNCE_MS)
-        if (!isFocused || text == lastCommittedValue) return@LaunchedEffect
-        latestOnValueChange(text)
-        lastCommittedValue = text
     }
     LaunchedEffect(isFocused, lastObservedExternalValue, text) {
         if (isFocused || text == lastObservedExternalValue) return@LaunchedEffect
