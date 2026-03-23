@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -48,12 +49,15 @@ class TakeoffViewModelTest {
             )
 
             viewModel.setProjectId(project.id)
-            delay(250)
+            waitUntil { !viewModel.uiState.value.isLoading && viewModel.uiState.value.project?.id == project.id }
 
             viewModel.updatePricingParams(laborPercent = 11.0)
             viewModel.updatePricingParams(laborPercent = 12.0)
 
-            delay(900)
+            waitUntil {
+                projectRepository.currentProject().takeoffSession.pricing.laborPercent == 12.0 &&
+                    projectRepository.savedLaborPercents.lastOrNull() == 12.0
+            }
 
             assertEquals(12.0, projectRepository.currentProject().takeoffSession.pricing.laborPercent)
             assertTrue(projectRepository.savedLaborPercents.contains(12.0))
@@ -127,4 +131,16 @@ private class FakeUxMetricsRepository : UxMetricsRepository {
 @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
 private fun newSingleMainThread(name: String): ExecutorCoroutineDispatcher {
     return newSingleThreadContext(name)
+}
+
+private suspend fun waitUntil(
+    timeoutMs: Long = 5_000L,
+    pollMs: Long = 25L,
+    condition: () -> Boolean
+) {
+    withTimeout(timeoutMs) {
+        while (!condition()) {
+            delay(pollMs)
+        }
+    }
 }

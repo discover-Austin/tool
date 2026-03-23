@@ -19,6 +19,7 @@ import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.domain.model.authoritativeBlueprint
+import com.tradesketch.estimator.ui.blueprint.curveGroupTag
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -353,7 +354,11 @@ class BlueprintEditorViewModel @Inject constructor(
     fun deleteSelectedWall() {
         val wallId = _uiState.value.selectedWallId ?: return
         updateDocument(label = "Delete Wall") { document ->
-            val updatedWalls = document.walls.filterNot { it.id == wallId }
+            val wallIdsToDelete = deletedWallIdsForSelection(
+                document = document,
+                selectedWallId = wallId
+            )
+            val updatedWalls = document.walls.filterNot { it.id in wallIdsToDelete }
             val rooms = detectRoomsByFloor(
                 walls = updatedWalls,
                 existingRooms = document.rooms
@@ -361,7 +366,7 @@ class BlueprintEditorViewModel @Inject constructor(
             document.copy(
                 walls = updatedWalls,
                 rooms = rooms,
-                openings = document.openings.filterNot { it.wallId == wallId }
+                openings = document.openings.filterNot { it.wallId in wallIdsToDelete }
             ).withUndoMeta(undoDepth = undoStack.size + 1)
         }
         _uiState.update { it.copy(selectedWallId = null) }
@@ -632,11 +637,24 @@ class BlueprintEditorViewModel @Inject constructor(
 
 }
 
+fun deletedWallIdsForSelection(
+    document: BlueprintDocument,
+    selectedWallId: String
+): Set<String> {
+    val selectedWall = document.walls.firstOrNull { wall -> wall.id == selectedWallId }
+        ?: return setOf(selectedWallId)
+    val curveGroupTag = selectedWall.curveGroupTag() ?: return setOf(selectedWallId)
+    return document.walls
+        .filter { wall -> wall.curveGroupTag() == curveGroupTag }
+        .mapTo(linkedSetOf()) { wall -> wall.id }
+}
+
 enum class BlueprintDraftTool {
     SELECT,
     DRAW_WALL,
     DRAW_BOX,
-    DRAW_ARC,
+    DRAW_MEASURED_ARC,
+    DRAW_SKETCH_CURVE,
     DRAW_CIRCLE,
     PLACE_DOOR,
     PLACE_WINDOW,
@@ -659,6 +677,15 @@ data class BlueprintEditorUiState(
     val canRedo: Boolean = false,
     val error: String? = null
 )
+
+fun BlueprintDraftTool.isCurveDraftTool(): Boolean =
+    this == BlueprintDraftTool.DRAW_MEASURED_ARC || this == BlueprintDraftTool.DRAW_SKETCH_CURVE
+
+fun BlueprintDraftTool.isMeasuredArcTool(): Boolean =
+    this == BlueprintDraftTool.DRAW_MEASURED_ARC
+
+fun BlueprintDraftTool.isSketchCurveTool(): Boolean =
+    this == BlueprintDraftTool.DRAW_SKETCH_CURVE
 
 
 

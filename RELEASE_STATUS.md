@@ -1,15 +1,19 @@
 # TradeSketch Estimator - Release Status (Authoritative)
 
-Last updated: March 16, 2026
+Last updated: March 22, 2026
 
 This file is the single source of truth for current release readiness in this repository.
 
 ## Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.11` (`versionCode = 13`)
+- Version: `1.0.16` (`versionCode = 18`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`isMinifyEnabled = true`, `isShrinkResources = true`)
+- Latest verified AAB: `app/build/outputs/bundle/release/app-release.aab`
+- AAB built: `2026-03-22 02:10:04 -04:00`
+- AAB size: `19.99 MB`
+- AAB SHA-256: `C7E97313D3DBD3728F46A5FB376B5562CC1DDCAA24625858EFF78487A87CA637`
 
 ## Truly Complete
 
@@ -23,6 +27,15 @@ This file is the single source of truth for current release readiness in this re
 ## Newly Added In This Hardening Pass
 
 - Truth-sync updates to release docs and metadata references.
+- Blueprint geometry upgrade:
+  - New `Measured Arc` tool for reproducible field curves with live chord, rise, radius, sweep, and arc-length math.
+  - `Sketch Curve` stays available as a separate freeform tool with distinct iconography and help/tutorial copy.
+  - Curve selections preserve reusable measurements instead of forcing users to read per-segment geometry.
+  - Selected measured arcs now show center/radius guide geometry on-canvas, and committed curve groups label the full curve length as a single logical measurement.
+- Shared-blueprint workflow improvements:
+  - Trade geometry keeps trade-specific colors when switching trades.
+  - Completed concrete and gravel/mulch polygons fill visibly while drywall stays unfilled.
+  - Combined exports include only trades actually present in the blueprint, avoiding zero-value noise.
 - Safer blueprint editing:
   - Preserves manual/non-loop rooms during wall-loop re-detection.
   - Validates opening placement for wall fit, endpoint clearance, overlap, and wall-height bounds.

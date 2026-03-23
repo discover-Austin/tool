@@ -29,8 +29,8 @@ android {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.0.15"
+        versionCode = 20
+        versionName = "1.0.18"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -60,6 +60,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releaseSigningConfig = signingConfigs.findByName("release")
+            if (releaseSigningConfig?.storeFile != null) {
+                signingConfig = releaseSigningConfig
+            }
+        }
+        create("sideload") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            resValue("string", "app_name", "TradeSketch Estimator Local")
             val releaseSigningConfig = signingConfigs.findByName("release")
             if (releaseSigningConfig?.storeFile != null) {
                 signingConfig = releaseSigningConfig

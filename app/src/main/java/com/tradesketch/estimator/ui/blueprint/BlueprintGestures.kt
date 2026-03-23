@@ -425,8 +425,13 @@ internal fun DrawLineEdgeDialsOverlay(
         val labelFontSize = if (compact) 7.5.sp else 8.5.sp
         val captionFontSize = if (compact) 7.5.sp else 8.5.sp
         val pxPerTick = if (compact) 8.5f else 9.5f
-        val dialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + leftInset
-        val rightDialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f)
+        val centerPull = when {
+            ultraCompact -> 6.dp
+            compact -> 8.dp
+            else -> 10.dp
+        }
+        val dialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + leftInset + centerPull
+        val rightDialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + centerPull
         val dialBottomPadding = controlsBottomPadding + when {
             dualJoysticksEnabled -> joystickSize + if (compact) 18.dp else 22.dp
             compact -> 102.dp
@@ -747,6 +752,10 @@ internal fun TouchModeQuickToolsOverlay(
     leftToolsModifier: Modifier = Modifier,
     centerControlsModifier: Modifier = Modifier,
     rightToolsModifier: Modifier = Modifier,
+    selectToolModifier: Modifier = Modifier,
+    drawToolModifier: Modifier = Modifier,
+    grabToolModifier: Modifier = Modifier,
+    cancelToolModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -796,7 +805,8 @@ internal fun TouchModeQuickToolsOverlay(
                         buttonSize = toolButtonSize,
                         iconSize = toolIconSize,
                         labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
+                        verticalSpacing = verticalSpacing,
+                        modifier = selectToolModifier
                     )
                     TouchToolButton(
                         icon = Icons.Filled.BorderColor,
@@ -806,7 +816,8 @@ internal fun TouchModeQuickToolsOverlay(
                         buttonSize = toolButtonSize,
                         iconSize = toolIconSize,
                         labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
+                        verticalSpacing = verticalSpacing,
+                        modifier = drawToolModifier
                     )
                 }
             }
@@ -852,7 +863,8 @@ internal fun TouchModeQuickToolsOverlay(
                         buttonSize = toolButtonSize,
                         iconSize = toolIconSize,
                         labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
+                        verticalSpacing = verticalSpacing,
+                        modifier = grabToolModifier
                     )
                     TouchToolButton(
                         icon = Icons.Filled.Close,
@@ -862,7 +874,8 @@ internal fun TouchModeQuickToolsOverlay(
                         buttonSize = toolButtonSize,
                         iconSize = toolIconSize,
                         labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
+                        verticalSpacing = verticalSpacing,
+                        modifier = cancelToolModifier
                     )
                 }
             }
@@ -879,9 +892,11 @@ private fun TouchToolButton(
     buttonSize: Dp = 46.dp,
     iconSize: Dp = 19.dp,
     labelFontSize: TextUnit = 9.sp,
-    verticalSpacing: Dp = 4.dp
+    verticalSpacing: Dp = 4.dp,
+    modifier: Modifier = Modifier
 ) {
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(verticalSpacing)
     ) {

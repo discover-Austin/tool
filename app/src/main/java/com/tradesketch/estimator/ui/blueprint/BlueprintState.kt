@@ -46,8 +46,9 @@ internal data class OpeningDragPreview(
 internal data class WallLengthLabelSpec(
     val start: Offset,
     val end: Offset,
-    val lengthFeet: Double,
-    val color: Color
+    val lengthMm: Long,
+    val color: Color,
+    val prefix: String? = null
 )
 
 internal data class RightAngleHint(
@@ -76,6 +77,28 @@ internal data class CircleSelectionInfo(
     val radiusMm: Long,
     val diameterMm: Long,
     val segmentCount: Int
+)
+
+internal enum class CurveSelectionKind {
+    MEASURED_ARC,
+    SKETCH_CURVE
+}
+
+internal data class ArcSelectionInfo(
+    val kind: CurveSelectionKind,
+    val spanMm: Long,
+    val arcLengthMm: Long,
+    val turnDegrees: Double,
+    val segmentCount: Int,
+    val shiftMm: Long? = null,
+    val bendMm: Long? = null,
+    val riseMm: Long? = null,
+    val radiusMm: Long? = null,
+    val guideChordStart: PointMm? = null,
+    val guideChordEnd: PointMm? = null,
+    val guideChordMidpoint: PointMm? = null,
+    val guideArcMidpoint: PointMm? = null,
+    val guideCenter: PointMm? = null
 )
 
 internal fun openingPreset(

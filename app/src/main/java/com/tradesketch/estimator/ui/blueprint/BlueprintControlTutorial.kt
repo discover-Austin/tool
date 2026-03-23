@@ -9,14 +9,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -40,16 +40,35 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.tradesketch.estimator.domain.model.PointMm
+import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import kotlin.math.roundToInt
 
 internal enum class BlueprintControlTutorialTarget {
     BOTTOM_RAIL,
     CANVAS,
+    DETACHED_BUTTON,
+    BOX_BUTTON,
+    MEASURED_ARC_BUTTON,
+    SKETCH_CURVE_BUTTON,
+    CIRCLE_BUTTON,
+    DOORS_BUTTON,
+    WINDOWS_BUTTON,
+    STAIR_UP_BUTTON,
+    STAIR_DOWN_BUTTON,
+    PARAMS_BUTTON,
+    HELP_BUTTON,
+    TOUCH_SELECT_BUTTON,
+    TOUCH_DRAW_BUTTON,
+    TOUCH_GRAB_BUTTON,
+    TOUCH_CANCEL_BUTTON,
     TOUCH_LEFT_TOOLS,
     TOUCH_CENTER_CONTROLS,
     TOUCH_RIGHT_TOOLS,
@@ -67,317 +86,453 @@ internal enum class BlueprintControlTutorialTarget {
     CLEAR_ALL_BUTTON
 }
 
+internal data class BlueprintControlTutorialDemoWall(
+    val start: PointMm,
+    val end: PointMm
+)
+
 internal data class BlueprintControlTutorialStep(
     val target: BlueprintControlTutorialTarget,
     val title: String,
     val message: String,
     val details: List<String> = emptyList(),
-    val tryIt: String? = null,
+    val seeIt: String? = null,
     val demoTool: BlueprintDraftTool? = null,
     val demoOpeningPanel: OpeningPanelType? = null,
     val showParamsPanel: Boolean = false,
     val showHelpPanel: Boolean = false,
+    val showGridScaleEditor: Boolean = false,
     val forceEdgeDials: Boolean = false,
+    val demoPlacementWalls: List<BlueprintControlTutorialDemoWall> = emptyList(),
+    val demoDrawingStart: PointMm? = null,
+    val demoDrawingPreview: PointMm? = null,
+    val demoBoxStart: PointMm? = null,
+    val demoBoxPreview: PointMm? = null,
+    val demoBoxRotationRadians: Double = 0.0,
+    val demoCurveStart: PointMm? = null,
+    val demoCurveEnd: PointMm? = null,
+    val demoCurvePreview: PointMm? = null,
+    val demoCircleCenter: PointMm? = null,
+    val demoCircleEdge: PointMm? = null,
+    val demoPointerWorld: PointMm? = null,
+    val demoPendingGrabSelection: Boolean = false,
     val demoLeftVector: Offset = Offset.Zero,
     val demoRightVector: Offset = Offset.Zero
 )
 
+internal fun BlueprintControlTutorialStep.resolvedDemoTool(): BlueprintDraftTool? {
+    return demoTool ?: when (demoOpeningPanel) {
+        OpeningPanelType.DOORS -> BlueprintDraftTool.PLACE_DOOR
+        OpeningPanelType.WINDOWS -> BlueprintDraftTool.PLACE_WINDOW
+        OpeningPanelType.STAIR_UP -> BlueprintDraftTool.PLACE_STAIR_UP
+        OpeningPanelType.STAIR_DOWN -> BlueprintDraftTool.PLACE_STAIR_DOWN
+        null -> null
+    }
+}
+
+internal fun BlueprintControlTutorialStep.resolvedTutorialTool(): BlueprintDraftTool {
+    return resolvedDemoTool() ?: when (target) {
+        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> BlueprintDraftTool.SELECT
+        else -> BlueprintDraftTool.DRAW_WALL
+    }
+}
+
+internal fun BlueprintControlTutorialStep.resolvedPlacementWalls(): List<WallSegment> {
+    return demoPlacementWalls.mapIndexed { index, wall ->
+        WallSegment(
+            id = "__tutorial_demo_wall_$index",
+            start = wall.start,
+            end = wall.end
+        )
+    }
+}
+
 internal fun blueprintControlTutorialSteps(
     dualJoysticksEnabled: Boolean
 ): List<BlueprintControlTutorialStep> {
-    return if (dualJoysticksEnabled) {
-        listOf(
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.BOTTOM_RAIL,
-                title = "Build Rail",
-                message = "This bottom rail is the fastest way to switch how you build and what you place.",
-                details = listOf(
-                    "Detached breaks the chain so the next wall starts fresh.",
-                    "Box creates a rectangle from two corners.",
-                    "Curve goes start, end, then shape the arc.",
-                    "Circle goes center, then edge."
-                ),
-                tryIt = "Tap a rail icon and watch the highlight move with your current tool."
+    val railSteps = commonRailTutorialSteps()
+    val modeSteps = if (dualJoysticksEnabled) {
+        joystickModeTutorialSteps()
+    } else {
+        touchModeTutorialSteps()
+    }
+    val hudSteps = commonHudTutorialSteps(includeGridScaleBadge = !dualJoysticksEnabled)
+    return railSteps + modeSteps + hudSteps
+}
+
+private fun commonRailTutorialSteps(): List<BlueprintControlTutorialStep> {
+    return listOf(
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.BOTTOM_RAIL,
+            title = "Build Rail",
+            message = "This rail is where drafting modes, placement panels, and the quick reference all live.",
+            details = listOf(
+                "The first cluster changes how geometry is drafted.",
+                "The middle cluster arms openings and estimating panels.",
+                "The last button opens the in-app legend."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.CANVAS,
-                title = "Canvas Flow",
-                message = "In dual-stick mode the cursor is your pointer, so placement is all about moving, confirming, and refining.",
-                details = listOf(
-                    "Move the cursor with the right pad, then confirm at the cursor.",
-                    "Walls, boxes, curves, and circles all follow a start-to-finish placement flow.",
-                    "Pan and zoom first, then place when the cursor is where you want it."
-                ),
-                tryIt = "Move the cursor into open space, then tap to start a wall and tap again to finish it."
+            seeIt = "The rest of the tour isolates each feature one at a time so you can see what changes without treating the tutorial like a checklist."
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.DETACHED_BUTTON,
+            title = "Detached",
+            message = "Detached tells the next wall to start fresh instead of chaining from the last endpoint.",
+            details = listOf(
+                "Use it when the next segment belongs to a different run.",
+                "Turn it back off when you want perimeter drafting to continue corner to corner."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
-                title = "Left Pad",
-                message = "The left pad moves the whole blueprint under the cursor for coarse positioning.",
-                details = listOf(
-                    "Use broad left-pad sweeps to pan across the job quickly.",
-                    "Ease off pressure for smaller corrections near a snap point."
-                ),
-                tryIt = "Push the left pad in one direction and watch the entire drawing pan under the cursor.",
-                demoLeftVector = Offset(-0.62f, 0.26f)
+            seeIt = "This wall preview stays self-contained, which is the detached behavior you want before starting a separate line.",
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.BOX_BUTTON,
+            title = "Box",
+            message = "Box drafts a rectangle from two corners and keeps the shape easy to size before you commit it.",
+            details = listOf(
+                "Tap the origin corner first and the opposite corner second.",
+                "The edge dials can refine both size and rotation before the final tap."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
-                title = "Right Pad",
-                message = "The right pad is your aiming stick and action side.",
-                details = listOf(
-                    "Move the cursor precisely with the right pad.",
-                    "Tap or press on the right side to place, confirm, or select at the cursor."
-                ),
-                tryIt = "Nudge the right pad a little, then tap on that side to place a point at the cursor.",
-                demoRightVector = Offset(0.56f, -0.54f)
+            seeIt = "A box draft is already staged on the canvas so you can see the live outline and corner flow immediately.",
+            demoTool = BlueprintDraftTool.DRAW_BOX,
+            demoBoxStart = TUTORIAL_BOX_DEMO_START,
+            demoBoxPreview = TUTORIAL_BOX_DEMO_END,
+            demoBoxRotationRadians = Math.toRadians(8.0)
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON,
+            title = "Measured Arc",
+            message = "Measured Arc builds a true arc by locking in start, end, and rise.",
+            details = listOf(
+                "Use it when the span is fixed and the curve needs a measurable rise.",
+                "The edge dials switch to sweep and rise once the end point is set."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
-                title = "Zoom and History",
-                message = "The center cluster keeps zoom and recovery within easy reach of both thumbs.",
-                details = listOf(
-                    "Zoom in before fine placements and zoom out to regain context.",
-                    "Undo and Redo are the fastest way to clean up a draft without changing tools.",
-                    "Coordinates below these buttons help you confirm where the cursor really is."
-                ),
-                tryIt = "Zoom in once, place something small, then use Undo and Redo to feel the recovery flow."
+            seeIt = "This step already shows a measured-arc preview so you can read the chord-to-rise relationship at a glance.",
+            demoTool = BlueprintDraftTool.DRAW_MEASURED_ARC,
+            demoCurveStart = TUTORIAL_ARC_DEMO_START,
+            demoCurveEnd = TUTORIAL_ARC_DEMO_END,
+            demoCurvePreview = TUTORIAL_MEASURED_ARC_DEMO_CONTROL
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON,
+            title = "Sketch Curve",
+            message = "Sketch Curve keeps the same start and end flow but lets you pull a freer bend.",
+            details = listOf(
+                "Use it when you care more about the shape than a measured radius.",
+                "The edge dials switch to shift and bend after the span is set."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.EDGE_DIALS,
-                title = "Precision Dials",
-                message = "The side dials are for small, repeatable nudges when finger movement is too coarse.",
-                details = listOf(
-                    "Left dial adjusts angle. Right dial adjusts length.",
-                    "Use them after you start a wall or while sizing a box.",
-                    "Curve mode switches them to Shift and Bend after the end point is set."
-                ),
-                tryIt = "Drag the left dial for angle nudges and the right dial for length nudges while a draft is active.",
-                demoTool = BlueprintDraftTool.DRAW_WALL,
-                forceEdgeDials = true
+            seeIt = "This curve preview is intentionally looser so you can compare it against the measured arc behavior from the last step.",
+            demoTool = BlueprintDraftTool.DRAW_SKETCH_CURVE,
+            demoCurveStart = TUTORIAL_ARC_DEMO_START,
+            demoCurveEnd = TUTORIAL_ARC_DEMO_END,
+            demoCurvePreview = TUTORIAL_SKETCH_CURVE_DEMO_CONTROL
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.CIRCLE_BUTTON,
+            title = "Circle",
+            message = "Circle is a center-and-radius workflow for round pads, columns, and curved takeoff zones.",
+            details = listOf(
+                "Set the center first and size it from the edge.",
+                "After placement, the selection panel exposes radius and diameter nudges."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.OPENING_PANEL,
-                title = "Doors, Windows, and Stairs",
-                message = "Openings come from the rail, then you place them directly onto the wall you want.",
-                details = listOf(
-                    "Use the door, window, stair up, and stair down buttons on the rail.",
-                    "Choose a preset or type custom width, height, and sill values.",
-                    "Place the opening after the panel is set the way you want."
-                ),
-                tryIt = "Open a door preset here, then place it on an existing wall segment.",
-                demoOpeningPanel = OpeningPanelType.DOORS
+            seeIt = "The canvas is already showing a live circle draft, which is the same preview you get before placing the final radius.",
+            demoTool = BlueprintDraftTool.DRAW_CIRCLE,
+            demoCircleCenter = TUTORIAL_CIRCLE_DEMO_CENTER,
+            demoCircleEdge = TUTORIAL_CIRCLE_DEMO_EDGE
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.DOORS_BUTTON,
+            title = "Doors",
+            message = "Doors opens the panel for door presets and arms the current preset for wall placement.",
+            details = listOf(
+                "Preset size, custom width, height, and sill all live in the panel.",
+                "Door swing is inferred from the side of the wall you approach."
             ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.PARAMS_PANEL,
-                title = "Params and Snaps",
-                message = "This panel controls takeoff formulas and the drafting behavior behind your measurements.",
-                details = listOf(
-                    "Trade-specific settings live here for drywall, concrete, gravel, and paint.",
-                    "Snap threshold and drafting tune-ups live here too.",
-                    "Use Params when the shape is right but the quantity math needs adjustment."
-                ),
-                tryIt = "Change one snap or trade value here, then go back to the canvas and feel the difference.",
-                showParamsPanel = true
+            seeIt = "The Doors panel is open and a door is already snapped to the sample wall so you can see the placement posture.",
+            demoOpeningPanel = OpeningPanelType.DOORS,
+            demoPlacementWalls = listOf(TUTORIAL_OPENING_DEMO_WALL),
+            demoPointerWorld = TUTORIAL_OPENING_DEMO_POINTER
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.WINDOWS_BUTTON,
+            title = "Windows",
+            message = "Windows uses the same placement flow, but the presets and sill defaults are tuned for fenestration.",
+            details = listOf(
+                "Window width, height, and sill can be preset or typed directly.",
+                "The armed preview follows the wall until you confirm placement."
             ),
+            seeIt = "The window preset is armed on the same sample wall here so you can compare it against the door workflow immediately.",
+            demoOpeningPanel = OpeningPanelType.WINDOWS,
+            demoPlacementWalls = listOf(TUTORIAL_OPENING_DEMO_WALL),
+            demoPointerWorld = TUTORIAL_OPENING_DEMO_POINTER
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.STAIR_UP_BUTTON,
+            title = "Stair Up",
+            message = "Stair Up marks an upward stair opening directly on the wall where the run belongs.",
+            details = listOf(
+                "These presets track run and rise instead of simple opening height.",
+                "Use it when the stair opening climbs away from the current floor."
+            ),
+            seeIt = "The stair-up preset is already armed so you can see that the workflow matches other openings while the labels change to run and rise.",
+            demoOpeningPanel = OpeningPanelType.STAIR_UP,
+            demoPlacementWalls = listOf(TUTORIAL_OPENING_DEMO_WALL),
+            demoPointerWorld = TUTORIAL_OPENING_DEMO_POINTER
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON,
+            title = "Stair Down",
+            message = "Stair Down captures openings that descend away from the current level.",
+            details = listOf(
+                "Use it when the cut belongs to a stair run dropping below the active floor.",
+                "The placement behavior is the same, but the resulting opening type is different."
+            ),
+            seeIt = "This step shows the stair-down preset armed on the wall so you can recognize it before you need it in a live draft.",
+            demoOpeningPanel = OpeningPanelType.STAIR_DOWN,
+            demoPlacementWalls = listOf(TUTORIAL_OPENING_DEMO_WALL),
+            demoPointerWorld = TUTORIAL_OPENING_DEMO_POINTER
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.PARAMS_BUTTON,
+            title = "Params",
+            message = "Params opens the trade formulas and snap tuning that sit behind your blueprint quantities.",
+            details = listOf(
+                "Trade-specific estimating controls live above room tools in the panel.",
+                "Snap threshold and drafting defaults are adjusted here too."
+            ),
+            seeIt = "The Params panel is already open so you can scan the live estimating controls without leaving blueprint mode.",
+            showParamsPanel = true
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.HELP_BUTTON,
+            title = "Help",
+            message = "Help opens the quick-reference legend for the rail and the active control mode.",
+            details = listOf(
+                "Use it when you need an icon refresher without leaving the screen.",
+                "The contents adapt to touch vs dual-joystick controls."
+            ),
+            seeIt = "The help panel is open right now so you can see the kind of reminder it gives before closing it.",
+            showHelpPanel = true
+        )
+    )
+}
+
+private fun joystickModeTutorialSteps(): List<BlueprintControlTutorialStep> {
+    return listOf(
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.CANVAS,
+            title = "Canvas Flow",
+            message = "In joystick mode the cursor becomes your pointer, so the whole drafting flow is move, confirm, then refine.",
+            details = listOf(
+                "The right pad aims the cursor.",
+                "The left pad pans the world under the cursor.",
+                "Draft previews still show up on the canvas before you confirm."
+            ),
+            seeIt = "This line preview is already staged so you can connect the cursor workflow to the geometry it produces.",
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
+            title = "Left Pad",
+            message = "The left pad pans the blueprint for coarse positioning without changing the current tool.",
+            details = listOf(
+                "Long pushes travel quickly across the plan.",
+                "Light pressure makes smaller corrections near a snap point."
+            ),
+            seeIt = "The animated vector shows a live pan gesture, which is why the drawing shifts while the cursor stays relevant.",
+            demoLeftVector = Offset(-0.62f, 0.26f)
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
+            title = "Right Pad",
+            message = "The right pad is the aiming side for cursor movement and confirm actions.",
+            details = listOf(
+                "Use small movement for precision and full movement for travel.",
+                "Placement, confirmation, and selection happen at the cursor."
+            ),
+            seeIt = "The animated vector here represents the aiming motion that lines the cursor up before you place a point.",
+            demoRightVector = Offset(0.56f, -0.54f)
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
+            title = "Zoom and History",
+            message = "The center cluster keeps zoom, undo, redo, and live coordinates easy to reach with either thumb.",
+            details = listOf(
+                "Zoom in before fine placements and back out to regain context.",
+                "Undo and Redo are the fastest cleanup path when a draft step is wrong."
+            ),
+            seeIt = "This cluster does not change tools, which is why it stays centered while every other control mode changes around it."
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.EDGE_DIALS,
+            title = "Precision Dials",
+            message = "The edge dials are for small, repeatable nudges when stick movement would be too coarse.",
+            details = listOf(
+                "Left dial adjusts angle or sweep.",
+                "Right dial adjusts length, rise, or bend depending on the active tool."
+            ),
+            seeIt = "A wall draft is already active so the dials are visible in their working state instead of hidden.",
+            demoTool = BlueprintDraftTool.DRAW_WALL,
+            forceEdgeDials = true,
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        )
+    )
+}
+
+private fun touchModeTutorialSteps(): List<BlueprintControlTutorialStep> {
+    return listOf(
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.CANVAS,
+            title = "Canvas Flow",
+            message = "Touch mode is still point-driven drafting, but the canvas is where start, end, and preview states all come together.",
+            details = listOf(
+                "Walls, boxes, arcs, curves, and circles all preview before they are committed.",
+                "Two-finger pan and zoom stay available while you draft."
+            ),
+            seeIt = "The wall preview is already on screen here so you can focus on the draft feedback instead of performing the gesture.",
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
+            title = "Select",
+            message = "Select is the inspection mode for existing walls and openings.",
+            details = listOf(
+                "Use it when you want to inspect quantities or bring up the edit card.",
+                "Selection is separate from drawing so you do not place new geometry by accident."
+            ),
+            seeIt = "This button is highlighted on its own because selection is a mode switch, not just another tap target on the canvas.",
+            demoTool = BlueprintDraftTool.SELECT
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
+            title = "Draw",
+            message = "Draw returns the blueprint to normal wall and shape creation.",
+            details = listOf(
+                "Most rail tools ultimately feed back into draw mode on the canvas.",
+                "You return here after cancelling or finishing most transient states."
+            ),
+            seeIt = "The draft preview is already active so you can recognize the draw-state visuals before starting your own layout.",
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
+            title = "Grab",
+            message = "Grab is the recovery path for relocating a wall instead of redrawing it.",
+            details = listOf(
+                "If nothing is selected yet, Grab becomes the next thing the app is waiting for.",
+                "Once a wall is picked up, the canvas treats it like a live placement preview."
+            ),
+            seeIt = "This step puts Grab into its waiting state so you can recognize the mode before you need to reposition something quickly.",
+            demoTool = BlueprintDraftTool.SELECT,
+            demoPendingGrabSelection = true
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
+            title = "Cancel",
+            message = "Cancel exits the current draft, pickup, or placement state without forcing you through completion.",
+            details = listOf(
+                "It is the fastest way out of a mistaken draft step.",
+                "Use it before switching modes if the current state is already wrong."
+            ),
+            seeIt = "A live wall draft is staged behind this button so you can see exactly the kind of in-progress state Cancel is designed to clear.",
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
+            title = "Zoom and History",
+            message = "The center controls keep zoom, undo, redo, and live coordinates in one predictable place.",
+            details = listOf(
+                "Zoom first, then place precisely.",
+                "Undo and Redo are faster than mode-switching when only the last move is wrong."
+            ),
+            seeIt = "This cluster stays stable while the tool buttons change, which makes it the safest place to recover orientation."
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.EDGE_DIALS,
+            title = "Precision Dials",
+            message = "The edge dials give you repeatable fine adjustments without dragging directly on the geometry.",
+            details = listOf(
+                "Use them after a draft is already active.",
+                "The labels change with walls, boxes, measured arcs, and sketch curves."
+            ),
+            seeIt = "A wall draft is already active so the dials are shown in the exact state where they matter.",
+            demoTool = BlueprintDraftTool.DRAW_WALL,
+            forceEdgeDials = true,
+            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
+            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
+        )
+    )
+}
+
+private fun commonHudTutorialSteps(includeGridScaleBadge: Boolean): List<BlueprintControlTutorialStep> {
+    return buildList {
+        add(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.TOP_START_STACK,
                 title = "Live Totals",
-                message = "The top-left stack is your running measurement readout while you work.",
+                message = "The top-left stack is the running quantity dashboard while you work.",
                 details = listOf(
-                    "Live quantities update as you draw.",
-                    "When you select a wall or opening, its edit card appears here too."
+                    "It reacts to geometry changes without leaving blueprint mode.",
+                    "Selection details also appear in this lane when there is something to inspect."
                 ),
-                tryIt = "Draw or select something and watch this stack react immediately."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.TOP_END_STACK,
-                title = "Project and Trade",
-                message = "The top-right stack keeps the current project context close at hand.",
-                details = listOf(
-                    "The project name stays visible here.",
-                    "Trade changes which live totals and params you see.",
-                    "Use the scope selector when you want wall, room, or ceiling context."
-                ),
-                tryIt = "Switch the trade or scope once and notice how the rest of the blueprint HUD updates."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.RAIL_HELP_PANEL,
-                title = "Help Cheat Sheet",
-                message = "The help button opens a quick reference for the rail and your current control mode.",
-                details = listOf(
-                    "Use it when you forget what an icon does.",
-                    "It is especially handy when switching between touch and joystick control."
-                ),
-                tryIt = "Open Help, skim the legend, then close it and keep building without leaving the screen.",
-                showHelpPanel = true
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON,
-                title = "Quick Reset",
-                message = "Clear All is the nuclear option for the current blueprint layout.",
-                details = listOf(
-                    "Use Undo when you only need to back up a few moves.",
-                    "Use Clear All when the whole sketch needs a restart."
-                ),
-                tryIt = "Use Undo first for small mistakes and save Clear All for full restarts."
+                seeIt = "Even on a blank starter project, this stack shows you where live takeoff feedback is always going to appear."
             )
         )
-    } else {
-        listOf(
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.BOTTOM_RAIL,
-                title = "Build Rail",
-                message = "This bottom rail is where you switch build modes, add openings, and open supporting tools.",
-                details = listOf(
-                    "Detached breaks the chain so the next wall starts fresh.",
-                    "Box creates a rectangle from two corners.",
-                    "Curve goes start, end, then shape the arc.",
-                    "Circle goes center, then edge."
-                ),
-                tryIt = "Tap a rail icon and watch the active build mode change before you touch the canvas."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.CANVAS,
-                title = "Canvas Flow",
-                message = "Most drafting happens right on the canvas, so the tap order matters.",
-                details = listOf(
-                    "Wall: tap start, then tap end. Keep chaining if Detached is off.",
-                    "Box: tap the first corner, then the opposite corner.",
-                    "Curve: tap start, tap end, then shape the arc before you confirm.",
-                    "Circle: tap center, then set the radius from the edge."
-                ),
-                tryIt = "Tap two points on the canvas to place a simple wall, then try Box or Curve from the rail."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
-                title = "Select and Draw",
-                message = "These left tools control whether you are inspecting geometry or creating it.",
-                details = listOf(
-                    "Select lets you tap a wall or opening and inspect or edit it.",
-                    "Draw returns you to normal wall and shape creation."
-                ),
-                tryIt = "Switch to Select, tap existing geometry, then switch back to Draw when you are ready to create more."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
-                title = "Grab and Cancel",
-                message = "These right tools handle recovery and repositioning without leaving the blueprint.",
-                details = listOf(
-                    "Grab picks up a wall so you can place it somewhere else.",
-                    "Cancel exits the current draft, pickup, or selection state."
-                ),
-                tryIt = "Use Cancel once during a draft so you know how to bail out fast when you need to."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-                title = "Zoom and History",
-                message = "The center controls keep scale, history, and live coordinates in one place.",
-                details = listOf(
-                    "Zoom in for tight placements and zoom out for context.",
-                    "Undo and Redo fix layout mistakes fast.",
-                    "Coordinates under these buttons show the live pointer position."
-                ),
-                tryIt = "Zoom in near a corner, place something small, then Undo and Redo it."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.EDGE_DIALS,
-                title = "Precision Dials",
-                message = "The dials give you repeatable adjustments when a drag would be too sloppy.",
-                details = listOf(
-                    "Left dial adjusts angle. Right dial adjusts length.",
-                    "Use them after you start a wall or while sizing a box.",
-                    "Curve mode switches them to Shift and Bend after the end point is set."
-                ),
-                tryIt = "Start a wall, then drag the dials instead of dragging on the canvas for the fine adjustment.",
-                demoTool = BlueprintDraftTool.DRAW_WALL,
-                forceEdgeDials = true
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.OPENING_PANEL,
-                title = "Doors, Windows, and Stairs",
-                message = "Use the add-on panels when you need more than raw wall geometry.",
-                details = listOf(
-                    "Open the door, window, stair up, or stair down panel from the rail.",
-                    "Pick a preset or enter custom width, height, and sill values.",
-                    "Place the opening on the wall after the panel is configured."
-                ),
-                tryIt = "Open Doors here, choose a preset, then tap a wall to place it.",
-                demoOpeningPanel = OpeningPanelType.DOORS
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.PARAMS_PANEL,
-                title = "Params and Snaps",
-                message = "This panel holds the trade formulas and snap behavior that shape your takeoff.",
-                details = listOf(
-                    "Trade-specific settings live here for drywall, concrete, gravel, and paint.",
-                    "Snap threshold and drafting tune-ups live here too.",
-                    "Use Params when the geometry is right but the quantity math needs tuning."
-                ),
-                tryIt = "Adjust one trade or snap setting here, then return to drawing and see what changed.",
-                showParamsPanel = true
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.TOP_START_STACK,
-                title = "Live Totals",
-                message = "The top-left stack is your live measurement dashboard.",
-                details = listOf(
-                    "It updates while you draw so you can watch quantities change in real time.",
-                    "Selection details show here too when you tap a wall or opening."
-                ),
-                tryIt = "Draw a wall or select one and watch the live totals react right away."
-            ),
+        add(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.TOP_END_STACK,
                 title = "Project and Trade",
-                message = "The top-right stack keeps project context and takeoff filters visible.",
+                message = "The top-right stack keeps scope, trade context, and destructive actions visible without covering the canvas center.",
                 details = listOf(
-                    "The project name stays up top while you work.",
-                    "Trade changes which live totals and params you are editing.",
-                    "The scope selector lets you switch wall, room, and ceiling context."
+                    "Scope changes which part of the takeoff you are working in.",
+                    "Project context and control chips stay grouped here."
                 ),
-                tryIt = "Change the trade or scope once so you can feel how the takeoff context shifts."
-            ),
+                seeIt = "This lane is intentionally compact because it is the place for context switches rather than drafting gestures."
+            )
+        )
+        add(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.FLOOR_SWITCHER,
                 title = "Floor Switcher",
-                message = "Use this control to move between floors without leaving blueprint mode.",
+                message = "Floor controls let you move between levels without leaving blueprint mode.",
                 details = listOf(
-                    "Jump back to Ground when you want a clean reference point.",
-                    "Switch floors before drawing if the next geometry belongs upstairs or downstairs."
+                    "Use it before drawing when the next geometry belongs on another level.",
+                    "Ground is always one tap away."
                 ),
-                tryIt = "Flip to another floor and back so the control is familiar before you actually need it."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.GRID_SCALE_BADGE,
-                title = "Grid Scale",
-                message = "Grid scale changes how big each reference block is and how the snap grid feels.",
-                details = listOf(
-                    "Tap here to tighten or loosen the grid.",
-                    "Smaller grid steps help with precise layouts. Larger ones speed up rough blocking."
-                ),
-                tryIt = "Change the grid once and compare how snapping feels on the canvas."
-            ),
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.RAIL_HELP_PANEL,
-                title = "Help Cheat Sheet",
-                message = "The help button opens a quick reminder for the rail and your current control setup.",
-                details = listOf(
-                    "Use it when you forget what an icon does.",
-                    "It is the fastest in-app refresher once you are already mid-project."
-                ),
-                tryIt = "Open Help, glance through the legend, then close it and keep working.",
-                showHelpPanel = true
-            ),
+                seeIt = "This control stays separate from the main rail because floor changes affect which blueprint data is in scope."
+            )
+        )
+        if (includeGridScaleBadge) {
+            add(
+                BlueprintControlTutorialStep(
+                    target = BlueprintControlTutorialTarget.GRID_SCALE_BADGE,
+                    title = "Grid Scale",
+                    message = "Grid scale changes the size of each reference block and the feel of snapping on the canvas.",
+                    details = listOf(
+                        "Smaller steps support tighter layouts.",
+                        "Larger steps help with rough blocking and fast framing."
+                    ),
+                    seeIt = "The grid editor is already open here so you can see the control it expands into without interrupting the tour.",
+                    showGridScaleEditor = true
+                )
+            )
+        }
+        add(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON,
-                title = "Quick Reset",
-                message = "Clear All removes the current blueprint geometry when a simple undo is not enough.",
+                title = "Clear All",
+                message = "Clear All is the full-reset control for the current blueprint layout.",
                 details = listOf(
-                    "Use Undo when you only need to back up a few moves.",
-                    "Use Clear All when the whole sketch needs a restart."
+                    "Use Undo when only the last few moves are wrong.",
+                    "Use Clear All when the entire sketch needs to restart."
                 ),
-                tryIt = "Remember this button is for full restarts, not everyday corrections."
+                seeIt = "This sits outside the main rail on purpose because it is a recovery action, not part of the normal drafting rhythm."
             )
         )
     }
@@ -409,6 +564,7 @@ internal fun BlueprintControlTutorialOverlay(
     stepIndex: Int,
     totalSteps: Int,
     targetBounds: Rect?,
+    minimumTopClearance: Dp = 0.dp,
     onBack: () -> Unit,
     onNext: () -> Unit,
     onSkip: () -> Unit,
@@ -427,43 +583,34 @@ internal fun BlueprintControlTutorialOverlay(
         )
         val density = LocalDensity.current
         val cardWidth = maxWidth.minus(24.dp).coerceAtMost(320.dp)
-        val cardHeightEstimate = 208.dp + (step.details.size * 18).dp + if (step.tryIt != null) 62.dp else 0.dp
+        val cardHeightEstimate = 208.dp + (step.details.size * 18).dp + if (step.seeIt != null) 62.dp else 0.dp
         val maxCardHeight = (maxHeight - 24.dp).coerceAtLeast(180.dp)
-        val targetRect = remember(targetBounds) {
-            targetBounds?.inflate(12f)
-        }
-        val tooltipOffset = remember(targetRect, maxWidth, maxHeight, cardWidth, cardHeightEstimate, density) {
+        val compactWindow = maxWidth < 420.dp || maxHeight < 720.dp
+        val targetRect = remember(targetBounds) { targetBounds?.inflate(12f) }
+        val tooltipOffset = remember(
+            targetRect,
+            maxWidth,
+            maxHeight,
+            cardWidth,
+            cardHeightEstimate,
+            maxCardHeight,
+            compactWindow,
+            minimumTopClearance,
+            density
+        ) {
             with(density) {
-                val horizontalPadding = 12.dp
-                val verticalPadding = 12.dp
-                val horizontalPaddingPx = horizontalPadding.roundToPx()
-                val verticalPaddingPx = verticalPadding.roundToPx()
-                if (targetRect == null) {
-                    IntOffset(
-                        x = horizontalPaddingPx,
-                        y = verticalPaddingPx
-                    )
-                } else {
-                    val maxCardX = (maxWidth - cardWidth - horizontalPadding).roundToPx()
-                    val targetCenterX = targetRect.center.x.roundToInt()
-                    val desiredX = targetCenterX - (cardWidth.roundToPx() / 2)
-                    val clampedX = desiredX.coerceIn(
-                        horizontalPaddingPx,
-                        maxCardX.coerceAtLeast(horizontalPaddingPx)
-                    )
-                    val aboveY = targetRect.top.roundToInt() - cardHeightEstimate.roundToPx() - 14.dp.roundToPx()
-                    val belowY = targetRect.bottom.roundToInt() + 14.dp.roundToPx()
-                    val maxCardY = (maxHeight - cardHeightEstimate - verticalPadding).roundToPx()
-                    val resolvedY = if (aboveY >= verticalPaddingPx) {
-                        aboveY
-                    } else {
-                        belowY.coerceIn(
-                            verticalPaddingPx,
-                            maxCardY.coerceAtLeast(verticalPaddingPx)
-                        )
-                    }
-                    IntOffset(x = clampedX, y = resolvedY)
-                }
+                blueprintTutorialTooltipOffset(
+                    targetRect = targetRect,
+                    viewportWidthPx = maxWidth.roundToPx(),
+                    viewportHeightPx = maxHeight.roundToPx(),
+                    cardWidthPx = cardWidth.roundToPx(),
+                    cardHeightPx = cardHeightEstimate.roundToPx().coerceAtMost(maxCardHeight.roundToPx()),
+                    horizontalPaddingPx = 12.dp.roundToPx(),
+                    verticalPaddingPx = 12.dp.roundToPx(),
+                    minimumTopClearancePx = minimumTopClearance.roundToPx(),
+                    anchorSpacingPx = 14.dp.roundToPx(),
+                    compactWindow = compactWindow
+                )
             }
         }
         val highlightBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha)
@@ -498,6 +645,19 @@ internal fun BlueprintControlTutorialOverlay(
                 )
             }
         }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(stepIndex) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                }
+        )
 
         Card(
             modifier = Modifier
@@ -574,7 +734,7 @@ internal fun BlueprintControlTutorialOverlay(
                             }
                         }
                     }
-                    step.tryIt?.let { prompt ->
+                    step.seeIt?.let { prompt ->
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
@@ -589,7 +749,7 @@ internal fun BlueprintControlTutorialOverlay(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "Try This Now",
+                                    text = "In Action",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
@@ -622,6 +782,51 @@ internal fun BlueprintControlTutorialOverlay(
     }
 }
 
+internal fun blueprintTutorialTooltipOffset(
+    targetRect: Rect?,
+    viewportWidthPx: Int,
+    viewportHeightPx: Int,
+    cardWidthPx: Int,
+    cardHeightPx: Int,
+    horizontalPaddingPx: Int,
+    verticalPaddingPx: Int,
+    minimumTopClearancePx: Int,
+    anchorSpacingPx: Int,
+    compactWindow: Boolean
+): IntOffset {
+    val topClearancePx = maxOf(verticalPaddingPx, minimumTopClearancePx)
+    if (targetRect == null) {
+        return IntOffset(x = horizontalPaddingPx, y = topClearancePx)
+    }
+    val maxCardX = viewportWidthPx - cardWidthPx - horizontalPaddingPx
+    val targetCenterX = targetRect.center.x.roundToInt()
+    val desiredX = targetCenterX - (cardWidthPx / 2)
+    val clampedX = desiredX.coerceIn(
+        horizontalPaddingPx,
+        maxOf(horizontalPaddingPx, maxCardX)
+    )
+    val lowerScreenTarget =
+        targetRect.bottom.roundToInt() >= (viewportHeightPx * 0.52f).roundToInt()
+    val preferPinnedTop =
+        lowerScreenTarget ||
+            (
+                compactWindow &&
+                    targetRect.center.y >= viewportHeightPx * 0.34f
+                )
+    val aboveY = targetRect.top.roundToInt() - cardHeightPx - anchorSpacingPx
+    val belowY = targetRect.bottom.roundToInt() + anchorSpacingPx
+    val maxCardY = viewportHeightPx - cardHeightPx - verticalPaddingPx
+    val resolvedY = when {
+        preferPinnedTop -> topClearancePx
+        aboveY >= topClearancePx -> aboveY
+        else -> belowY.coerceIn(
+            topClearancePx,
+            maxOf(topClearancePx, maxCardY)
+        )
+    }
+    return IntOffset(x = clampedX, y = resolvedY)
+}
+
 private fun Rect.inflate(padding: Float): Rect {
     return Rect(
         left = left - padding,
@@ -630,3 +835,19 @@ private fun Rect.inflate(padding: Float): Rect {
         bottom = bottom + padding
     )
 }
+
+private val TUTORIAL_WALL_DEMO_START = PointMm(x = -4_200L, y = -1_100L)
+private val TUTORIAL_WALL_DEMO_END = PointMm(x = 3_600L, y = 1_850L)
+private val TUTORIAL_BOX_DEMO_START = PointMm(x = -3_900L, y = -2_200L)
+private val TUTORIAL_BOX_DEMO_END = PointMm(x = 2_800L, y = 1_300L)
+private val TUTORIAL_ARC_DEMO_START = PointMm(x = -4_800L, y = -1_200L)
+private val TUTORIAL_ARC_DEMO_END = PointMm(x = 4_600L, y = -1_200L)
+private val TUTORIAL_MEASURED_ARC_DEMO_CONTROL = PointMm(x = 0L, y = 2_600L)
+private val TUTORIAL_SKETCH_CURVE_DEMO_CONTROL = PointMm(x = 1_400L, y = 2_100L)
+private val TUTORIAL_CIRCLE_DEMO_CENTER = PointMm(x = 0L, y = -300L)
+private val TUTORIAL_CIRCLE_DEMO_EDGE = PointMm(x = 3_200L, y = -300L)
+private val TUTORIAL_OPENING_DEMO_WALL = BlueprintControlTutorialDemoWall(
+    start = PointMm(x = -5_200L, y = -2_500L),
+    end = PointMm(x = 5_200L, y = -2_500L)
+)
+private val TUTORIAL_OPENING_DEMO_POINTER = PointMm(x = 300L, y = -2_500L)

@@ -318,7 +318,13 @@ private fun TradeSketchRoot() {
                     initialProjectId = startupProjectId,
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top +
+                                    WindowInsetsSides.Start +
+                                    WindowInsetsSides.End
+                            )
+                        )
                 )
             }
 
@@ -332,7 +338,13 @@ private fun TradeSketchRoot() {
                     initialProjectId = startupProjectId,
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top +
+                                    WindowInsetsSides.Start +
+                                    WindowInsetsSides.End
+                            )
+                        )
                 )
             }
         }
@@ -641,6 +653,12 @@ private fun WorkspaceShell(
                 DetailTab.SETTINGS_ABOUT -> null
             }
 
+            val workspaceContentBottomInset = if (selectedTab == DetailTab.BLUEPRINT) {
+                Modifier
+            } else {
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+            }
+
             if (projectTabContent == null) {
                 SettingsScreen(
                     onReplayTutorial = {
@@ -650,12 +668,14 @@ private fun WorkspaceShell(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = nonBlueprintContentStartPadding)
+                        .then(workspaceContentBottomInset)
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = nonBlueprintContentStartPadding)
+                        .then(workspaceContentBottomInset)
                 ) {
                     ProjectScopedTab(
                         selectedProjectId = selectedProjectId,
@@ -667,7 +687,7 @@ private fun WorkspaceShell(
                 }
             }
 
-            if (selectedTab == DetailTab.BLUEPRINT && activeProject != null) {
+            if (selectedTab == DetailTab.BLUEPRINT && activeProject != null && !tutorialMode) {
                 val blueprintHeaderLanePadding = when {
                     compactBlueprintHud -> (configuration.screenWidthDp * 0.26f).dp.coerceIn(108.dp, 144.dp)
                     else -> (configuration.screenWidthDp * 0.22f).dp.coerceIn(128.dp, 188.dp)

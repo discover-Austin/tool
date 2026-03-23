@@ -1,13 +1,13 @@
 # TradeSketch Estimator - Play Store Launch Guide
 
-Last updated: March 16, 2026
+Last updated: March 22, 2026
 
 Use this on release day with `RELEASE_STATUS.md` as source of truth.
 
 ## 1) Verify Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.11` (`versionCode = 13`)
+- Version: `1.0.16` (`versionCode = 18`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 
 ## 2) Run Release Gates
@@ -29,6 +29,8 @@ Or scripted:
 Expected artifact:
 
 - `app/build/outputs/bundle/release/app-release.aab`
+- Latest locally verified build: `2026-03-22 02:10:04 -04:00`
+- Latest locally verified SHA-256: `C7E97313D3DBD3728F46A5FB376B5562CC1DDCAA24625858EFF78487A87CA637`
 
 ## 3) Signing Requirements
 
@@ -42,7 +44,7 @@ Required values via env vars or `local.properties`:
 ## 4) Device Smoke Checklist
 
 - [ ] Welcome -> project ritual -> workspace path works on first run.
-- [ ] Blueprint editing, room detection, undo/redo, and floor switching are stable.
+- [ ] Blueprint editing, measured arc/sketch curve tools, room detection, undo/redo, and floor switching are stable.
 - [ ] Materials tab recalculates correctly for each supported trade.
 - [ ] Export tab can share/save estimate PDF, blueprint PNG/PDF, CSV, and JSON.
 - [ ] Settings changes persist after app restart.
@@ -52,7 +54,7 @@ Required values via env vars or `local.properties`:
 
 1. Open Play Console app `com.tradesketch.estimator`.
 2. Upload `app-release.aab` in Production track.
-3. Confirm parsed version is `versionCode 13` / `versionName 1.0.11`.
+3. Confirm parsed version is `versionCode 18` / `versionName 1.0.16`.
 4. Upload listing assets from `store-assets/`.
 5. Paste release notes from `store-assets/listing/whats-new.txt`.
 6. Verify screenshots are freshly captured from the current UI build.

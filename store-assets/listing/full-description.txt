@@ -3,11 +3,11 @@ TradeSketch Estimator: Offline Blueprint-First Material Takeoffs
 Build faster, cleaner estimates for drywall, concrete, gravel/mulch, and paint work. TradeSketch is designed for contractors, estimators, and serious DIY users who need practical quantity numbers without cloud accounts or subscriptions.
 
 FEATURES:
-- Blueprint-first workflow for walls, openings, and room surfaces
+- Blueprint-first workflow for walls, openings, room surfaces, measured arcs, and sketch curves
 - Trade-specific takeoff modes: drywall, concrete, gravel/mulch, paint
 - Materials and quantities views with adjustable waste and pricing inputs
 - Smart warnings to catch low/high waste and margin assumptions
-- Export options: PDF, CSV, JSON, and shareable report text
+- Export options: estimate PDF/text, blueprint PNG/PDF, CSV, JSON
 - Business identity fields for branded estimate output
 
 BUILT FOR:
