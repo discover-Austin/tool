@@ -153,31 +153,34 @@ import kotlin.math.sin
 private fun ControlClusterShell(
     compact: Boolean,
     modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier,
     horizontalPadding: Dp = if (compact) 10.dp else 12.dp,
     verticalPadding: Dp = if (compact) 10.dp else 12.dp,
     content: @Composable () -> Unit
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(if (compact) 24.dp else 28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.78f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (compact) 10.dp else 14.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                            MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+    Box(modifier = modifier) {
+        Card(
+            modifier = boundsModifier,
+            shape = RoundedCornerShape(if (compact) 24.dp else 28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.78f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (compact) 10.dp else 14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                                MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+                            )
                         )
                     )
-                )
-                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            content()
+                    .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                content()
+            }
         }
     }
 }
@@ -248,8 +251,8 @@ internal fun DualJoystickOverlay(
                 labelFontSize = labelFontSize,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = joystickBottomLift)
-                    .then(leftPadModifier)
+                    .padding(bottom = joystickBottomLift),
+                boundsModifier = leftPadModifier
             )
             CenteredOverlayControls(
                 canUndo = canUndo,
@@ -270,8 +273,8 @@ internal fun DualJoystickOverlay(
                 belowHistoryContent = belowHistoryContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier)
+                    .padding(bottom = centerColumnBottom),
+                boundsModifier = centerControlsModifier
             )
             JoystickPad(
                 insideLabel = "Cursor / Select",
@@ -287,8 +290,8 @@ internal fun DualJoystickOverlay(
                 labelFontSize = labelFontSize,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = joystickBottomLift)
-                    .then(rightPadModifier)
+                    .padding(bottom = joystickBottomLift),
+                boundsModifier = rightPadModifier
             )
         }
     }
@@ -312,66 +315,69 @@ private fun CenteredOverlayControls(
     historyButtonSize: Dp,
     historyIconSize: Dp,
     belowHistoryContent: (@Composable () -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
-    ) {
-        if (controlStateLabel != null) {
-            ControlStateHud(
-                stateLabel = controlStateLabel
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier) {
+        Column(
+            modifier = boundsModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
         ) {
-            SlimIconAction(
-                icon = Icons.Filled.Add,
-                contentDescription = "Zoom in",
-                enabled = canZoomIn,
-                onClick = onZoomIn,
-                buttonSize = zoomButtonSize,
-                iconSize = zoomIconSize
-            )
-            SlimIconAction(
-                icon = Icons.Filled.Remove,
-                contentDescription = "Zoom out",
-                enabled = canZoomOut,
-                onClick = onZoomOut,
-                buttonSize = zoomButtonSize,
-                iconSize = zoomIconSize
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SlimIconAction(
-                icon = Icons.AutoMirrored.Filled.Undo,
-                contentDescription = "Undo",
-                enabled = canUndo,
-                onClick = onUndo,
-                buttonSize = historyButtonSize,
-                iconSize = historyIconSize
-            )
-            SlimIconAction(
-                icon = Icons.AutoMirrored.Filled.Redo,
-                contentDescription = "Redo",
-                enabled = canRedo,
-                onClick = onRedo,
-                buttonSize = historyButtonSize,
-                iconSize = historyIconSize
-            )
-        }
-        belowHistoryContent?.let { content ->
-            Box(
-                modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
-                contentAlignment = Alignment.Center
+            if (controlStateLabel != null) {
+                ControlStateHud(
+                    stateLabel = controlStateLabel
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                content()
+                SlimIconAction(
+                    icon = Icons.Filled.Add,
+                    contentDescription = "Zoom in",
+                    enabled = canZoomIn,
+                    onClick = onZoomIn,
+                    buttonSize = zoomButtonSize,
+                    iconSize = zoomIconSize
+                )
+                SlimIconAction(
+                    icon = Icons.Filled.Remove,
+                    contentDescription = "Zoom out",
+                    enabled = canZoomOut,
+                    onClick = onZoomOut,
+                    buttonSize = zoomButtonSize,
+                    iconSize = zoomIconSize
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SlimIconAction(
+                    icon = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    enabled = canUndo,
+                    onClick = onUndo,
+                    buttonSize = historyButtonSize,
+                    iconSize = historyIconSize
+                )
+                SlimIconAction(
+                    icon = Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = "Redo",
+                    enabled = canRedo,
+                    onClick = onRedo,
+                    buttonSize = historyButtonSize,
+                    iconSize = historyIconSize
+                )
+            }
+            belowHistoryContent?.let { content ->
+                Box(
+                    modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    content()
+                }
             }
         }
     }
@@ -430,10 +436,16 @@ internal fun DrawLineEdgeDialsOverlay(
             compact -> 8.dp
             else -> 10.dp
         }
+        val joystickBottomLift = if (compact) 10.dp else 14.dp
+        val dialJoystickClearance = when {
+            ultraCompact -> 20.dp
+            compact -> 22.dp
+            else -> 24.dp
+        }
         val dialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + leftInset + centerPull
         val rightDialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + centerPull
         val dialBottomPadding = controlsBottomPadding + when {
-            dualJoysticksEnabled -> joystickSize + if (compact) 18.dp else 22.dp
+            dualJoysticksEnabled -> joystickSize + joystickBottomLift + dialJoystickClearance
             compact -> 102.dp
             else -> 110.dp
         }
@@ -457,8 +469,8 @@ internal fun DrawLineEdgeDialsOverlay(
                     .align(Alignment.BottomStart)
                     .padding(start = dialHorizontalInset)
                     .width(dialWidth)
-                    .height(dialTouchHeight)
-                    .then(angleDialModifier)
+                    .height(dialTouchHeight),
+                boundsModifier = angleDialModifier
             )
             EdgeTickDial(
                 caption = lengthCaption,
@@ -474,8 +486,8 @@ internal fun DrawLineEdgeDialsOverlay(
                     .align(Alignment.BottomEnd)
                     .padding(end = rightDialHorizontalInset)
                     .width(dialWidth)
-                    .height(dialTouchHeight)
-                    .then(lengthDialModifier)
+                    .height(dialTouchHeight),
+                boundsModifier = lengthDialModifier
             )
         }
     }
@@ -493,7 +505,8 @@ private fun EdgeTickDial(
     trackHeight: Dp,
     labelFontSize: TextUnit,
     captionFontSize: TextUnit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
     var carryPx by remember { mutableFloatStateOf(0f) }
     var dialPhasePx by remember { mutableFloatStateOf(0f) }
@@ -612,7 +625,8 @@ private fun EdgeTickDial(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(visualHeight),
+                .height(visualHeight)
+                .then(boundsModifier),
             shape = RoundedCornerShape(16.dp),
             color = dialShellColor,
             border = BorderStroke(1.dp, dialBorderColor)
@@ -788,8 +802,8 @@ internal fun TouchModeQuickToolsOverlay(
             ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = 8.dp)
-                    .then(leftToolsModifier),
+                    .padding(bottom = 8.dp),
+                boundsModifier = leftToolsModifier,
                 compact = compact,
                 horizontalPadding = if (compact) 8.dp else 10.dp
             ) {
@@ -840,14 +854,14 @@ internal fun TouchModeQuickToolsOverlay(
                 belowHistoryContent = belowHistoryContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier)
+                    .padding(bottom = centerColumnBottom),
+                boundsModifier = centerControlsModifier
             )
             ControlClusterShell(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 8.dp)
-                    .then(rightToolsModifier),
+                    .padding(bottom = 8.dp),
+                boundsModifier = rightToolsModifier,
                 compact = compact,
                 horizontalPadding = if (compact) 8.dp else 10.dp
             ) {
@@ -963,7 +977,8 @@ internal fun JoystickPad(
     padSize: Dp = 126.dp,
     knobSize: Dp = 50.dp,
     labelFontSize: TextUnit = 8.sp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
     val maxRadiusPx = with(LocalDensity.current) { (padSize * 0.317f).toPx() }
     val padSizePx = with(LocalDensity.current) { padSize.toPx() }
@@ -1006,7 +1021,7 @@ internal fun JoystickPad(
     val joystickLabelColor = MaterialTheme.colorScheme.onSurface
     val joystickOuterRingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
     val joystickTapGuideColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-    Surface(
+    Box(
         modifier = modifier
             .size(padSize)
             .pointerInteropFilter { event ->
@@ -1110,75 +1125,81 @@ internal fun JoystickPad(
 
                     else -> activePointerId != MotionEvent.INVALID_POINTER_ID
                 }
-            },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-        border = BorderStroke(1.3.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.82f)),
-        shadowElevation = 10.dp
-    ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val c = Offset(size.width / 2f, size.height / 2f)
-                val axisInset = size.minDimension * 0.08f
-                drawCircle(
-                    color = joystickOuterRingColor,
-                    radius = size.minDimension * 0.46f,
-                    center = c,
-                    style = Stroke(width = 2.5f)
-                )
-                drawCircle(
-                    color = joystickAxisGlow,
-                    radius = size.minDimension * 0.34f,
-                    center = c
-                )
-                drawCircle(
-                    color = joystickTapGuideColor,
-                    radius = size.minDimension * tapZoneScale.coerceIn(0.24f, 0.88f) * 0.5f,
-                    center = c,
-                    style = Stroke(width = 1.5f)
-                )
-                drawLine(
-                    color = joystickAxisLine,
-                    start = Offset(c.x, axisInset),
-                    end = Offset(c.x, size.height - axisInset),
-                    strokeWidth = 1f
-                )
-                drawLine(
-                    color = joystickAxisLine,
-                    start = Offset(axisInset, c.y),
-                    end = Offset(size.width - axisInset, c.y),
-                    strokeWidth = 1f
-                )
             }
-            Surface(
-                modifier = Modifier
-                    .size(knobSize)
-                    .align(Alignment.Center)
-                    .offset {
-                        IntOffset(
-                            x = (vector.x * maxRadiusPx).roundToInt(),
-                            y = (vector.y * maxRadiusPx).roundToInt()
-                        )
-                    },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.98f),
-                border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)),
-                shadowElevation = 10.dp
-            ) {}
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.74f)),
-                shadowElevation = 0.dp,
-                modifier = Modifier.align(Alignment.Center)
-            ) {
-                Text(
-                    text = insideLabel,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                    color = joystickLabelColor,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(boundsModifier),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+            border = BorderStroke(1.3.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.82f)),
+            shadowElevation = 10.dp
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val c = Offset(size.width / 2f, size.height / 2f)
+                    val axisInset = size.minDimension * 0.08f
+                    drawCircle(
+                        color = joystickOuterRingColor,
+                        radius = size.minDimension * 0.46f,
+                        center = c,
+                        style = Stroke(width = 2.5f)
+                    )
+                    drawCircle(
+                        color = joystickAxisGlow,
+                        radius = size.minDimension * 0.34f,
+                        center = c
+                    )
+                    drawCircle(
+                        color = joystickTapGuideColor,
+                        radius = size.minDimension * tapZoneScale.coerceIn(0.24f, 0.88f) * 0.5f,
+                        center = c,
+                        style = Stroke(width = 1.5f)
+                    )
+                    drawLine(
+                        color = joystickAxisLine,
+                        start = Offset(c.x, axisInset),
+                        end = Offset(c.x, size.height - axisInset),
+                        strokeWidth = 1f
+                    )
+                    drawLine(
+                        color = joystickAxisLine,
+                        start = Offset(axisInset, c.y),
+                        end = Offset(size.width - axisInset, c.y),
+                        strokeWidth = 1f
+                    )
+                }
+                Surface(
+                    modifier = Modifier
+                        .size(knobSize)
+                        .align(Alignment.Center)
+                        .offset {
+                            IntOffset(
+                                x = (vector.x * maxRadiusPx).roundToInt(),
+                                y = (vector.y * maxRadiusPx).roundToInt()
+                            )
+                        },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.98f),
+                    border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)),
+                    shadowElevation = 10.dp
+                ) {}
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.74f)),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Text(
+                        text = insideLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
+                        color = joystickLabelColor,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

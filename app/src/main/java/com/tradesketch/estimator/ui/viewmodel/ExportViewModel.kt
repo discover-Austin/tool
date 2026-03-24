@@ -133,10 +133,9 @@ class ExportViewModel @Inject constructor(
             val exportSnapshot = runCatching {
                 withContext(Dispatchers.Default) {
                     val inputs = buildTakeoffInputs(project = project, settings = settings)
-                    val previewBlueprint = project.authoritativeBlueprint()
-                    val selectedTradeBlueprint = projectBlueprintForType(
+                    val resolvedBlueprints = resolveExportBlueprints(
                         project = project,
-                        type = selectedType
+                        selectedType = selectedType
                     )
                     val result = calculateTakeoffUseCase.calculateForType(
                         project = project,
@@ -155,8 +154,9 @@ class ExportViewModel @Inject constructor(
                     )
                     ExportComputation(
                         result = result,
-                        previewBlueprint = previewBlueprint,
-                        selectedTradeHasGeometry = selectedTradeBlueprint.hasGeometry(),
+                        selectedTradeBlueprint = resolvedBlueprints.selectedTradeBlueprint,
+                        projectBlueprint = resolvedBlueprints.projectBlueprint,
+                        selectedTradeHasGeometry = resolvedBlueprints.selectedTradeBlueprint.hasGeometry(),
                         presentTradeLabels = presentTradeSections.map(CombinedExportSection::takeoffTypeLabel),
                         takeoffType = label,
                         estimateId = estimateId,
@@ -201,7 +201,8 @@ class ExportViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     result = exportSnapshot.result,
-                    previewBlueprint = exportSnapshot.previewBlueprint,
+                    selectedTradeBlueprint = exportSnapshot.selectedTradeBlueprint,
+                    projectBlueprint = exportSnapshot.projectBlueprint,
                     selectedTradeHasGeometry = exportSnapshot.selectedTradeHasGeometry,
                     presentTradeLabels = exportSnapshot.presentTradeLabels,
                     takeoffType = exportSnapshot.takeoffType,
@@ -565,36 +566,11 @@ class ExportViewModel @Inject constructor(
     fun jsonContent(): String = _uiState.value.jsonContent
 
     private fun buildEstimateExportPayload(): EstimateExportPayload? {
-        val state = _uiState.value
-        val project = state.project ?: return null
-        val result = state.result ?: return null
-        val selectedType = state.selectedType ?: TakeoffType.DRYWALL
-        val generatedAtMillis = state.generatedAtMillis ?: System.currentTimeMillis()
-        val blueprint = state.previewBlueprint
-            ?: projectBlueprintForType(project = project, type = selectedType)
-        return EstimateExportPayload(
-            project = project,
-            settings = state.settings,
-            result = result,
-            blueprint = blueprint,
-            takeoffTypeLabel = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
-            generatedAtMillis = generatedAtMillis,
-            estimateId = state.estimateId.ifBlank { null }
-        )
+        return buildEstimateExportPayload(_uiState.value)
     }
 
     private fun buildBlueprintExportPayload(): BlueprintExportPayload? {
-        val state = _uiState.value
-        val project = state.project ?: return null
-        val blueprint = state.previewBlueprint
-            ?: project.authoritativeBlueprint()
-        val hasGeometry = blueprint.walls.isNotEmpty() || blueprint.rooms.isNotEmpty() || blueprint.openings.isNotEmpty()
-        if (!hasGeometry) return null
-        return BlueprintExportPayload(
-            project = project,
-            blueprint = blueprint,
-            includeGrid = state.blueprintExportShowGrid
-        )
+        return buildBlueprintExportPayload(_uiState.value)
     }
 
     private fun applyShareResult(result: ExportResult<Intent>): ExportActionResult {
@@ -635,7 +611,8 @@ class ExportViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 result = null,
-                previewBlueprint = null,
+                selectedTradeBlueprint = null,
+                projectBlueprint = null,
                 selectedTradeHasGeometry = false,
                 presentTradeLabels = emptyList(),
                 takeoffType = "",
@@ -694,7 +671,8 @@ class ExportViewModel @Inject constructor(
 
 private data class ExportComputation(
     val result: TakeoffResult,
-    val previewBlueprint: BlueprintDocument,
+    val selectedTradeBlueprint: BlueprintDocument,
+    val projectBlueprint: BlueprintDocument,
     val selectedTradeHasGeometry: Boolean,
     val presentTradeLabels: List<String>,
     val takeoffType: String,
@@ -706,7 +684,7 @@ private data class ExportComputation(
     val jsonContent: String
 )
 
-private data class EstimateExportPayload(
+internal data class EstimateExportPayload(
     val project: Project,
     val settings: Settings,
     val result: TakeoffResult,
@@ -716,7 +694,7 @@ private data class EstimateExportPayload(
     val estimateId: String?
 )
 
-private data class BlueprintExportPayload(
+internal data class BlueprintExportPayload(
     val project: Project,
     val blueprint: BlueprintDocument,
     val includeGrid: Boolean
@@ -741,7 +719,8 @@ data class ExportUiState(
     val estimateId: String = "",
     val generatedAtMillis: Long? = null,
     val result: TakeoffResult? = null,
-    val previewBlueprint: BlueprintDocument? = null,
+    val selectedTradeBlueprint: BlueprintDocument? = null,
+    val projectBlueprint: BlueprintDocument? = null,
     val selectedTradeHasGeometry: Boolean = false,
     val textContent: String = "",
     val summaryContent: String = "",
@@ -755,4 +734,48 @@ data class ExportUiState(
 
 private fun BlueprintDocument.hasGeometry(): Boolean {
     return walls.isNotEmpty() || rooms.isNotEmpty() || openings.isNotEmpty()
+}
+
+internal data class ExportBlueprints(
+    val selectedTradeBlueprint: BlueprintDocument,
+    val projectBlueprint: BlueprintDocument
+)
+
+internal fun resolveExportBlueprints(
+    project: Project,
+    selectedType: TakeoffType
+): ExportBlueprints {
+    return ExportBlueprints(
+        selectedTradeBlueprint = projectBlueprintForType(project = project, type = selectedType),
+        projectBlueprint = project.authoritativeBlueprint()
+    )
+}
+
+internal fun buildEstimateExportPayload(state: ExportUiState): EstimateExportPayload? {
+    val project = state.project ?: return null
+    val result = state.result ?: return null
+    val selectedType = state.selectedType ?: TakeoffType.DRYWALL
+    val generatedAtMillis = state.generatedAtMillis ?: System.currentTimeMillis()
+    val blueprint = state.selectedTradeBlueprint
+        ?: projectBlueprintForType(project = project, type = selectedType)
+    return EstimateExportPayload(
+        project = project,
+        settings = state.settings,
+        result = result,
+        blueprint = blueprint,
+        takeoffTypeLabel = state.takeoffType.ifBlank { state.selectedType?.displayLabel ?: "Estimate" },
+        generatedAtMillis = generatedAtMillis,
+        estimateId = state.estimateId.ifBlank { null }
+    )
+}
+
+internal fun buildBlueprintExportPayload(state: ExportUiState): BlueprintExportPayload? {
+    val project = state.project ?: return null
+    val blueprint = state.projectBlueprint ?: project.authoritativeBlueprint()
+    if (!blueprint.hasGeometry()) return null
+    return BlueprintExportPayload(
+        project = project,
+        blueprint = blueprint,
+        includeGrid = state.blueprintExportShowGrid
+    )
 }

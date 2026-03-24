@@ -1203,7 +1203,7 @@ private fun SavedProjectsPanel(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    projects.take(24).forEach { project ->
+                    projects.forEach { project ->
                         Surface(
                             onClick = { onSelectProject(project.id) },
                             shape = MaterialTheme.shapes.small,

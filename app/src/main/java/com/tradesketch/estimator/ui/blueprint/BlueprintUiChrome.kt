@@ -127,7 +127,6 @@ import com.tradesketch.estimator.domain.model.BlueprintSnapSettings
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.OpeningType
 import com.tradesketch.estimator.domain.model.PointMm
-import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
@@ -150,7 +149,7 @@ import kotlin.math.roundToLong
 import kotlin.math.sin
 
 @Composable
-private fun blueprintHudContainerColor(alpha: Float = 0.99f): Color {
+private fun blueprintHudContainerColor(alpha: Float = 0.95f): Color {
     return MaterialTheme.colorScheme.surface.copy(alpha = alpha)
 }
 
@@ -202,7 +201,7 @@ internal fun BlueprintBottomBar(
     val toggleIconSize = if (compactBottomBar) 13.dp else 15.dp
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(6.dp),
         colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor()),
         border = BorderStroke(1.4.dp, blueprintHudBorderColor()),
         elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
@@ -365,7 +364,7 @@ internal fun SlimIconToggle(
     }
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(4.dp),
         color = container,
         border = BorderStroke(
             width = if (selected) 1.5.dp else 1.2.dp,
@@ -421,7 +420,7 @@ internal fun SlimIconAction(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(4.dp),
         color = container,
         border = BorderStroke(1.3.dp, blueprintHudBorderColor(alpha = if (enabled) 0.96f else 0.5f)),
         shadowElevation = if (enabled) 6.dp else 1.dp,
@@ -459,7 +458,7 @@ internal fun ScopeSelector(
 ) {
     Surface(
         onClick = { onChangeScope(scope.next()) },
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(4.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.88f)),
         shadowElevation = 8.dp,
@@ -508,7 +507,7 @@ internal fun ClearAllButton(
     val iconSize = if (compactButton) 14.dp else 15.dp
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(4.dp),
         color = MaterialTheme.colorScheme.errorContainer,
         border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.82f)),
         shadowElevation = 8.dp,
@@ -546,7 +545,7 @@ internal fun FloorLevelSwitcher(
     val groundPaddingVertical = if (compact) 3.dp else 4.dp
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(4.dp),
         color = blueprintHudContainerColor(),
         border = BorderStroke(1.4.dp, blueprintHudBorderColor()),
         shadowElevation = 12.dp
@@ -590,7 +589,7 @@ internal fun FloorLevelSwitcher(
             }
             Surface(
                 onClick = { onSelect(FLOOR_GROUND_LEVEL) },
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(4.dp),
                 color = MaterialTheme.colorScheme.secondaryContainer,
                 border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
                 shadowElevation = 4.dp
@@ -626,7 +625,7 @@ internal fun GridScaleBadge(
     }
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(4.dp),
         color = blueprintHudContainerColor(),
         border = BorderStroke(1.3.dp, blueprintHudBorderColor()),
         shadowElevation = 10.dp,
@@ -669,7 +668,7 @@ internal fun FloorCompactBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(4.dp),
         color = blueprintHudContainerColor(),
         border = BorderStroke(1.3.dp, blueprintHudBorderColor()),
         shadowElevation = 10.dp,
@@ -728,7 +727,7 @@ internal fun GridScaleEditorPanel(
     if (!expanded) return
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(4.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.3.dp, blueprintHudBorderColor())
     ) {
@@ -813,76 +812,44 @@ internal fun GridScaleEditorPanel(
 @Composable
 internal fun ParamsPanel(
     expanded: Boolean,
-    scope: TakeoffScope,
     activeTool: BlueprintDraftTool,
     params: BlueprintParams,
-    takeoffSession: ProjectTakeoffSession,
     snapThresholdFeet: Double,
     useMetric: Boolean,
     onSelectDrawWallTool: () -> Unit,
-    onParamsChange: (BlueprintParams) -> Unit,
     onWallHeightChange: (Long) -> Unit,
-    onDrywallSheetAreaChange: (Double) -> Unit,
-    onDrywallWasteChange: (Double) -> Unit,
-    onDrywallScrewsChange: (Int) -> Unit,
-    onDrywallMudRateChange: (Double) -> Unit,
-    onDrywallIncludeCeilingsChange: (Boolean) -> Unit,
-    onConcreteDepthFeetChange: (Double) -> Unit,
-    onConcreteWasteChange: (Double) -> Unit,
-    onGravelDepthFeetChange: (Double) -> Unit,
-    onGravelDensityChange: (Double) -> Unit,
-    onGravelWasteChange: (Double) -> Unit,
-    onPaintCoverageChange: (Double) -> Unit,
-    onPaintCoatsChange: (Int) -> Unit,
-    onPaintWasteChange: (Double) -> Unit,
     onSnapThresholdFeetChange: (Double) -> Unit,
-    onScopeExpand: () -> Unit,
-    onDetectRooms: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (!expanded) return
-    var heightFt by remember(params.wallHeightMm) { mutableStateOf("%.2f".format(Millimeters(params.wallHeightMm).toFeet())) }
-    var drywallSheetArea by remember(takeoffSession.drywall.sheetAreaSqFt) { mutableStateOf(takeoffSession.drywall.sheetAreaSqFt.toString()) }
-    var drywallWaste by remember(takeoffSession.drywall.wastePercent) { mutableStateOf(takeoffSession.drywall.wastePercent.toString()) }
-    var drywallScrews by remember(takeoffSession.drywall.screwsPerSheet) { mutableStateOf(takeoffSession.drywall.screwsPerSheet.toString()) }
-    var drywallMudRate by remember(takeoffSession.drywall.mudGallonsPer100SqFt) { mutableStateOf(takeoffSession.drywall.mudGallonsPer100SqFt.toString()) }
-    var concreteDepthInches by remember(takeoffSession.concrete.thicknessFeet) { mutableStateOf("%.2f".format(takeoffSession.concrete.thicknessFeet * 12.0)) }
-    var concreteWaste by remember(takeoffSession.concrete.wastePercent) { mutableStateOf(takeoffSession.concrete.wastePercent.toString()) }
-    var gravelDepthInches by remember(takeoffSession.gravel.depthFeet) { mutableStateOf("%.2f".format(takeoffSession.gravel.depthFeet * 12.0)) }
-    var gravelDensity by remember(takeoffSession.gravel.densityTonsPerYard) { mutableStateOf("%.2f".format(takeoffSession.gravel.densityTonsPerYard)) }
-    var gravelWaste by remember(takeoffSession.gravel.wastePercent) { mutableStateOf(takeoffSession.gravel.wastePercent.toString()) }
-    var paintCoverage by remember(takeoffSession.paint.coverageSqFtPerGallon) { mutableStateOf(takeoffSession.paint.coverageSqFtPerGallon.toString()) }
-    var paintCoats by remember(takeoffSession.paint.coats) { mutableStateOf(takeoffSession.paint.coats.toString()) }
-    var paintWaste by remember(takeoffSession.paint.wastePercent) { mutableStateOf(takeoffSession.paint.wastePercent.toString()) }
-    var selectedGravelType by remember(takeoffSession.gravel.densityTonsPerYard) {
-        mutableStateOf(closestGravelMaterialPreset(takeoffSession.gravel.densityTonsPerYard).label)
+    var heightFt by remember(params.wallHeightMm) {
+        mutableStateOf(
+            if (useMetric) "%.1f".format(Millimeters(params.wallHeightMm).value / 10.0)
+            else "%.2f".format(Millimeters(params.wallHeightMm).toFeet())
+        )
     }
-    Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.4.dp, blueprintHudBorderColor())) {
+    val heightLabel = if (useMetric) "Wall height (cm)" else "Wall height (ft)"
+    Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.4.dp, blueprintHudBorderColor())) {
         Card(
             modifier = Modifier
-                .width(278.dp)
-                .heightIn(max = 548.dp),
-            shape = RoundedCornerShape(14.dp),
+                .width(238.dp)
+                .heightIn(max = 420.dp),
+            shape = RoundedCornerShape(4.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
         ) {
             Column(Modifier.padding(8.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("${scope.shortLabel()} parameters", style = MaterialTheme.typography.titleSmall)
-                }
+                Text("Drawing Settings", style = MaterialTheme.typography.titleSmall)
+
                 val clampedSnapThresholdFeet = snapThresholdFeet.coerceIn(
                     MIN_SNAP_THRESHOLD_FEET,
                     MAX_SNAP_THRESHOLD_FEET
                 )
                 Text(
                     text = if (useMetric) {
-                        "Snap sensitivity: ${"%.1f".format(clampedSnapThresholdFeet * 30.48)} cm"
+                        "Snap: ${"%.1f".format(clampedSnapThresholdFeet * 30.48)} cm"
                     } else {
-                        "Snap sensitivity: ${"%.2f".format(clampedSnapThresholdFeet)} ft"
+                        "Snap: ${"%.2f".format(clampedSnapThresholdFeet)} ft"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -897,242 +864,33 @@ internal fun ParamsPanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
                 Text("Draw mode", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = activeTool == BlueprintDraftTool.DRAW_WALL,
-                        onClick = onSelectDrawWallTool,
-                        label = { Text("Straight walls") }
-                    )
-                    Text(
-                        text = "Box, measured arc, sketch curve, and circle live on the build rail. Draw mode stays straight-wall by default.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                FilterChip(
+                    selected = activeTool == BlueprintDraftTool.DRAW_WALL,
+                    onClick = onSelectDrawWallTool,
+                    label = { Text("Straight walls") }
+                )
 
-                when (scope) {
-                    TakeoffScope.DRYWALL -> {
-                        OutlinedTextField(
-                            value = heightFt,
-                            onValueChange = {
-                                heightFt = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onWallHeightChange(Millimeters.fromFeet(value).value)
-                                }
-                            },
-                            label = { Text("Wall height (ft)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = drywallSheetArea,
-                            onValueChange = {
-                                drywallSheetArea = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onDrywallSheetAreaChange(value)
-                                }
-                            },
-                            label = { Text("Sheet size (sq ft)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = drywallWaste,
-                            onValueChange = {
-                                drywallWaste = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onDrywallWasteChange(value)
-                                    onParamsChange(params.copy(wasteFactorPercent = value.coerceAtLeast(0.0)))
-                                }
-                            },
-                            label = { Text("Waste (%)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = drywallScrews,
-                            onValueChange = {
-                                drywallScrews = it
-                                it.toIntOrNull()?.let { value ->
-                                    onDrywallScrewsChange(value)
-                                }
-                            },
-                            label = { Text("Screws per sheet") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = drywallMudRate,
-                            onValueChange = {
-                                drywallMudRate = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onDrywallMudRateChange(value)
-                                }
-                            },
-                            label = { Text("Mud gallons / 100 sq ft") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        FilterChip(
-                            selected = takeoffSession.drywall.includeCeilings,
-                            onClick = { onDrywallIncludeCeilingsChange(!takeoffSession.drywall.includeCeilings) },
-                            label = { Text(if (takeoffSession.drywall.includeCeilings) "Ceilings included" else "Ceilings excluded") }
-                        )
-                    }
-
-                    TakeoffScope.CONCRETE -> {
-                        OutlinedTextField(
-                            value = concreteDepthInches,
-                            onValueChange = {
-                                concreteDepthInches = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    val depthFeet = (value / 12.0).coerceAtLeast(0.0)
-                                    onConcreteDepthFeetChange(depthFeet)
-                                    onParamsChange(params.copy(concreteThicknessMm = Millimeters.fromFeet(depthFeet).value))
-                                }
-                            },
-                            label = { Text("Depth (in)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = concreteWaste,
-                            onValueChange = {
-                                concreteWaste = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onConcreteWasteChange(value)
-                                }
-                            },
-                            label = { Text("Waste (%)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    TakeoffScope.GRAVEL_MULCH -> {
-                        OutlinedTextField(
-                            value = gravelDepthInches,
-                            onValueChange = {
-                                gravelDepthInches = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    val depthFeet = (value / 12.0).coerceAtLeast(0.0)
-                                    onGravelDepthFeetChange(depthFeet)
-                                    onParamsChange(params.copy(bedDepthMm = Millimeters.fromFeet(depthFeet).value))
-                                }
-                            },
-                            label = { Text("Depth (in)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text("Material type", style = MaterialTheme.typography.labelLarge)
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            gravelMaterialPresets.forEach { preset ->
-                                FilterChip(
-                                    selected = selectedGravelType == preset.label,
-                                    onClick = {
-                                        selectedGravelType = preset.label
-                                        gravelDensity = "%.2f".format(preset.densityTonsPerYard)
-                                        onGravelDensityChange(preset.densityTonsPerYard)
-                                    },
-                                    label = { Text(preset.label) }
-                                )
-                            }
+                OutlinedTextField(
+                    value = heightFt,
+                    onValueChange = {
+                        heightFt = it
+                        it.toDoubleOrNull()?.let { value ->
+                            val mm = if (useMetric) (value * 10.0).toLong() else Millimeters.fromFeet(value).value
+                            onWallHeightChange(mm)
                         }
-                        OutlinedTextField(
-                            value = gravelDensity,
-                            onValueChange = {
-                                gravelDensity = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onGravelDensityChange(value)
-                                    selectedGravelType = closestGravelMaterialPreset(value).label
-                                }
-                            },
-                            label = { Text("Tons per yard³") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = gravelWaste,
-                            onValueChange = {
-                                gravelWaste = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onGravelWasteChange(value)
-                                }
-                            },
-                            label = { Text("Waste (%)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    TakeoffScope.PAINT -> {
-                        OutlinedTextField(
-                            value = heightFt,
-                            onValueChange = {
-                                heightFt = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onWallHeightChange(Millimeters.fromFeet(value).value)
-                                }
-                            },
-                            label = { Text("Wall height (ft)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = paintCoats,
-                            onValueChange = {
-                                paintCoats = it
-                                it.toIntOrNull()?.let { value ->
-                                    onPaintCoatsChange(value)
-                                    onParamsChange(params.copy(paintCoats = value.coerceAtLeast(1)))
-                                }
-                            },
-                            label = { Text("Coats") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = paintCoverage,
-                            onValueChange = {
-                                paintCoverage = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onPaintCoverageChange(value)
-                                }
-                            },
-                            label = { Text("Coverage (sq ft / gal)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = paintWaste,
-                            onValueChange = {
-                                paintWaste = it
-                                it.toDoubleOrNull()?.let { value ->
-                                    onPaintWasteChange(value)
-                                    onParamsChange(params.copy(wasteFactorPercent = value.coerceAtLeast(0.0)))
-                                }
-                            },
-                            label = { Text("Waste (%)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                Text("Room tools", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = false,
-                        onClick = onDetectRooms,
-                        label = { Text("Detect Rooms") }
-                    )
-                    FilterChip(
-                        selected = false,
-                        onClick = onScopeExpand,
-                        label = { Text("Tag Rooms") }
-                    )
-                }
+                    },
+                    label = { Text(heightLabel) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "New walls use this height. Existing walls keep their height.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1178,19 +936,22 @@ internal fun OpeningAddonsPanel(
     }
     val widthHint = when (type) {
         OpeningType.STAIR_UP,
-        OpeningType.STAIR_DOWN -> "3', 4ft, 1200mm"
+        OpeningType.STAIR_DOWN -> "3', 3.5ft, 1000mm"
         else -> "3', 3.5ft, 900mm"
     }
     val heightHint = when (type) {
         OpeningType.STAIR_UP,
-        OpeningType.STAIR_DOWN -> "9', 10ft, 3000mm"
+        OpeningType.STAIR_DOWN -> "10', 12ft, 3000mm"
         else -> "7', 7ft, 2100mm"
     }
     val sillHint = when (type) {
         OpeningType.STAIR_UP,
-        OpeningType.STAIR_DOWN -> "0', 1ft, 300mm"
+        OpeningType.STAIR_DOWN -> "8.5', 9ft, 2600mm"
         else -> "0', 3ft, 900mm"
     }
+    val customWidthMm = DimensionParser.parseLengthToMillimeters(customWidthFeet)?.coerceAtLeast(1L) ?: selectedPreset.widthMm
+    val customHeightMm = DimensionParser.parseLengthToMillimeters(customHeightFeet)?.coerceAtLeast(1L) ?: selectedPreset.heightMm
+    val customSillMm = DimensionParser.parseLengthToMillimeters(customSillFeet)?.coerceAtLeast(0L) ?: selectedPreset.sillMm
     val customPreset = OpeningPreset(
         name = when (type) {
             OpeningType.DOOR -> "Custom Door"
@@ -1199,16 +960,25 @@ internal fun OpeningAddonsPanel(
             OpeningType.STAIR_DOWN -> "Custom Stair Down"
         },
         type = type,
-        widthMm = DimensionParser.parseLengthToMillimeters(customWidthFeet)?.coerceAtLeast(1L) ?: selectedPreset.widthMm,
-        heightMm = DimensionParser.parseLengthToMillimeters(customHeightFeet)?.coerceAtLeast(1L) ?: selectedPreset.heightMm,
-        sillMm = DimensionParser.parseLengthToMillimeters(customSillFeet)?.coerceAtLeast(0L) ?: selectedPreset.sillMm
+        widthMm = customWidthMm,
+        heightMm = customHeightMm,
+        sillMm = customSillMm
     )
-    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.3.dp, blueprintHudBorderColor())) {
+    val customSelected = selectedPreset == customPreset
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(4.dp),
+        color = blueprintHudContainerColor(alpha = 0.92f),
+        border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.56f)),
+        shadowElevation = 14.dp
+    ) {
         Column(
             modifier = Modifier
-                .width(156.dp)
-                .padding(5.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+                .width(150.dp)
+                .heightIn(max = 318.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1219,41 +989,89 @@ internal fun OpeningAddonsPanel(
                 FilterChip(
                     selected = showPresets,
                     onClick = onTogglePresets,
-                    label = { Text("List", style = MaterialTheme.typography.labelSmall) }
+                    label = {
+                        Text(
+                            if (showPresets) "Standard On" else "Standard Off",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 )
             }
-            Text(
-                "Select size. Item stays on pointer until deselected.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedTextField(
-                value = customWidthFeet,
-                onValueChange = onCustomWidthChange,
-                label = { Text("W", style = MaterialTheme.typography.labelSmall) },
-                singleLine = true,
-                placeholder = { Text(widthHint, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = customHeightFeet,
-                onValueChange = onCustomHeightChange,
-                label = { Text(heightLabel.take(1), style = MaterialTheme.typography.labelSmall) },
-                singleLine = true,
-                placeholder = { Text(heightHint, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = customSillFeet,
-                onValueChange = onCustomSillChange,
-                label = { Text(sillLabel.take(1), style = MaterialTheme.typography.labelSmall) },
-                singleLine = true,
-                placeholder = { Text(sillHint, style = MaterialTheme.typography.labelSmall) },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.66f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.42f))
+            ) {
+                Text(
+                    "Preset armed: ${selectedPreset.name}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.56f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.34f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Text("How to place", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                    Text("1. Pick Standard or Custom.", style = MaterialTheme.typography.labelSmall)
+                    Text("2. Move cursor to a wall.", style = MaterialTheme.typography.labelSmall)
+                    Text("3. Tap when preview is not red.", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.52f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.34f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Custom", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = { onSelectPreset(customPreset) }) {
+                            Text("Use Custom", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = customWidthFeet,
+                        onValueChange = onCustomWidthChange,
+                        label = { Text("W", style = MaterialTheme.typography.labelSmall) },
+                        singleLine = true,
+                        placeholder = { Text(widthHint, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customHeightFeet,
+                        onValueChange = onCustomHeightChange,
+                        label = { Text(heightLabel.take(1), style = MaterialTheme.typography.labelSmall) },
+                        singleLine = true,
+                        placeholder = { Text(heightHint, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customSillFeet,
+                        onValueChange = onCustomSillChange,
+                        label = { Text(sillLabel.take(1), style = MaterialTheme.typography.labelSmall) },
+                        singleLine = true,
+                        placeholder = { Text(sillHint, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
             AddonPresetCard(
                 preset = customPreset,
-                selected = false,
+                selected = customSelected,
                 icon = {
                     Icon(
                         imageVector = when (type) {
@@ -1265,9 +1083,16 @@ internal fun OpeningAddonsPanel(
                         contentDescription = null
                     )
                 },
+                subtitle = "Custom dimensions",
                 onClick = { onSelectPreset(customPreset) }
             )
             if (showPresets) {
+                Text(
+                    "Standard presets",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
                 presets.forEach { preset ->
                     AddonPresetCard(
                         preset = preset,
@@ -1283,9 +1108,21 @@ internal fun OpeningAddonsPanel(
                                 contentDescription = null
                             )
                         },
+                        subtitle = when (preset.type) {
+                            OpeningType.DOOR -> "Door opening"
+                            OpeningType.WINDOW -> "Window opening"
+                            OpeningType.STAIR_UP -> "Stair opening up"
+                            OpeningType.STAIR_DOWN -> "Stair opening down"
+                        },
                         onClick = { onSelectPreset(preset) }
                     )
                 }
+            } else {
+                Text(
+                    "Enable Standard to view common presets.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1300,7 +1137,7 @@ internal fun RailHelpPanel(
     if (!expanded) return
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(4.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.3.dp, blueprintHudBorderColor())
     ) {
@@ -1361,7 +1198,7 @@ internal fun RailHelpPanel(
             RailHelpLine(title = "Params", detail = "Opens takeoff and snap settings for the current trade.")
             RailHelpLine(title = "Undo/Redo + Zoom", detail = "Bottom-center cluster above the rail.")
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(4.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
             ) {
                 Text(
@@ -1407,12 +1244,27 @@ internal fun AddonPresetCard(
     preset: OpeningPreset,
     selected: Boolean,
     icon: @Composable () -> Unit,
+    subtitle: String,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier,
+        modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.84f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.74f)
+            }
+        ),
+        border = BorderStroke(
+            width = if (selected) 1.2.dp else 0.9.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.64f)
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)
+            }
+        )
     ) {
         Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
             icon()
@@ -1424,12 +1276,7 @@ internal fun AddonPresetCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    when (preset.type) {
-                        OpeningType.DOOR -> "Door swing arc"
-                        OpeningType.WINDOW -> "Window break"
-                        OpeningType.STAIR_UP -> "Stair opening up"
-                        OpeningType.STAIR_DOWN -> "Stair opening down"
-                    },
+                    subtitle,
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1454,7 +1301,7 @@ internal fun SelectionPanel(
 ) {
     Card(
         modifier = modifier.widthIn(max = 190.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.97f)
         ),
@@ -1658,7 +1505,7 @@ internal fun LiveOverlay(
         .replace("Ground", "Gnd")
     Card(
         modifier = modifier.widthIn(max = if (compactHud) 104.dp else 164.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor()),
         border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 14.dp)
@@ -1757,7 +1604,7 @@ internal fun CursorCoordinateOverlay(
     if (worldPoint == null) return
     val xValue = formatSignedLengthDisplay(mm = worldPoint.x, useMetric = useMetric)
     val yValue = formatSignedLengthDisplay(mm = worldPoint.y, useMetric = useMetric)
-    val cornerRadius = if (compact) 9.dp else 12.dp
+    val cornerRadius = 4.dp
     val horizontalPadding = if (compact) 5.dp else 8.dp
     val verticalPadding = if (compact) 3.dp else 5.dp
     val rowSpacing = if (compact) 4.dp else 7.dp
@@ -1873,7 +1720,7 @@ internal fun ControlStateHud(
     }
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(4.dp),
         color = blueprintHudContainerColor(alpha = 0.95f + (emphasis * 0.05f)),
         border = BorderStroke(
             (1.2f + (0.4f * emphasis)).dp,
@@ -1905,7 +1752,7 @@ internal fun ControlStateChip(
     val textColor = if (active) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         color = container,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(4.dp),
         border = BorderStroke(
             width = if (active) 1.4.dp else 1.2.dp,
             color = if (active) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline.copy(alpha = 0.82f)

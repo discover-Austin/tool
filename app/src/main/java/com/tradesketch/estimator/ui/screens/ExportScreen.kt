@@ -189,7 +189,7 @@ fun ExportScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         val sessionInputMode = uiState.project?.takeoffSession?.inputMode ?: TakeoffInputMode.BLUEPRINT
-        val hasBlueprintGeometry = uiState.previewBlueprint?.hasGeometry() == true
+        val hasBlueprintGeometry = uiState.projectBlueprint?.hasGeometry() == true
         val hasMeasuredQuantities = uiState.result?.hasMeasuredQuantities() == true
         ExportProjectHeaderCard(
             projectName = uiState.project?.name.orEmpty(),
@@ -294,7 +294,8 @@ fun ExportScreen(
                     uiState.selectedType?.displayLabel ?: "Estimate"
                 },
                 result = result,
-                blueprint = uiState.previewBlueprint,
+                blueprint = uiState.selectedTradeBlueprint,
+                useMetric = uiState.settings.useMetric,
                 selectedPage = selectedPreviewPage,
                 onSelectPage = { selectedPreviewPage = it },
                 modifier = Modifier.animateContentSize()
@@ -906,6 +907,7 @@ private fun ProfessionalPreviewDeck(
     takeoffType: String,
     result: TakeoffResult,
     blueprint: BlueprintDocument?,
+    useMetric: Boolean,
     selectedPage: EstimatePreviewPage,
     onSelectPage: (EstimatePreviewPage) -> Unit,
     modifier: Modifier = Modifier
@@ -1022,7 +1024,10 @@ private fun ProfessionalPreviewDeck(
                     when (selectedPage) {
                         EstimatePreviewPage.COST -> CostPreviewPage(result = result)
                         EstimatePreviewPage.SHOPPING_LIST -> ShoppingListPreviewPage(result = result)
-                        EstimatePreviewPage.BLUEPRINT -> BlueprintPreviewPage(blueprint = blueprint)
+                        EstimatePreviewPage.BLUEPRINT -> BlueprintPreviewPage(
+                            blueprint = blueprint,
+                            useMetric = useMetric
+                        )
                         EstimatePreviewPage.COMBINED_NO_BLUEPRINT -> CombinedNoBlueprintPreviewPage(result = result)
                     }
                 }
@@ -1130,7 +1135,10 @@ private fun ShoppingListPreviewPage(result: TakeoffResult) {
 }
 
 @Composable
-private fun BlueprintPreviewPage(blueprint: BlueprintDocument?) {
+private fun BlueprintPreviewPage(
+    blueprint: BlueprintDocument?,
+    useMetric: Boolean
+) {
     PreviewPageTitle(
         title = "Blueprint Sheet",
         subtitle = "Geometry summary and room-by-room footprint."
@@ -1150,8 +1158,8 @@ private fun BlueprintPreviewPage(blueprint: BlueprintDocument?) {
     PreviewMetricRow(label = "Walls", value = blueprint.walls.size.toString())
     PreviewMetricRow(label = "Rooms", value = blueprint.rooms.size.toString())
     PreviewMetricRow(label = "Openings", value = blueprint.openings.size.toString())
-    PreviewMetricRow(label = "Total Wall Length", value = "${Formatters.formatQuantity(totalWallFeet)} ft")
-    PreviewMetricRow(label = "Room Floor Area", value = "${Formatters.formatQuantity(totalRoomArea)} sq ft")
+    PreviewMetricRow(label = "Total Wall Length", value = Formatters.formatLength(totalWallFeet, useMetric))
+    PreviewMetricRow(label = "Room Floor Area", value = Formatters.formatArea(totalRoomArea, useMetric))
 
     if (blueprint.rooms.isNotEmpty()) {
         Spacer(modifier = Modifier.height(4.dp))
@@ -1164,7 +1172,7 @@ private fun BlueprintPreviewPage(blueprint: BlueprintDocument?) {
         roomRows.forEachIndexed { index, room ->
             PreviewMetricRow(
                 label = room.name,
-                value = "${Formatters.formatQuantity(room.areaSqFt())} sq ft",
+                value = Formatters.formatArea(room.areaSqFt(), useMetric),
                 showDivider = index < roomRows.lastIndex
             )
         }

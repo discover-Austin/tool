@@ -1,19 +1,24 @@
 # TradeSketch Estimator - Release Status (Authoritative)
 
-Last updated: March 22, 2026
+Last updated: March 23, 2026
 
 This file is the single source of truth for current release readiness in this repository.
 
 ## Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.16` (`versionCode = 18`)
+- Version: `1.0.18` (`versionCode = 20`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`isMinifyEnabled = true`, `isShrinkResources = true`)
-- Latest verified AAB: `app/build/outputs/bundle/release/app-release.aab`
-- AAB built: `2026-03-22 02:10:04 -04:00`
-- AAB size: `19.99 MB`
-- AAB SHA-256: `C7E97313D3DBD3728F46A5FB376B5562CC1DDCAA24625858EFF78487A87CA637`
+- Current worktree verification:
+  - `:app:testDebugUnitTest` passed on `2026-03-23`
+  - `:core:test` passed on `2026-03-23`
+  - `:app:lint` and `:app:lintRelease` generated reports with `0` lint errors on `2026-03-23`
+  - `:app:bundleRelease` is still pending for the current worktree
+- Last bundle artifact on disk: `app/build/outputs/bundle/release/app-release.aab`
+- Artifact timestamp on disk: `2026-03-23 10:30:54 -04:00`
+- Artifact SHA-256 on disk: `99E20C96F0B527C498BFF88D7F3084F0728A5A9E3511B384484FBAEF0C16270D`
+- Note: the on-disk bundle was not revalidated after the current audit fixes.
 
 ## Truly Complete
 
