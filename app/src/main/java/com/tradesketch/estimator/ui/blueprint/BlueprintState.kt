@@ -149,22 +149,48 @@ internal val windowPresets = listOf(
     openingPreset("6'0\" x 4'0\"", OpeningType.WINDOW, 6.0, 4.0, 3.0)
 )
 
-internal val stairUpPresets = listOf(
-    openingPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_UP, 3.0, 9.0, 0.0),
-    openingPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_UP, 3.5, 10.0, 0.0),
-    openingPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_UP, 4.0, 11.0, 0.0)
+private data class StairPresetDefinition(
+    val name: String,
+    val widthFeet: Double,
+    val runFeet: Double,
+    val riseFeet: Double
 )
 
-internal val stairDownPresets = listOf(
-    openingPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_DOWN, 3.0, 9.0, 0.0),
-    openingPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_DOWN, 3.5, 10.0, 0.0),
-    openingPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_DOWN, 4.0, 11.0, 0.0)
+private val commonStairPresetDefinitions = listOf(
+    StairPresetDefinition("3'0\" x 10'0\" straight", widthFeet = 3.0, runFeet = 10.0, riseFeet = 8.5),
+    StairPresetDefinition("3'6\" x 10'0\" straight", widthFeet = 3.5, runFeet = 10.0, riseFeet = 8.5),
+    StairPresetDefinition("4'0\" x 10'6\" straight", widthFeet = 4.0, runFeet = 10.5, riseFeet = 8.5),
+    StairPresetDefinition("3'0\" x 9'6\" compact", widthFeet = 3.0, runFeet = 9.5, riseFeet = 8.0),
+    StairPresetDefinition("2'8\" x 9'0\" compact", widthFeet = 2.67, runFeet = 9.0, riseFeet = 8.0),
+    StairPresetDefinition("3'6\" x 11'0\" quarter-turn", widthFeet = 3.5, runFeet = 11.0, riseFeet = 8.5),
+    StairPresetDefinition("4'0\" x 12'0\" quarter-turn", widthFeet = 4.0, runFeet = 12.0, riseFeet = 9.0),
+    StairPresetDefinition("4'0\" x 13'0\" U-shaped", widthFeet = 4.0, runFeet = 13.0, riseFeet = 9.0)
 )
+
+internal val stairUpPresets = commonStairPresetDefinitions.map { preset ->
+    openingPreset(
+        name = preset.name,
+        type = OpeningType.STAIR_UP,
+        widthFeet = preset.widthFeet,
+        heightFeet = preset.runFeet,
+        sillFeet = preset.riseFeet
+    )
+}
+
+internal val stairDownPresets = commonStairPresetDefinitions.map { preset ->
+    openingPreset(
+        name = preset.name,
+        type = OpeningType.STAIR_DOWN,
+        widthFeet = preset.widthFeet,
+        heightFeet = preset.runFeet,
+        sillFeet = preset.riseFeet
+    )
+}
 
 internal val doorPreset = doorPresets.first { it.name.startsWith("3'0\" x 7'0\"") }
 internal val windowPreset = windowPresets.first { it.name.startsWith("4'0\" x 4'0\"") }
-internal val stairUpPreset = stairUpPresets.first()
-internal val stairDownPreset = stairDownPresets.first()
+internal val stairUpPreset = stairUpPresets.first { it.name.startsWith("3'0\" x 10'0\"") }
+internal val stairDownPreset = stairDownPresets.first { it.name.startsWith("3'0\" x 10'0\"") }
 
 internal const val BASE_PX_PER_MM = 0.065f
 internal const val MIN_BLUEPRINT_SCALE = 0.2f

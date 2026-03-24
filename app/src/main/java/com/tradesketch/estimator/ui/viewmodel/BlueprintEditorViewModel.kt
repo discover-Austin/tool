@@ -530,7 +530,8 @@ class BlueprintEditorViewModel @Inject constructor(
                 selectedOpeningId = nextSelectedOpeningId,
                 selectedRoomId = nextSelectedRoomId,
                 canUndo = undoStack.isNotEmpty(),
-                canRedo = redoStack.isNotEmpty()
+                canRedo = redoStack.isNotEmpty(),
+                error = null
             )
         }
         persistDocument(updated)
@@ -579,7 +580,12 @@ class BlueprintEditorViewModel @Inject constructor(
         if (opening.widthMm >= wallLengthMm) {
             return "Opening width must be smaller than the wall length."
         }
-        if (opening.heightMm + opening.sillMm > wall.heightMm) {
+        val exceedsWallHeight = if (opening.type == OpeningType.STAIR_UP || opening.type == OpeningType.STAIR_DOWN) {
+            false
+        } else {
+            opening.heightMm + opening.sillMm > wall.heightMm
+        }
+        if (exceedsWallHeight) {
             return "Opening height and sill exceed the wall height."
         }
         val halfT = (opening.widthMm.toDouble() / wallLengthMm.toDouble()) / 2.0

@@ -215,14 +215,14 @@ fun BlueprintScreen(
     var windowSillFeet by remember { mutableStateOf("3.0") }
     var stairUpWidthFeet by remember { mutableStateOf("3.5") }
     var stairUpHeightFeet by remember { mutableStateOf("10.0") }
-    var stairUpSillFeet by remember { mutableStateOf("0.0") }
+    var stairUpSillFeet by remember { mutableStateOf("8.5") }
     var stairDownWidthFeet by remember { mutableStateOf("3.5") }
     var stairDownHeightFeet by remember { mutableStateOf("10.0") }
-    var stairDownSillFeet by remember { mutableStateOf("0.0") }
-    var showDoorPresets by rememberSaveable(projectId) { mutableStateOf(false) }
-    var showWindowPresets by rememberSaveable(projectId) { mutableStateOf(false) }
-    var showStairUpPresets by rememberSaveable(projectId) { mutableStateOf(false) }
-    var showStairDownPresets by rememberSaveable(projectId) { mutableStateOf(false) }
+    var stairDownSillFeet by remember { mutableStateOf("8.5") }
+    var showDoorPresets by rememberSaveable(projectId) { mutableStateOf(true) }
+    var showWindowPresets by rememberSaveable(projectId) { mutableStateOf(true) }
+    var showStairUpPresets by rememberSaveable(projectId) { mutableStateOf(true) }
+    var showStairDownPresets by rememberSaveable(projectId) { mutableStateOf(true) }
     var showRailHelp by rememberSaveable(projectId) { mutableStateOf(false) }
     var showGridScaleEditor by rememberSaveable(projectId) { mutableStateOf(false) }
     var showClearAllConfirm by rememberSaveable(projectId) { mutableStateOf(false) }
@@ -605,7 +605,12 @@ fun BlueprintScreen(
                 ?: base.sillMm
         )
     }
-    val placementThresholdMm = Millimeters.fromFeet(snapSettings.thresholdFeet * 2).value.coerceAtLeast(1L)
+    val placementThresholdMm = maxOf(
+        Millimeters.fromFeet(snapSettings.thresholdFeet * 2).value.coerceAtLeast(1L),
+        (76f / (BASE_PX_PER_MM * scale.coerceIn(MIN_BLUEPRINT_SCALE, MAX_BLUEPRINT_SCALE)))
+            .roundToLong()
+            .coerceAtLeast(Millimeters.fromFeet(1.0).value)
+    )
     val findPlacementCandidate: (PointMm, OpeningPreset) -> OpeningPlacementCandidate? = { worldPoint, preset ->
         (renderedDoc.walls + tutorialGuideWalls)
             .map { wall ->
@@ -613,18 +618,44 @@ fun BlueprintScreen(
                 val distance = BlueprintSnapMath.pointToWallDistanceMm(worldPoint, wall)
                 Triple(wall, t, distance)
             }
-            .minByOrNull { it.third }
-            ?.takeIf { it.third <= placementThresholdMm }
-            ?.let { nearest ->
+            .sortedBy { it.third }
+            .takeWhile { it.third <= placementThresholdMm }
+            .firstNotNullOfOrNull { nearest ->
+                val wall = nearest.first
+                val wallLengthMm = wall.lengthMillimeters().coerceAtLeast(1L)
+                if (preset.widthMm >= wallLengthMm) return@firstNotNullOfOrNull null
+                if (
+                    preset.type != OpeningType.STAIR_UP &&
+                        preset.type != OpeningType.STAIR_DOWN &&
+                        preset.heightMm + preset.sillMm > wall.heightMm
+                ) {
+                    return@firstNotNullOfOrNull null
+                }
+                val halfT = (preset.widthMm.toDouble() / wallLengthMm.toDouble()) / 2.0
+                val minT = 0.02 + halfT
+                val maxT = 0.98 - halfT
+                if (minT >= maxT) return@firstNotNullOfOrNull null
+                val clampedT = nearest.second.coerceIn(minT, maxT)
+                val openingMinT = clampedT - halfT
+                val openingMaxT = clampedT + halfT
+                val overlapsExisting = renderedDoc.openings.any { existing ->
+                    if (existing.wallId != wall.id) return@any false
+                    val existingHalfT = (existing.widthMm.toDouble() / wallLengthMm.toDouble()) / 2.0
+                    val existingMinT = existing.t - existingHalfT
+                    val existingMaxT = existing.t + existingHalfT
+                    openingMinT < existingMaxT && openingMaxT > existingMinT
+                }
+                if (overlapsExisting) return@firstNotNullOfOrNull null
+
                 val swingTag = if (preset.type == OpeningType.DOOR) {
-                    if (pointSideOfWall(worldPoint, nearest.first) >= 0.0) DOOR_SWING_POS_TAG else DOOR_SWING_NEG_TAG
+                    if (pointSideOfWall(worldPoint, wall) >= 0.0) DOOR_SWING_POS_TAG else DOOR_SWING_NEG_TAG
                 } else {
                     null
                 }
                 OpeningPlacementCandidate(
-                    wall = nearest.first,
-                    t = nearest.second,
-                    snappedCenter = BlueprintSnapMath.pointOnWall(nearest.first, nearest.second),
+                    wall = wall,
+                    t = clampedT,
+                    snappedCenter = BlueprintSnapMath.pointOnWall(wall, clampedT),
                     swingTag = swingTag
                 )
             }
@@ -1712,45 +1743,45 @@ fun BlueprintScreen(
     val tutorialEdgeDialBounds = listOfNotNull(
         tutorialAngleDialBounds,
         tutorialLengthDialBounds
-    ).reduceOrNull(::mergeTutorialRects)
+    )
     val tutorialTooltipTopClearance = with(density) {
         ((listOfNotNull(topStartStackBounds, topEndStackBounds).maxOfOrNull { it.bottom } ?: 0f).toDp() + 12.dp)
             .coerceAtLeast(12.dp)
     }
     val tutorialTargetBounds = when (currentTutorialStep?.target) {
-        BlueprintControlTutorialTarget.BOTTOM_RAIL -> bottomRailBounds
-        BlueprintControlTutorialTarget.CANVAS -> tutorialCanvasBounds
-        BlueprintControlTutorialTarget.DETACHED_BUTTON -> detachedButtonBounds
-        BlueprintControlTutorialTarget.BOX_BUTTON -> boxButtonBounds
-        BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON -> measuredArcButtonBounds
-        BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON -> sketchCurveButtonBounds
-        BlueprintControlTutorialTarget.CIRCLE_BUTTON -> circleButtonBounds
-        BlueprintControlTutorialTarget.DOORS_BUTTON -> doorsButtonBounds
-        BlueprintControlTutorialTarget.WINDOWS_BUTTON -> windowsButtonBounds
-        BlueprintControlTutorialTarget.STAIR_UP_BUTTON -> stairUpButtonBounds
-        BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON -> stairDownButtonBounds
-        BlueprintControlTutorialTarget.PARAMS_BUTTON -> paramsButtonBounds
-        BlueprintControlTutorialTarget.HELP_BUTTON -> helpButtonBounds
-        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON -> tutorialTouchSelectBounds
-        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON -> tutorialTouchDrawBounds
-        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> tutorialTouchGrabBounds
-        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON -> tutorialTouchCancelBounds
+        BlueprintControlTutorialTarget.BOTTOM_RAIL -> listOfNotNull(bottomRailBounds)
+        BlueprintControlTutorialTarget.CANVAS -> listOfNotNull(tutorialCanvasBounds)
+        BlueprintControlTutorialTarget.DETACHED_BUTTON -> listOfNotNull(detachedButtonBounds)
+        BlueprintControlTutorialTarget.BOX_BUTTON -> listOfNotNull(boxButtonBounds)
+        BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON -> listOfNotNull(measuredArcButtonBounds)
+        BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON -> listOfNotNull(sketchCurveButtonBounds)
+        BlueprintControlTutorialTarget.CIRCLE_BUTTON -> listOfNotNull(circleButtonBounds)
+        BlueprintControlTutorialTarget.DOORS_BUTTON -> listOfNotNull(doorsButtonBounds)
+        BlueprintControlTutorialTarget.WINDOWS_BUTTON -> listOfNotNull(windowsButtonBounds)
+        BlueprintControlTutorialTarget.STAIR_UP_BUTTON -> listOfNotNull(stairUpButtonBounds)
+        BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON -> listOfNotNull(stairDownButtonBounds)
+        BlueprintControlTutorialTarget.PARAMS_BUTTON -> listOfNotNull(paramsButtonBounds)
+        BlueprintControlTutorialTarget.HELP_BUTTON -> listOfNotNull(helpButtonBounds)
+        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON -> listOfNotNull(tutorialTouchSelectBounds)
+        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON -> listOfNotNull(tutorialTouchDrawBounds)
+        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> listOfNotNull(tutorialTouchGrabBounds)
+        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON -> listOfNotNull(tutorialTouchCancelBounds)
         BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
-        BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD -> tutorialLeftControlsBounds
+        BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD -> listOfNotNull(tutorialLeftControlsBounds)
         BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-        BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS -> tutorialCenterControlsBounds
+        BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS -> listOfNotNull(tutorialCenterControlsBounds)
         BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
-        BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD -> tutorialRightControlsBounds
+        BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD -> listOfNotNull(tutorialRightControlsBounds)
         BlueprintControlTutorialTarget.EDGE_DIALS -> tutorialEdgeDialBounds
-        BlueprintControlTutorialTarget.OPENING_PANEL -> openingPanelBounds
-        BlueprintControlTutorialTarget.PARAMS_PANEL -> paramsPanelBounds
-        BlueprintControlTutorialTarget.RAIL_HELP_PANEL -> railHelpBounds
-        BlueprintControlTutorialTarget.TOP_START_STACK -> topStartStackBounds
-        BlueprintControlTutorialTarget.TOP_END_STACK -> topEndStackBounds
-        BlueprintControlTutorialTarget.FLOOR_SWITCHER -> floorSwitcherBounds
-        BlueprintControlTutorialTarget.GRID_SCALE_BADGE -> gridScaleBadgeBounds
-        BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> clearAllButtonBounds
-        null -> null
+        BlueprintControlTutorialTarget.OPENING_PANEL -> listOfNotNull(openingPanelBounds)
+        BlueprintControlTutorialTarget.PARAMS_PANEL -> listOfNotNull(paramsPanelBounds)
+        BlueprintControlTutorialTarget.RAIL_HELP_PANEL -> listOfNotNull(railHelpBounds)
+        BlueprintControlTutorialTarget.TOP_START_STACK -> listOfNotNull(topStartStackBounds)
+        BlueprintControlTutorialTarget.TOP_END_STACK -> listOfNotNull(topEndStackBounds)
+        BlueprintControlTutorialTarget.FLOOR_SWITCHER -> listOfNotNull(floorSwitcherBounds)
+        BlueprintControlTutorialTarget.GRID_SCALE_BADGE -> listOfNotNull(gridScaleBadgeBounds)
+        BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> listOfNotNull(clearAllButtonBounds)
+        null -> emptyList()
     }
     val tutorialLeftVector = if (tutorialMode) {
         animatedTutorialJoystickVector(currentTutorialStep?.demoLeftVector ?: Offset.Zero)
@@ -2551,10 +2582,8 @@ fun BlueprintScreen(
 
         ParamsPanel(
             expanded = showParams,
-            scope = currentScope,
             activeTool = tool,
             params = doc.params,
-            takeoffSession = takeoffSession,
             snapThresholdFeet = snapSettings.thresholdFeet,
             useMetric = appSettings.useMetric,
             onSelectDrawWallTool = {
@@ -2570,28 +2599,12 @@ fun BlueprintScreen(
                 boxRotationRadians = 0.0
                 tool = BlueprintDraftTool.DRAW_WALL
             },
-            onParamsChange = viewModel::updateParams,
             onWallHeightChange = viewModel::updateWallHeight,
-            onDrywallSheetAreaChange = { value -> viewModel.updateDrywallSessionParams(sheetAreaSqFt = value) },
-            onDrywallWasteChange = { value -> viewModel.updateDrywallSessionParams(wastePercent = value) },
-            onDrywallScrewsChange = { value -> viewModel.updateDrywallSessionParams(screwsPerSheet = value) },
-            onDrywallMudRateChange = { value -> viewModel.updateDrywallSessionParams(mudGallonsPer100SqFt = value) },
-            onDrywallIncludeCeilingsChange = { value -> viewModel.updateDrywallSessionParams(includeCeilings = value) },
-            onConcreteDepthFeetChange = { value -> viewModel.updateConcreteSessionParams(thicknessFeet = value) },
-            onConcreteWasteChange = { value -> viewModel.updateConcreteSessionParams(wastePercent = value) },
-            onGravelDepthFeetChange = { value -> viewModel.updateGravelSessionParams(depthFeet = value) },
-            onGravelDensityChange = { value -> viewModel.updateGravelSessionParams(densityTonsPerYard = value) },
-            onGravelWasteChange = { value -> viewModel.updateGravelSessionParams(wastePercent = value) },
-            onPaintCoverageChange = { value -> viewModel.updatePaintSessionParams(coverageSqFtPerGallon = value) },
-            onPaintCoatsChange = { value -> viewModel.updatePaintSessionParams(coats = value) },
-            onPaintWasteChange = { value -> viewModel.updatePaintSessionParams(wastePercent = value) },
             onSnapThresholdFeetChange = { value ->
                 val clamped = value.coerceIn(MIN_SNAP_THRESHOLD_FEET, MAX_SNAP_THRESHOLD_FEET)
                 snapSettings = snapSettings.copy(thresholdFeet = clamped)
                 settingsViewModel.updateBlueprintSnapDefaults(thresholdFeet = clamped)
             },
-            onScopeExpand = viewModel::expandScopeWithPaint,
-            onDetectRooms = viewModel::ensureRoomDetection,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 12.dp, bottom = panelBottomPadding)
@@ -2632,6 +2645,35 @@ fun BlueprintScreen(
                     }
                 }
             )
+        }
+        uiState.error?.let { error ->
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+                    .navigationBarsPadding()
+                    .zIndex(8f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = viewModel::clearError) {
+                        Text("Dismiss", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
         }
         val clearOpeningPlacementTool = {
             pendingGrabSelection = false
@@ -3138,6 +3180,7 @@ fun BlueprintScreen(
                 },
                 modifier = Modifier
                     .fillMaxSize()
+                    .navigationBarsPadding()
                     .zIndex(6f)
             )
         }
@@ -3260,15 +3303,6 @@ internal fun worldPointToCanvasLocal(
     return Offset(
         x = (canvasSize.width / 2f + pan.x + (worldPoint.x * ppm)).coerceIn(0f, canvasSize.width),
         y = (canvasSize.height / 2f + pan.y - (worldPoint.y * ppm)).coerceIn(0f, canvasSize.height)
-    )
-}
-
-private fun mergeTutorialRects(first: Rect, second: Rect): Rect {
-    return Rect(
-        left = minOf(first.left, second.left),
-        top = minOf(first.top, second.top),
-        right = maxOf(first.right, second.right),
-        bottom = maxOf(first.bottom, second.bottom)
     )
 }
 

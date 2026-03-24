@@ -40,6 +40,23 @@ class FormattersTest {
     }
 
     @Test
+    fun `formatArea can format square meters for metric displays`() {
+        assertEquals("9.29 sq m", Formatters.formatArea(100.0, useMetric = true))
+    }
+
+    @Test
+    fun `formatLength can format metric and imperial displays`() {
+        assertEquals("10 ft", Formatters.formatLength(10.0, useMetric = false))
+        assertEquals("3.05 m", Formatters.formatLength(Millimeters.fromFeet(10.0), useMetric = true))
+    }
+
+    @Test
+    fun `formatSnapDistance uses centimeters in metric mode`() {
+        assertEquals("22.86 cm", Formatters.formatSnapDistance(0.75, useMetric = true))
+        assertEquals("0.75 ft", Formatters.formatSnapDistance(0.75, useMetric = false))
+    }
+
+    @Test
     fun `formatPercent formats percentage`() {
         assertEquals("10%", Formatters.formatPercent(10.0))
         assertEquals("5.5%", Formatters.formatPercent(5.5))

@@ -47,6 +47,7 @@ import com.tradesketch.estimator.ui.components.appCardElevation
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
+import com.tradesketch.estimator.utils.Formatters
 
 @Composable
 fun SettingsScreen(
@@ -133,7 +134,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Use Metric Units", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            text = "Controls dimension labels throughout the app.",
+                            text = "Controls blueprint dimensions, geometry previews, and review readouts. Quantity inputs stay in estimating units.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -199,6 +200,7 @@ fun SettingsScreen(
         item {
             BlueprintControlsCard(
                 settings = uiState.settings,
+                useMetric = uiState.settings.useMetric,
                 onUpdateBlueprintSnapDefaults = viewModel::updateBlueprintSnapDefaults,
                 onUpdateBlueprintControlDefaults = viewModel::updateBlueprintControlDefaults,
                 onHapticTap = haptics::tap
@@ -208,7 +210,7 @@ fun SettingsScreen(
         item {
             TitledSectionCard(
                 title = "Quantity Inputs",
-                subtitle = "Starting assumptions used when creating estimates."
+                subtitle = "Starting assumptions used when creating estimates. These stay in estimating units."
             ) {
                 BufferedDoubleField(
                     label = "Waste %",
@@ -456,6 +458,7 @@ fun SettingsScreen(
 @Composable
 internal fun BlueprintControlsCard(
     settings: Settings,
+    useMetric: Boolean,
     onUpdateBlueprintSnapDefaults: (
         Boolean?,
         Boolean?,
@@ -566,7 +569,7 @@ internal fun BlueprintControlsCard(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Snap sensitivity: ${"%.2f".format(settings.blueprintSnapThresholdFeet)} ft",
+            text = "Snap sensitivity: ${Formatters.formatSnapDistance(settings.blueprintSnapThresholdFeet, useMetric)}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

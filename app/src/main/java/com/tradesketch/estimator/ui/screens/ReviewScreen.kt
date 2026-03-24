@@ -34,6 +34,7 @@ import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
 import com.tradesketch.estimator.ui.viewmodel.calculateForType
 import com.tradesketch.estimator.ui.viewmodel.projectBlueprintForType
 import com.tradesketch.estimator.ui.viewmodel.toTakeoffType
+import com.tradesketch.estimator.utils.Formatters
 
 @Composable
 fun ReviewScreen(
@@ -60,6 +61,7 @@ fun ReviewScreen(
     }
 
     val settings = uiState.settings
+    val useMetric = settings.useMetric
     val calculator = remember { CalculateTakeoffUseCase() }
     val reviewType = remember(project.takeoffSession.selectedScope) {
         project.takeoffSession.selectedScope.toTakeoffType()
@@ -117,8 +119,8 @@ fun ReviewScreen(
             ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${room.name} (${room.id})", fontWeight = FontWeight.SemiBold)
-                    Text("Area: ${"%.1f".format(room.areaSqFt())} sq ft")
-                    Text("Perimeter: ${"%.1f".format(room.perimeterFeet())} ft")
+                    Text("Area: ${Formatters.formatArea(room.areaSqFt(), useMetric)}")
+                    Text("Perimeter: ${Formatters.formatLength(room.perimeterFeet(), useMetric)}")
                     if (room.tags.isNotEmpty()) {
                         Text("Tags: ${room.tags.joinToString()}")
                     }
@@ -141,9 +143,9 @@ fun ReviewScreen(
             ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Wall ${wall.id}", fontWeight = FontWeight.SemiBold)
-                    Text("Length: ${"%.2f".format(Millimeters(wall.lengthMillimeters()).toFeet())} ft")
-                    Text("Height: ${"%.2f".format(Millimeters(wall.heightMm).toFeet())} ft")
-                    Text("Area: ${"%.1f".format((wallArea - openingArea).coerceAtLeast(0.0))} sq ft (net)")
+                    Text("Length: ${Formatters.formatLength(Millimeters(wall.lengthMillimeters()), useMetric)}")
+                    Text("Height: ${Formatters.formatLength(Millimeters(wall.heightMm), useMetric)}")
+                    Text("Area: ${Formatters.formatArea((wallArea - openingArea).coerceAtLeast(0.0), useMetric)} (net)")
                 }
             }
         }
@@ -160,7 +162,10 @@ fun ReviewScreen(
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${opening.type.name} ${opening.id}", fontWeight = FontWeight.SemiBold)
                     Text("Wall ID: ${opening.wallId} @ t=${"%.2f".format(opening.t)}")
-                    Text("Size: ${"%.2f".format(Millimeters(opening.widthMm).toFeet())}ft × ${"%.2f".format(Millimeters(opening.heightMm).toFeet())}ft")
+                    Text(
+                        "Size: ${Formatters.formatLength(Millimeters(opening.widthMm), useMetric)} × " +
+                            Formatters.formatLength(Millimeters(opening.heightMm), useMetric)
+                    )
                 }
             }
         }
