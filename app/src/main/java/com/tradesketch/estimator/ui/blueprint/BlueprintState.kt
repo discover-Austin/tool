@@ -48,7 +48,14 @@ internal data class WallLengthLabelSpec(
     val end: Offset,
     val lengthMm: Long,
     val color: Color,
-    val prefix: String? = null
+    val prefix: String? = null,
+    val repeatCount: Int = 1,
+    val groupedMarkers: List<WallLengthGroupMarkerSpec> = emptyList()
+)
+
+internal data class WallLengthGroupMarkerSpec(
+    val start: Offset,
+    val end: Offset
 )
 
 internal data class RightAngleHint(
@@ -217,6 +224,8 @@ internal const val WALL_LENGTH_LABEL_TEXT_SP = 11.2f
 internal const val WALL_LENGTH_LABEL_OFFSET_PX = 13f
 internal const val PARALLEL_MATCH_ANGLE_TOLERANCE_DEG = 2.0
 internal const val PARALLEL_MATCH_LENGTH_TOLERANCE_MM = 35L
+internal const val GROUPED_LENGTH_TOLERANCE_MM = 35L
+internal const val GROUPED_LENGTH_MIN_SEPARATION_MM = 180L
 internal const val RIGHT_ANGLE_MARKER_SIZE_PX = 11f
 internal const val RIGHT_ANGLE_MARKER_TOLERANCE_DEG = 1.0
 internal const val RIGHT_ANGLE_LABEL_TEXT_SP = 6.8f
@@ -227,6 +236,8 @@ internal const val JOYSTICK_FRAME_RATE_BASE = 60f
 internal const val JOYSTICK_CURSOR_SPEED_PX_PER_SEC = 5.2f * JOYSTICK_FRAME_RATE_BASE
 internal const val JOYSTICK_PAN_SPEED_PX_PER_SEC = 7f * JOYSTICK_FRAME_RATE_BASE
 internal const val JOYSTICK_PAN_BOOST_PX_PER_SEC = 10f * JOYSTICK_FRAME_RATE_BASE
+internal const val JOYSTICK_FINE_CURSOR_SPEED_MULTIPLIER = 0.28f
+internal const val JOYSTICK_FINE_PAN_SPEED_MULTIPLIER = 0.24f
 internal const val JOYSTICK_MIN_FRAME_DELTA_SEC = 1f / 120f
 internal const val JOYSTICK_MAX_FRAME_DELTA_SEC = 1f / 30f
 internal const val JOYSTICK_CURSOR_RESPONSE_EXPONENT = 1.35f

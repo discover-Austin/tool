@@ -11,6 +11,19 @@ internal enum class BlueprintRoomFillPattern {
     GRAVEL_PEBBLES
 }
 
+internal enum class BlueprintWallAccentPattern {
+    DRYWALL_PARALLEL,
+    CONCRETE_TICKS,
+    GRAVEL_PEBBLES,
+    PAINT_DASH
+}
+
+internal data class BlueprintWallDisplayStyle(
+    val baseColor: Color,
+    val accentColor: Color,
+    val pattern: BlueprintWallAccentPattern?
+)
+
 internal data class BlueprintRoomFillStyle(
     val fillColor: Color,
     val outlineColor: Color,
@@ -20,18 +33,41 @@ internal data class BlueprintRoomFillStyle(
 
 internal fun WallSegment.visualTradeScope(): TakeoffScope? = tags.takeoffScopeOrNull()
 
+internal fun resolveWallDisplayStyle(
+    wall: WallSegment,
+    activeScope: TakeoffScope
+): BlueprintWallDisplayStyle {
+    val wallScope = wall.visualTradeScope()
+    val resolvedScope = wallScope ?: activeScope
+    val isActive = wallScope == null || wallScope == activeScope
+    return when (resolvedScope) {
+        TakeoffScope.DRYWALL -> BlueprintWallDisplayStyle(
+            baseColor = (if (isActive) Color(0xFF9FDEFF) else Color(0xFF9FDEFF)).copy(alpha = if (isActive) 1f else 0.7f),
+            accentColor = Color(0xFFDDF6FF).copy(alpha = if (isActive) 0.82f else 0.54f),
+            pattern = BlueprintWallAccentPattern.DRYWALL_PARALLEL
+        )
+        TakeoffScope.CONCRETE -> BlueprintWallDisplayStyle(
+            baseColor = (if (isActive) Color(0xFFFF9A82) else Color(0xFFFF9A82)).copy(alpha = if (isActive) 1f else 0.72f),
+            accentColor = Color(0xFFFFDFC8).copy(alpha = if (isActive) 0.8f else 0.52f),
+            pattern = BlueprintWallAccentPattern.CONCRETE_TICKS
+        )
+        TakeoffScope.GRAVEL_MULCH -> BlueprintWallDisplayStyle(
+            baseColor = (if (isActive) Color(0xFFFFD54D) else Color(0xFFFFD54D)).copy(alpha = if (isActive) 1f else 0.72f),
+            accentColor = Color(0xFFFFF0B3).copy(alpha = if (isActive) 0.86f else 0.56f),
+            pattern = BlueprintWallAccentPattern.GRAVEL_PEBBLES
+        )
+        TakeoffScope.PAINT -> BlueprintWallDisplayStyle(
+            baseColor = (if (isActive) Color(0xFF7FF0B0) else Color(0xFF7FF0B0)).copy(alpha = if (isActive) 1f else 0.72f),
+            accentColor = Color(0xFFD9FFE7).copy(alpha = if (isActive) 0.8f else 0.5f),
+            pattern = BlueprintWallAccentPattern.PAINT_DASH
+        )
+    }
+}
+
 internal fun resolveWallDisplayColor(
     wall: WallSegment,
     activeScope: TakeoffScope
-): Color {
-    val wallScope = wall.visualTradeScope()
-    val base = (wallScope ?: activeScope).wallColor()
-    return if (wallScope == null || wallScope == activeScope) {
-        base
-    } else {
-        base.copy(alpha = 0.7f)
-    }
-}
+): Color = resolveWallDisplayStyle(wall, activeScope).baseColor
 
 internal fun resolveVisibleRoomTradeScope(
     room: Room,

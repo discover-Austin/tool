@@ -566,7 +566,8 @@ class BlueprintEditorViewModel @Inject constructor(
     ): List<Room> {
         return detectRoomsByFloorAndScope(
             walls = walls,
-            existingRooms = existingRooms
+            existingRooms = existingRooms,
+            preferredScope = _uiState.value.project?.takeoffSession?.selectedScope
         )
     }
 
