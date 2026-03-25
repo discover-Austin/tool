@@ -610,10 +610,18 @@ internal fun BlueprintCanvas(
         ).toMutableList()
         document.walls.forEach { wall ->
             val isSelected = wall.id == selectedWallId
+            val wallStyle = if (isSelected) {
+                null
+            } else {
+                resolveWallDisplayStyle(
+                    wall = wall,
+                    activeScope = scope
+                )
+            }
             val color = if (isSelected) {
                 GEOMETRY_SELECTION_COLOR
             } else {
-                resolveWallDisplayColor(
+                wallStyle?.baseColor ?: resolveWallDisplayColor(
                     wall = wall,
                     activeScope = scope
                 )
@@ -631,7 +639,9 @@ internal fun BlueprintCanvas(
                 strokeWidth = strokeWidth,
                 roundedCaps = isCurveSegment,
                 selected = isSelected,
-                pulse = selectionPulse
+                pulse = selectionPulse,
+                accentPattern = wallStyle?.pattern,
+                accentColor = wallStyle?.accentColor ?: Color.Transparent
             )
             if (isCircleSegment) {
                 drawCircleWallAccent(
@@ -858,7 +868,9 @@ internal fun BlueprintCanvas(
                 lengthMm = label.lengthMm,
                 useMetric = useMetric,
                 color = label.color,
-                prefix = label.prefix
+                prefix = label.prefix,
+                repeatCount = label.repeatCount,
+                groupedMarkers = label.groupedMarkers
             )
         }
         val pointer = if (virtualPointerScreenPoint != null) {
@@ -1170,7 +1182,9 @@ internal fun DrawScope.drawStyledWallSegment(
     strokeWidth: Float,
     roundedCaps: Boolean,
     selected: Boolean,
-    pulse: Float
+    pulse: Float,
+    accentPattern: BlueprintWallAccentPattern? = null,
+    accentColor: Color = Color.Transparent
 ) {
     val dx = end.x - start.x
     val dy = end.y - start.y
@@ -1225,6 +1239,108 @@ internal fun DrawScope.drawStyledWallSegment(
             strokeWidth = strokeWidth + 5.2f + (pulseBoost * 0.6f),
             cap = strokeCap
         )
+    }
+    if (!selected && accentPattern != null && accentColor.alpha > 0f) {
+        drawTradeWallAccent(
+            start = start,
+            end = end,
+            nx = nx,
+            ny = ny,
+            magnitude = magnitude,
+            color = accentColor,
+            pattern = accentPattern,
+            strokeCap = strokeCap
+        )
+    }
+}
+
+private fun DrawScope.drawTradeWallAccent(
+    start: Offset,
+    end: Offset,
+    nx: Float,
+    ny: Float,
+    magnitude: Float,
+    color: Color,
+    pattern: BlueprintWallAccentPattern,
+    strokeCap: StrokeCap
+) {
+    val ux = (end.x - start.x) / magnitude
+    val uy = (end.y - start.y) / magnitude
+    when (pattern) {
+        BlueprintWallAccentPattern.DRYWALL_PARALLEL -> {
+            val offset = Offset(-nx * 2.4f, -ny * 2.4f)
+            drawLine(
+                color = color,
+                start = start + offset,
+                end = end + offset,
+                strokeWidth = 1.1f,
+                cap = strokeCap
+            )
+        }
+
+        BlueprintWallAccentPattern.CONCRETE_TICKS -> {
+            val spacing = 26f
+            val tickHalf = 2.8f
+            val usableLength = (magnitude - (spacing * 0.8f)).coerceAtLeast(0f)
+            val tickCount = (usableLength / spacing).toInt().coerceAtLeast(1)
+            repeat(tickCount) { index ->
+                val t = (index + 1f) / (tickCount + 1f)
+                val anchor = Offset(
+                    x = start.x + (ux * magnitude * t),
+                    y = start.y + (uy * magnitude * t)
+                )
+                val tickOffset = Offset(nx * tickHalf, ny * tickHalf)
+                drawLine(
+                    color = color,
+                    start = anchor - tickOffset,
+                    end = anchor + tickOffset,
+                    strokeWidth = 1.35f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        BlueprintWallAccentPattern.GRAVEL_PEBBLES -> {
+            val spacing = 20f
+            val pebbleCount = ((magnitude - 10f) / spacing).toInt().coerceAtLeast(1)
+            repeat(pebbleCount) { index ->
+                val t = (index + 1f) / (pebbleCount + 1f)
+                val lateral = if (index % 2 == 0) 2.2f else -2.2f
+                val center = Offset(
+                    x = start.x + (ux * magnitude * t) + (nx * lateral),
+                    y = start.y + (uy * magnitude * t) + (ny * lateral)
+                )
+                drawCircle(
+                    color = color,
+                    radius = if (index % 3 == 0) 1.55f else 1.25f,
+                    center = center
+                )
+            }
+        }
+
+        BlueprintWallAccentPattern.PAINT_DASH -> {
+            val dashLength = 8f
+            val gapLength = 7f
+            var distance = 8f
+            while (distance < magnitude - 6f) {
+                val dashStart = Offset(
+                    x = start.x + (ux * distance) + (nx * 1.8f),
+                    y = start.y + (uy * distance) + (ny * 1.8f)
+                )
+                val dashEnd = Offset(
+                    x = start.x + (ux * (distance + dashLength).coerceAtMost(magnitude - 4f)) + (nx * 1.8f),
+                    y = start.y + (uy * (distance + dashLength).coerceAtMost(magnitude - 4f)) + (ny * 1.8f)
+                )
+                drawLine(
+                    color = color,
+                    start = dashStart,
+                    end = dashEnd,
+                    strokeWidth = 1.2f,
+                    cap = StrokeCap.Round
+                )
+                distance += dashLength + gapLength
+            }
+        }
     }
 }
 
@@ -2898,7 +3014,9 @@ internal fun DrawScope.drawWallLengthLabel(
     lengthMm: Long,
     useMetric: Boolean,
     color: Color,
-    prefix: String? = null
+    prefix: String? = null,
+    repeatCount: Int = 1,
+    groupedMarkers: List<WallLengthGroupMarkerSpec> = emptyList()
 ) {
     val dx = end.x - start.x
     val dy = end.y - start.y
@@ -2917,11 +3035,23 @@ internal fun DrawScope.drawWallLengthLabel(
     )
 
     val text = buildString {
+        if (repeatCount > 1) {
+            append(repeatCount)
+            append('x')
+            append(' ')
+        }
         prefix?.takeIf { it.isNotBlank() }?.let {
             append(it)
             append(' ')
         }
         append(formatLengthDisplay(mm = lengthMm, useMetric = useMetric))
+    }
+    groupedMarkers.forEach { marker ->
+        drawEqualLengthMarker(
+            start = marker.start,
+            end = marker.end,
+            color = color
+        )
     }
     val textSizePx = WALL_LENGTH_LABEL_TEXT_SP * density
     drawContext.canvas.nativeCanvas.apply {
@@ -2976,6 +3106,42 @@ internal fun DrawScope.drawWallLengthLabel(
     }
 }
 
+private fun DrawScope.drawEqualLengthMarker(
+    start: Offset,
+    end: Offset,
+    color: Color
+) {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val magnitude = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val ux = dx / magnitude
+    val uy = dy / magnitude
+    val nx = -dy / magnitude
+    val ny = dx / magnitude
+    val midpoint = Offset(
+        x = (start.x + end.x) / 2f,
+        y = (start.y + end.y) / 2f
+    )
+    val firstCenter = Offset(
+        x = midpoint.x - (ux * 5f),
+        y = midpoint.y - (uy * 5f)
+    )
+    val secondCenter = Offset(
+        x = midpoint.x + (ux * 5f),
+        y = midpoint.y + (uy * 5f)
+    )
+    listOf(firstCenter, secondCenter).forEach { center ->
+        val tickOffset = Offset(nx * 5.2f, ny * 5.2f)
+        drawLine(
+            color = color.copy(alpha = 0.92f),
+            start = center - tickOffset,
+            end = center + tickOffset,
+            strokeWidth = 1.45f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
 internal fun collectCommittedWallLengthLabels(
     document: BlueprintDocument,
     selectedWallId: String?,
@@ -2986,10 +3152,30 @@ internal fun collectCommittedWallLengthLabels(
         .mapNotNull { wall -> wall.curveGroupTag()?.let { groupTag -> groupTag to wall } }
         .groupBy(keySelector = { it.first }, valueTransform = { it.second })
     val emittedCurveGroups = mutableSetOf<String>()
+    val emittedStraightWalls = mutableSetOf<String>()
     return buildList {
         document.walls.forEach { wall ->
             val curveGroupTag = wall.curveGroupTag()
             if (curveGroupTag == null) {
+                if (!emittedStraightWalls.add(wall.id)) return@forEach
+                val groupedParallelWalls = document.walls.filter { candidate ->
+                    candidate.curveGroupTag() == null &&
+                        candidate.id != wall.id &&
+                        candidate.id !in emittedStraightWalls &&
+                        wallsShareGroupedLengthLabel(anchor = wall, candidate = candidate)
+                }
+                if (groupedParallelWalls.isNotEmpty()) {
+                    val groupedWalls = listOf(wall) + groupedParallelWalls
+                    emittedStraightWalls += groupedParallelWalls.map(WallSegment::id)
+                    add(
+                        buildGroupedStraightWallLengthLabelSpec(
+                            walls = groupedWalls,
+                            selectedWallId = selectedWallId,
+                            worldToScreen = worldToScreen
+                        )
+                    )
+                    return@forEach
+                }
                 add(
                     WallLengthLabelSpec(
                         start = worldToScreen(wall.start),
@@ -3033,6 +3219,32 @@ internal fun collectCommittedWallLengthLabels(
             }
         }
     }
+}
+
+private fun buildGroupedStraightWallLengthLabelSpec(
+    walls: List<WallSegment>,
+    selectedWallId: String?,
+    worldToScreen: (PointMm) -> Offset
+): WallLengthLabelSpec {
+    val representative = walls.firstOrNull { it.id == selectedWallId }
+        ?: walls.first()
+    return WallLengthLabelSpec(
+        start = worldToScreen(representative.start),
+        end = worldToScreen(representative.end),
+        lengthMm = representative.lengthMillimeters(),
+        color = if (walls.any { it.id == selectedWallId }) {
+            WALL_LABEL_ACTIVE_COLOR
+        } else {
+            WALL_LABEL_NEUTRAL_COLOR
+        },
+        repeatCount = walls.size,
+        groupedMarkers = walls.map { wall ->
+            WallLengthGroupMarkerSpec(
+                start = worldToScreen(wall.start),
+                end = worldToScreen(wall.end)
+            )
+        }
+    )
 }
 
 internal fun buildArcGroupLengthLabelSpec(
@@ -3080,6 +3292,46 @@ internal fun orientCurveChordTowardBend(
     } else {
         start to end
     }
+}
+
+private fun wallsShareGroupedLengthLabel(
+    anchor: WallSegment,
+    candidate: WallSegment
+): Boolean {
+    if (anchor.id == candidate.id) return false
+    if (wallsShareEndpoint(anchor, candidate)) return false
+    if (abs(anchor.lengthMillimeters() - candidate.lengthMillimeters()) > GROUPED_LENGTH_TOLERANCE_MM) {
+        return false
+    }
+    if (
+        parallelAngleDeltaDegrees(
+            anchor.angleDegrees(),
+            candidate.angleDegrees()
+        ) > PARALLEL_MATCH_ANGLE_TOLERANCE_DEG
+    ) {
+        return false
+    }
+    return wallSeparationMillimeters(anchor, candidate) >= GROUPED_LENGTH_MIN_SEPARATION_MM
+}
+
+private fun wallsShareEndpoint(
+    first: WallSegment,
+    second: WallSegment
+): Boolean {
+    return first.start == second.start ||
+        first.start == second.end ||
+        first.end == second.start ||
+        first.end == second.end
+}
+
+private fun wallSeparationMillimeters(
+    anchor: WallSegment,
+    candidate: WallSegment
+): Long {
+    val candidateMidpoint = candidate.midpoint()
+    val projectionT = BlueprintSnapMath.projectToWallT(candidateMidpoint, anchor)
+    val projected = BlueprintSnapMath.pointOnWall(anchor, projectionT)
+    return BlueprintSnapMath.distanceMillimeters(candidateMidpoint, projected)
 }
 
 internal fun BlueprintOpening.doorSwingTag(): String? = when {

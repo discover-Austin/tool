@@ -249,6 +249,8 @@ fun BlueprintScreen(
     var clearAllButtonBounds by remember { mutableStateOf<Rect?>(null) }
     var topStartStackBounds by remember { mutableStateOf<Rect?>(null) }
     var topEndStackBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTopStartHeaderBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialTopEndHeaderBounds by remember { mutableStateOf<Rect?>(null) }
     var gridScaleEditorBounds by remember { mutableStateOf<Rect?>(null) }
     var railHelpBounds by remember { mutableStateOf<Rect?>(null) }
     var wallRotateButtonBounds by remember { mutableStateOf<Rect?>(null) }
@@ -280,6 +282,8 @@ fun BlueprintScreen(
     }
     var rightJoystickVector by remember { mutableStateOf(Offset.Zero) }
     var leftJoystickVector by remember { mutableStateOf(Offset.Zero) }
+    var fineRightJoystickVector by remember { mutableStateOf(Offset.Zero) }
+    var fineLeftJoystickVector by remember { mutableStateOf(Offset.Zero) }
     var rightJoystickPressed by remember { mutableStateOf(false) }
     var joystickCursorLocal by remember { mutableStateOf<Offset?>(null) }
     var edgeDialActiveTouchCount by remember { mutableIntStateOf(0) }
@@ -1481,6 +1485,8 @@ fun BlueprintScreen(
         if (!dualJoysticksEnabled) {
             rightJoystickVector = Offset.Zero
             leftJoystickVector = Offset.Zero
+            fineRightJoystickVector = Offset.Zero
+            fineLeftJoystickVector = Offset.Zero
             rightJoystickPressed = false
             joystickCursorLocal = null
             return@LaunchedEffect
@@ -1498,7 +1504,9 @@ fun BlueprintScreen(
     }
     val joystickFrameLoopActive = dualJoysticksEnabled && (
         leftJoystickVector != Offset.Zero ||
+            fineLeftJoystickVector != Offset.Zero ||
             rightJoystickVector != Offset.Zero ||
+            fineRightJoystickVector != Offset.Zero ||
             movingWallPreview != null
         )
     LaunchedEffect(dualJoysticksEnabled, joystickFrameLoopActive) {
@@ -1508,7 +1516,9 @@ fun BlueprintScreen(
             dualJoysticksEnabled &&
                 (
                     leftJoystickVector != Offset.Zero ||
+                        fineLeftJoystickVector != Offset.Zero ||
                         rightJoystickVector != Offset.Zero ||
+                        fineRightJoystickVector != Offset.Zero ||
                         movingWallPreview != null
                     )
         ) {
@@ -1531,11 +1541,19 @@ fun BlueprintScreen(
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_CURSOR_RESPONSE_EXPONENT
                 )
-                if (rightInput != Offset.Zero) {
-                    val cursorStep = JOYSTICK_CURSOR_SPEED_PX_PER_SEC * joystickSensitivity * frameDeltaSec
+                val fineRightInput = applyJoystickDeadzone(
+                    input = fineRightJoystickVector,
+                    deadzone = joystickDeadzone,
+                    responseExponent = JOYSTICK_CURSOR_RESPONSE_EXPONENT
+                )
+                if (rightInput != Offset.Zero || fineRightInput != Offset.Zero) {
+                    val coarseCursorStep =
+                        JOYSTICK_CURSOR_SPEED_PX_PER_SEC * joystickSensitivity * frameDeltaSec
+                    val fineCursorStep =
+                        coarseCursorStep * JOYSTICK_FINE_CURSOR_SPEED_MULTIPLIER
                     val delta = Offset(
-                        x = rightInput.x * cursorStep,
-                        y = rightInput.y * cursorStep
+                        x = (rightInput.x * coarseCursorStep) + (fineRightInput.x * fineCursorStep),
+                        y = (rightInput.y * coarseCursorStep) + (fineRightInput.y * fineCursorStep)
                     )
                     if (tool == BlueprintDraftTool.DRAW_WALL && updatedMovingWall != null) {
                         val pxPerMm = (BASE_PX_PER_MM * scale).coerceAtLeast(0.0001f)
@@ -1558,15 +1576,28 @@ fun BlueprintScreen(
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_PAN_RESPONSE_EXPONENT
                 )
-                if (leftInput != Offset.Zero) {
-                    val leftMagnitude = hypot(leftInput.x.toDouble(), leftInput.y.toDouble()).toFloat().coerceIn(0f, 1f)
+                val fineLeftInput = applyJoystickDeadzone(
+                    input = fineLeftJoystickVector,
+                    deadzone = joystickDeadzone,
+                    responseExponent = JOYSTICK_PAN_RESPONSE_EXPONENT
+                )
+                if (leftInput != Offset.Zero || fineLeftInput != Offset.Zero) {
+                    val leftMagnitude =
+                        hypot(leftInput.x.toDouble(), leftInput.y.toDouble()).toFloat().coerceIn(0f, 1f)
                     val panSpeed = (
                         JOYSTICK_PAN_SPEED_PX_PER_SEC +
                             (JOYSTICK_PAN_BOOST_PX_PER_SEC * leftMagnitude)
                         ) * joystickSensitivity
+                    val finePanSpeed = panSpeed * JOYSTICK_FINE_PAN_SPEED_MULTIPLIER
                     val panDelta = Offset(
-                        x = -leftInput.x * panSpeed * frameDeltaSec,
-                        y = -leftInput.y * panSpeed * frameDeltaSec
+                        x = (
+                            (-leftInput.x * panSpeed) -
+                                (fineLeftInput.x * finePanSpeed)
+                            ) * frameDeltaSec,
+                        y = (
+                            (-leftInput.y * panSpeed) -
+                                (fineLeftInput.y * finePanSpeed)
+                            ) * frameDeltaSec
                     )
                     updatedPan += panDelta
                     // Keep cursor anchored to the same world point while panning,
@@ -1623,7 +1654,7 @@ fun BlueprintScreen(
     }
     val leftControlsInset = leftEdgeDialInset.coerceAtLeast(0.dp)
     val centeredControlsInset = (leftControlsInset / 2f).coerceAtLeast(0.dp)
-    val joystickRailPadding = if (dualJoysticksEnabled) 56.dp else 0.dp
+    val joystickRailPadding = if (dualJoysticksEnabled) 112.dp else 0.dp
     val panelBottomPadding = DEFAULT_PANEL_BOTTOM_PADDING + joystickRailPadding
     val helpBottomPadding = panelBottomPadding + 14.dp
     val density = LocalDensity.current
@@ -1744,12 +1775,32 @@ fun BlueprintScreen(
         tutorialAngleDialBounds,
         tutorialLengthDialBounds
     )
+    val tutorialBottomRailBounds = listOfNotNull(
+        detachedButtonBounds,
+        boxButtonBounds,
+        measuredArcButtonBounds,
+        sketchCurveButtonBounds,
+        circleButtonBounds,
+        doorsButtonBounds,
+        windowsButtonBounds,
+        stairUpButtonBounds,
+        stairDownButtonBounds,
+        paramsButtonBounds,
+        helpButtonBounds
+    ).reduceOrNull { first, second ->
+        Rect(
+            left = minOf(first.left, second.left),
+            top = minOf(first.top, second.top),
+            right = maxOf(first.right, second.right),
+            bottom = maxOf(first.bottom, second.bottom)
+        )
+    } ?: bottomRailBounds
     val tutorialTooltipTopClearance = with(density) {
-        ((listOfNotNull(topStartStackBounds, topEndStackBounds).maxOfOrNull { it.bottom } ?: 0f).toDp() + 12.dp)
+        ((listOfNotNull(tutorialTopStartHeaderBounds, tutorialTopEndHeaderBounds).maxOfOrNull { it.bottom } ?: 0f).toDp() + 12.dp)
             .coerceAtLeast(12.dp)
     }
     val tutorialTargetBounds = when (currentTutorialStep?.target) {
-        BlueprintControlTutorialTarget.BOTTOM_RAIL -> listOfNotNull(bottomRailBounds)
+        BlueprintControlTutorialTarget.BOTTOM_RAIL -> listOfNotNull(tutorialBottomRailBounds)
         BlueprintControlTutorialTarget.CANVAS -> listOfNotNull(tutorialCanvasBounds)
         BlueprintControlTutorialTarget.DETACHED_BUTTON -> listOfNotNull(detachedButtonBounds)
         BlueprintControlTutorialTarget.BOX_BUTTON -> listOfNotNull(boxButtonBounds)
@@ -2281,7 +2332,10 @@ fun BlueprintScreen(
                 squareFeet = squareFeet,
                 linearFeet = linearFeet,
                 selectedFloor = selectedFloor,
-                useMetric = appSettings.useMetric
+                useMetric = appSettings.useMetric,
+                modifier = Modifier.onGloballyPositioned {
+                    tutorialTopStartHeaderBounds = Rect(it.positionInRoot(), it.size.toSize())
+                }
             )
             if (selectedWall != null || selectedOpening != null) {
                 SelectionPanel(
@@ -2337,6 +2391,9 @@ fun BlueprintScreen(
             verticalArrangement = Arrangement.spacedBy(topOverlaySpacing)
         ) {
             Row(
+                modifier = Modifier.onGloballyPositioned {
+                    tutorialTopEndHeaderBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
                 horizontalArrangement = Arrangement.spacedBy(topOverlaySpacing),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2919,8 +2976,12 @@ fun BlueprintScreen(
             DualJoystickOverlay(
                 leftVector = if (tutorialMode) tutorialLeftVector else leftJoystickVector,
                 rightVector = if (tutorialMode) tutorialRightVector else rightJoystickVector,
+                fineLeftVector = fineLeftJoystickVector,
+                fineRightVector = fineRightJoystickVector,
                 onLeftVectorChange = { leftJoystickVector = it },
                 onRightVectorChange = { rightJoystickVector = it },
+                onFineLeftVectorChange = { fineLeftJoystickVector = it },
+                onFineRightVectorChange = { fineRightJoystickVector = it },
                 onLeftPressChange = { rightJoystickPressed = it },
                 onRightPressChange = {},
                 onLeftTap = dispatchRightJoystickClick,

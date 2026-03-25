@@ -39,6 +39,45 @@ class BlueprintTradeScopeSupportTest {
     }
 
     @Test
+    fun detectRoomsByFloorAndScope_assignsPreferredScope_toMixedBoundaryLoop() {
+        val mixedWalls = listOf(
+            WallSegment(
+                id = "mix-1",
+                start = PointMm(0, 0),
+                end = PointMm(Millimeters.fromFeet(10.0).value, 0),
+                tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-2",
+                start = PointMm(Millimeters.fromFeet(10.0).value, 0),
+                end = PointMm(Millimeters.fromFeet(10.0).value, Millimeters.fromFeet(10.0).value),
+                tags = setOf(TakeoffScope.GRAVEL_MULCH.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-3",
+                start = PointMm(Millimeters.fromFeet(10.0).value, Millimeters.fromFeet(10.0).value),
+                end = PointMm(0, Millimeters.fromFeet(10.0).value),
+                tags = setOf(TakeoffScope.GRAVEL_MULCH.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-4",
+                start = PointMm(0, Millimeters.fromFeet(10.0).value),
+                end = PointMm(0, 0),
+                tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+            )
+        )
+
+        val rooms = detectRoomsByFloorAndScope(
+            walls = mixedWalls,
+            existingRooms = emptyList(),
+            preferredScope = TakeoffScope.GRAVEL_MULCH
+        )
+
+        assertEquals(1, rooms.size)
+        assertEquals(TakeoffScope.GRAVEL_MULCH, rooms.single().tags.takeoffScopeOrNull())
+    }
+
+    @Test
     fun scopedToTakeoffScope_redetectsConcreteRoomsFromScopedWalls() {
         val concreteWalls = rectangleWalls(
             prefix = "conc",
@@ -133,6 +172,52 @@ class BlueprintTradeScopeSupportTest {
         assertEquals(1, concreteBlueprint.rooms.size)
         assertEquals(4, paintBlueprint.walls.size)
         assertEquals(1, paintBlueprint.rooms.size)
+    }
+
+    @Test
+    fun scopedToTakeoffScope_keepsExplicitlyTaggedMixedBoundaryRooms() {
+        val mixedWalls = listOf(
+            WallSegment(
+                id = "mix-1",
+                start = PointMm(0, 0),
+                end = PointMm(Millimeters.fromFeet(10.0).value, 0),
+                tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-2",
+                start = PointMm(Millimeters.fromFeet(10.0).value, 0),
+                end = PointMm(Millimeters.fromFeet(10.0).value, Millimeters.fromFeet(10.0).value),
+                tags = setOf(TakeoffScope.GRAVEL_MULCH.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-3",
+                start = PointMm(Millimeters.fromFeet(10.0).value, Millimeters.fromFeet(10.0).value),
+                end = PointMm(0, Millimeters.fromFeet(10.0).value),
+                tags = setOf(TakeoffScope.GRAVEL_MULCH.tradeScopeTag())
+            ),
+            WallSegment(
+                id = "mix-4",
+                start = PointMm(0, Millimeters.fromFeet(10.0).value),
+                end = PointMm(0, 0),
+                tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+            )
+        )
+        val detectedRooms = detectRoomsByFloorAndScope(
+            walls = mixedWalls,
+            existingRooms = emptyList(),
+            preferredScope = TakeoffScope.GRAVEL_MULCH
+        )
+        val document = BlueprintDocument(
+            projectId = "project-4",
+            walls = mixedWalls,
+            rooms = detectedRooms
+        )
+
+        val gravelDocument = document.scopedToTakeoffScope(TakeoffScope.GRAVEL_MULCH)
+
+        assertEquals(2, gravelDocument.walls.size)
+        assertEquals(1, gravelDocument.rooms.size)
+        assertEquals(TakeoffScope.GRAVEL_MULCH, gravelDocument.rooms.single().tags.takeoffScopeOrNull())
     }
 
     private fun rectangleWalls(

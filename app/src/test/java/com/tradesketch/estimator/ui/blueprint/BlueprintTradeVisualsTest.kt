@@ -46,6 +46,45 @@ class BlueprintTradeVisualsTest {
     }
 
     @Test
+    fun `wall display styles assign distinct accent patterns by trade`() {
+        val walls = listOf(
+            WallSegment(
+                id = "drywall-wall",
+                start = PointMm(0, 0),
+                end = PointMm(2_000, 0),
+                tags = setOf(TakeoffScope.DRYWALL.wallScopeTag())
+            ),
+            WallSegment(
+                id = "concrete-wall",
+                start = PointMm(0, 0),
+                end = PointMm(2_000, 0),
+                tags = setOf(TakeoffScope.CONCRETE.wallScopeTag())
+            ),
+            WallSegment(
+                id = "gravel-wall",
+                start = PointMm(0, 0),
+                end = PointMm(2_000, 0),
+                tags = setOf(TakeoffScope.GRAVEL_MULCH.wallScopeTag())
+            ),
+            WallSegment(
+                id = "paint-wall",
+                start = PointMm(0, 0),
+                end = PointMm(2_000, 0),
+                tags = setOf(TakeoffScope.PAINT.wallScopeTag())
+            )
+        )
+
+        val styles = walls.associate { wall ->
+            wall.id to resolveWallDisplayStyle(wall = wall, activeScope = TakeoffScope.DRYWALL)
+        }
+
+        assertEquals(BlueprintWallAccentPattern.DRYWALL_PARALLEL, styles.getValue("drywall-wall").pattern)
+        assertEquals(BlueprintWallAccentPattern.CONCRETE_TICKS, styles.getValue("concrete-wall").pattern)
+        assertEquals(BlueprintWallAccentPattern.GRAVEL_PEBBLES, styles.getValue("gravel-wall").pattern)
+        assertEquals(BlueprintWallAccentPattern.PAINT_DASH, styles.getValue("paint-wall").pattern)
+    }
+
+    @Test
     fun `room scope falls back to linked wall scope before active scope`() {
         val concreteWall = WallSegment(
             id = "wall-1",

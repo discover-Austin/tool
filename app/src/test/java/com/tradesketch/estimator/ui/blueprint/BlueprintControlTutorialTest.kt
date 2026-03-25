@@ -121,4 +121,34 @@ class BlueprintControlTutorialTest {
 
         assertEquals(IntOffset(x = 12, y = 180), offset)
     }
+
+    @Test
+    fun `canvas tutorial step prefers top pinned side anchored tooltip`() {
+        val canvasStep = blueprintControlTutorialSteps(dualJoysticksEnabled = false)
+            .first { it.target == BlueprintControlTutorialTarget.CANVAS }
+
+        assertEquals(true, canvasStep.hasLiveExample())
+        assertEquals(true, canvasStep.prefersPinnedTopTooltip())
+        assertEquals(true, canvasStep.prefersSideAnchoredTooltip())
+    }
+
+    @Test
+    fun `wide demo targets anchor tutorial card to the side`() {
+        val offset = blueprintTutorialTooltipOffset(
+            targetRect = Rect(left = 0f, top = 260f, right = 1080f, bottom = 1760f),
+            viewportWidthPx = 1080,
+            viewportHeightPx = 1920,
+            cardWidthPx = 300,
+            cardHeightPx = 240,
+            horizontalPaddingPx = 12,
+            verticalPaddingPx = 12,
+            minimumTopClearancePx = 160,
+            anchorSpacingPx = 14,
+            compactWindow = false,
+            preferPinnedTop = true,
+            preferSidePlacement = true
+        )
+
+        assertEquals(IntOffset(x = 12, y = 160), offset)
+    }
 }

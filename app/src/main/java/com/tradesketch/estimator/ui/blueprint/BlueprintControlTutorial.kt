@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -138,6 +136,53 @@ internal fun BlueprintControlTutorialStep.resolvedTutorialTool(): BlueprintDraft
         BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
         BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> BlueprintDraftTool.SELECT
         else -> BlueprintDraftTool.DRAW_WALL
+    }
+}
+
+internal fun BlueprintControlTutorialStep.hasLiveExample(): Boolean {
+    return demoPlacementWalls.isNotEmpty() ||
+        demoDrawingStart != null ||
+        demoDrawingPreview != null ||
+        demoBoxStart != null ||
+        demoBoxPreview != null ||
+        demoCurveStart != null ||
+        demoCurveEnd != null ||
+        demoCurvePreview != null ||
+        demoCircleCenter != null ||
+        demoCircleEdge != null ||
+        demoPointerWorld != null ||
+        demoPendingGrabSelection ||
+        showParamsPanel ||
+        showHelpPanel ||
+        showGridScaleEditor ||
+        forceEdgeDials ||
+        demoLeftVector != Offset.Zero ||
+        demoRightVector != Offset.Zero
+}
+
+internal fun BlueprintControlTutorialStep.prefersPinnedTopTooltip(): Boolean {
+    return hasLiveExample() || when (target) {
+        BlueprintControlTutorialTarget.CANVAS,
+        BlueprintControlTutorialTarget.BOTTOM_RAIL,
+        BlueprintControlTutorialTarget.OPENING_PANEL,
+        BlueprintControlTutorialTarget.PARAMS_PANEL,
+        BlueprintControlTutorialTarget.RAIL_HELP_PANEL,
+        BlueprintControlTutorialTarget.EDGE_DIALS -> true
+
+        else -> false
+    }
+}
+
+internal fun BlueprintControlTutorialStep.prefersSideAnchoredTooltip(): Boolean {
+    return hasLiveExample() || when (target) {
+        BlueprintControlTutorialTarget.CANVAS,
+        BlueprintControlTutorialTarget.BOTTOM_RAIL,
+        BlueprintControlTutorialTarget.OPENING_PANEL,
+        BlueprintControlTutorialTarget.PARAMS_PANEL,
+        BlueprintControlTutorialTarget.RAIL_HELP_PANEL,
+        BlueprintControlTutorialTarget.EDGE_DIALS -> true
+
+        else -> false
     }
 }
 
@@ -587,13 +632,19 @@ internal fun BlueprintControlTutorialOverlay(
         val density = LocalDensity.current
         var measuredCardWidthPx by remember(stepIndex) { mutableIntStateOf(0) }
         var measuredCardHeightPx by remember(stepIndex) { mutableIntStateOf(0) }
-        val cardWidth = maxWidth.minus(24.dp).coerceAtMost(320.dp)
-        val cardHeightEstimate = 208.dp + (step.details.size * 18).dp + if (step.seeIt != null) 62.dp else 0.dp
-        val maxCardHeight = (maxHeight - 24.dp).coerceAtLeast(180.dp)
+        val cardWidth = maxWidth.minus(20.dp).coerceAtMost(272.dp)
+        val cardHeightEstimate = 108.dp + (step.details.size * 14).dp
+        val maxCardHeight = (maxHeight - 20.dp).coerceAtLeast(128.dp)
         val compactWindow = maxWidth < 420.dp || maxHeight < 720.dp
         val targetRects = remember(targetBounds, step.target, density) {
             val highlightPaddingPx = with(density) { tutorialHighlightPadding(step.target).toPx() }
-            targetBounds.map { it.inflate(highlightPaddingPx) }
+            val highlightYOffsetPx = with(density) { tutorialHighlightVerticalOffset(step.target).toPx() }
+            val highlightBottomTrimPx = with(density) { tutorialHighlightBottomTrim(step.target).toPx() }
+            targetBounds.map {
+                it.inflate(highlightPaddingPx)
+                    .offsetBy(dy = -highlightYOffsetPx)
+                    .trimBottom(highlightBottomTrimPx)
+            }
         }
         val targetRect = remember(targetRects) {
             targetRects.reduceOrNull(::mergeTutorialRects)
@@ -626,7 +677,9 @@ internal fun BlueprintControlTutorialOverlay(
                     verticalPaddingPx = 12.dp.roundToPx(),
                     minimumTopClearancePx = minimumTopClearance.roundToPx(),
                     anchorSpacingPx = 10.dp.roundToPx(),
-                    compactWindow = compactWindow
+                    compactWindow = compactWindow,
+                    preferPinnedTop = step.prefersPinnedTopTooltip(),
+                    preferSidePlacement = step.prefersSideAnchoredTooltip()
                 )
             }
         }
@@ -637,7 +690,6 @@ internal fun BlueprintControlTutorialOverlay(
                 .fillMaxSize()
                 .graphicsLayer(alpha = 0.99f)
         ) {
-            drawRect(color = Color.Black.copy(alpha = 0.62f))
             targetRects.forEach { rect ->
                 drawRoundRect(
                     color = Color.Transparent,
@@ -687,103 +739,45 @@ internal fun BlueprintControlTutorialOverlay(
                 },
             shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 18.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
             Box(
                 modifier = Modifier.background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f)
                         )
                     )
                 )
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "Step ${stepIndex + 1} of $totalSteps",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = modeLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = step.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
                         TextButton(onClick = onSkip) {
                             Text("Skip")
                         }
                     }
-                    LinearProgressIndicator(
-                        progress = { (stepIndex + 1f) / totalSteps.toFloat() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
                     Text(
                         text = step.message,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     if (step.details.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "What To Do",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             step.details.forEach { detail ->
                                 Text(
                                     text = "• $detail",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                    step.seeIt?.let { prompt ->
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "What You're Seeing",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = prompt,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                         }
@@ -818,7 +812,9 @@ internal fun blueprintTutorialTooltipOffset(
     verticalPaddingPx: Int,
     minimumTopClearancePx: Int,
     anchorSpacingPx: Int,
-    compactWindow: Boolean
+    compactWindow: Boolean,
+    preferPinnedTop: Boolean = false,
+    preferSidePlacement: Boolean = false
 ): IntOffset {
     val topClearancePx = maxOf(verticalPaddingPx, minimumTopClearancePx)
     if (targetRect == null) {
@@ -826,15 +822,25 @@ internal fun blueprintTutorialTooltipOffset(
     }
     val maxCardX = viewportWidthPx - cardWidthPx - horizontalPaddingPx
     val targetCenterX = targetRect.center.x.roundToInt()
-    val desiredX = targetCenterX - (cardWidthPx / 2)
-    val clampedX = desiredX.coerceIn(
-        horizontalPaddingPx,
-        maxOf(horizontalPaddingPx, maxCardX)
-    )
+    val wideTarget = targetRect.width >= viewportWidthPx * 0.58f
+    val clampedX = if (preferSidePlacement || wideTarget) {
+        if (targetCenterX >= viewportWidthPx / 2) {
+            horizontalPaddingPx
+        } else {
+            maxOf(horizontalPaddingPx, maxCardX)
+        }
+    } else {
+        val desiredX = targetCenterX - (cardWidthPx / 2)
+        desiredX.coerceIn(
+            horizontalPaddingPx,
+            maxOf(horizontalPaddingPx, maxCardX)
+        )
+    }
     val lowerScreenTarget =
         targetRect.bottom.roundToInt() >= (viewportHeightPx * 0.52f).roundToInt()
-    val preferPinnedTop =
-        lowerScreenTarget ||
+    val shouldPinTop =
+        preferPinnedTop ||
+            lowerScreenTarget ||
             (
                 compactWindow &&
                     targetRect.center.y >= viewportHeightPx * 0.34f
@@ -843,7 +849,7 @@ internal fun blueprintTutorialTooltipOffset(
     val belowY = targetRect.bottom.roundToInt() + anchorSpacingPx
     val maxCardY = viewportHeightPx - cardHeightPx - verticalPaddingPx
     val resolvedY = when {
-        preferPinnedTop -> topClearancePx
+        shouldPinTop -> topClearancePx
         aboveY >= topClearancePx -> aboveY
         else -> belowY.coerceIn(
             topClearancePx,
@@ -878,12 +884,105 @@ private fun tutorialHighlightPadding(target: BlueprintControlTutorialTarget): Dp
     }
 }
 
+private fun tutorialHighlightVerticalOffset(target: BlueprintControlTutorialTarget): Dp {
+    return when (target) {
+        BlueprintControlTutorialTarget.CANVAS -> 8.dp
+        BlueprintControlTutorialTarget.TOP_START_STACK,
+        BlueprintControlTutorialTarget.TOP_END_STACK -> 8.dp
+
+        BlueprintControlTutorialTarget.BOTTOM_RAIL,
+        BlueprintControlTutorialTarget.DETACHED_BUTTON,
+        BlueprintControlTutorialTarget.BOX_BUTTON,
+        BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON,
+        BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON,
+        BlueprintControlTutorialTarget.CIRCLE_BUTTON,
+        BlueprintControlTutorialTarget.DOORS_BUTTON,
+        BlueprintControlTutorialTarget.WINDOWS_BUTTON,
+        BlueprintControlTutorialTarget.STAIR_UP_BUTTON,
+        BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON,
+        BlueprintControlTutorialTarget.PARAMS_BUTTON,
+        BlueprintControlTutorialTarget.HELP_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
+        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
+        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
+        BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
+        BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
+        BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
+        BlueprintControlTutorialTarget.EDGE_DIALS,
+        BlueprintControlTutorialTarget.FLOOR_SWITCHER,
+        BlueprintControlTutorialTarget.GRID_SCALE_BADGE,
+        BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> 14.dp
+
+        else -> 12.dp
+    }
+}
+
+private fun tutorialHighlightBottomTrim(target: BlueprintControlTutorialTarget): Dp {
+    return when (target) {
+        BlueprintControlTutorialTarget.CANVAS -> 0.dp
+        BlueprintControlTutorialTarget.TOP_START_STACK,
+        BlueprintControlTutorialTarget.TOP_END_STACK -> 4.dp
+
+        BlueprintControlTutorialTarget.BOTTOM_RAIL,
+        BlueprintControlTutorialTarget.DETACHED_BUTTON,
+        BlueprintControlTutorialTarget.BOX_BUTTON,
+        BlueprintControlTutorialTarget.MEASURED_ARC_BUTTON,
+        BlueprintControlTutorialTarget.SKETCH_CURVE_BUTTON,
+        BlueprintControlTutorialTarget.CIRCLE_BUTTON,
+        BlueprintControlTutorialTarget.DOORS_BUTTON,
+        BlueprintControlTutorialTarget.WINDOWS_BUTTON,
+        BlueprintControlTutorialTarget.STAIR_UP_BUTTON,
+        BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON,
+        BlueprintControlTutorialTarget.PARAMS_BUTTON,
+        BlueprintControlTutorialTarget.HELP_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
+        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
+        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
+        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
+        BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
+        BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
+        BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
+        BlueprintControlTutorialTarget.EDGE_DIALS,
+        BlueprintControlTutorialTarget.FLOOR_SWITCHER,
+        BlueprintControlTutorialTarget.GRID_SCALE_BADGE,
+        BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> 10.dp
+
+        else -> 6.dp
+    }
+}
+
 private fun Rect.inflate(padding: Float): Rect {
     return Rect(
         left = left - padding,
         top = top - padding,
         right = right + padding,
         bottom = bottom + padding
+    )
+}
+
+private fun Rect.offsetBy(dx: Float = 0f, dy: Float = 0f): Rect {
+    return Rect(
+        left = left + dx,
+        top = top + dy,
+        right = right + dx,
+        bottom = bottom + dy
+    )
+}
+
+private fun Rect.trimBottom(trim: Float): Rect {
+    if (trim <= 0f) return this
+    return Rect(
+        left = left,
+        top = top,
+        right = right,
+        bottom = maxOf(top, bottom - trim)
     )
 }
 

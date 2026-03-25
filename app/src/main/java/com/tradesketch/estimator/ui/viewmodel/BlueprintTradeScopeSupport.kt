@@ -13,8 +13,6 @@ private const val FLOOR_TAG_PREFIX = "floor:"
 private const val FLOOR_DEFAULT_TAG = "${FLOOR_TAG_PREFIX}0"
 private const val FLOOR_LEGACY_LOWER_TAG = "${FLOOR_TAG_PREFIX}lower"
 private const val FLOOR_LEGACY_UPPER_TAG = "${FLOOR_TAG_PREFIX}upper"
-private const val UNTAGGED_SCOPE_BUCKET = "__untagged__"
-
 internal fun BlueprintDocument.scopedToTakeoffScope(scope: TakeoffScope): BlueprintDocument {
     val hasExplicitTradeScopes = hasExplicitTradeScopeTags()
     val wallsById = walls.associateBy { it.id }
@@ -29,8 +27,12 @@ internal fun BlueprintDocument.scopedToTakeoffScope(scope: TakeoffScope): Bluepr
                 scope = scope,
                 wallsById = wallsById,
                 hasExplicitTradeScopes = hasExplicitTradeScopes
-            ) && room.referencesOnlyWalls(scopedWallIds)
-        }
+            ) && (
+                room.hasExplicitTradeScopeFor(scope) ||
+                    room.referencesOnlyWalls(scopedWallIds)
+                )
+        },
+        preferredScope = scope
     )
     val scopedOpenings = openings.filter { opening ->
         opening.wallId in scopedWallIds &&
@@ -78,7 +80,8 @@ internal fun BlueprintDocument.assignUnscopedGeometryTo(scope: TakeoffScope): Bl
 
 internal fun detectRoomsByFloorAndScope(
     walls: List<WallSegment>,
-    existingRooms: List<Room>
+    existingRooms: List<Room>,
+    preferredScope: TakeoffScope? = null
 ): List<Room> {
     val wallsById = walls.associateBy { it.id }
     if (walls.isEmpty()) {
@@ -93,46 +96,40 @@ internal fun detectRoomsByFloorAndScope(
             }
     }
 
-    val existingByKey = existingRooms.groupBy { room ->
-        RoomScopeKey(
-            floorTag = room.normalizedFloorTag(),
-            scopeBucket = room.takeoffScopeOrNull(wallsById)?.name ?: UNTAGGED_SCOPE_BUCKET
-        )
-    }
-    val wallsByKey = walls.groupBy { wall ->
-        RoomScopeKey(
-            floorTag = wall.normalizedFloorTag(),
-            scopeBucket = wall.takeoffScopeOrNull()?.name ?: UNTAGGED_SCOPE_BUCKET
-        )
-    }
-    val allKeys = (existingByKey.keys + wallsByKey.keys)
+    val existingByFloor = existingRooms.groupBy(Room::normalizedFloorTag)
+    val wallsByFloor = walls.groupBy(WallSegment::normalizedFloorTag)
+    val allFloors = (existingByFloor.keys + wallsByFloor.keys)
         .distinct()
-        .sortedWith(
-            compareBy<RoomScopeKey> { floorSortValue(it.floorTag) }
-                .thenBy { it.scopeBucket }
-        )
+        .sortedBy(::floorSortValue)
 
-    return allKeys.flatMap { key ->
-        val floorWalls = wallsByKey[key].orEmpty()
-        val floorExisting = existingByKey[key].orEmpty()
-        val scope = key.scopeBucket.takeoffScopeBucketValue()
+    return allFloors.flatMap { floorTag ->
+        val floorWalls = wallsByFloor[floorTag].orEmpty()
+        val floorWallsById = floorWalls.associateBy { it.id }
+        val floorExisting = existingByFloor[floorTag].orEmpty()
         val preservedManualRooms = floorExisting
             .filterNot(Room::isAutoDetectedRoom)
             .map { room ->
                 room.copy(
                     tags = room.tags
-                        .withNormalizedFloorTag(key.floorTag)
-                        .withTradeScope(scope)
+                        .withNormalizedFloorTag(floorTag)
+                        .withTradeScope(
+                            room.tags.takeoffScopeOrNull()
+                                ?: room.takeoffScopeOrNull(wallsById)
+                        )
                 )
+            }
+        val preservedTaggedAutoRooms = floorExisting
+            .filter { room ->
+                room.isAutoDetectedRoom() && room.tags.hasExplicitTradeScopeTag()
             }
 
         if (floorWalls.isEmpty()) {
-            return@flatMap preservedManualRooms
+            return@flatMap preservedManualRooms + preservedTaggedAutoRooms
         }
 
         val detected = RoomLoopDetector.detectRooms(floorWalls)
         if (detected.isEmpty()) {
-            return@flatMap preservedManualRooms
+            return@flatMap preservedManualRooms + preservedTaggedAutoRooms
         }
 
         val detectedWithMetadata = mergeRoomMetadata(
@@ -142,15 +139,31 @@ internal fun detectRoomsByFloorAndScope(
             val existingMatch = floorExisting.firstOrNull { known ->
                 known.isAutoDetectedRoom() && roomSignature(known) == roomSignature(detectedRoom)
             }
+            val resolvedScope = existingMatch?.tags?.takeoffScopeOrNull()
+                ?: existingMatch?.takeoffScopeOrNull(floorWallsById)
+                ?: detectedRoom.preferredTakeoffScope(
+                    wallsById = floorWallsById,
+                    preferredScope = preferredScope
+                )
             detectedRoom.copy(
                 tags = (existingMatch?.tags ?: detectedRoom.tags)
-                    .withNormalizedFloorTag(key.floorTag)
-                    .withTradeScope(scope),
+                    .withNormalizedFloorTag(floorTag)
+                    .withTradeScope(resolvedScope),
                 ceiling = existingMatch?.ceiling ?: detectedRoom.ceiling,
                 overrides = existingMatch?.overrides ?: detectedRoom.overrides
             )
         }
-        preservedManualRooms + detectedWithMetadata
+        val detectedSignatures = detectedWithMetadata.mapTo(mutableSetOf(), ::roomSignature)
+        val preservedExplicitAutoRooms = preservedTaggedAutoRooms
+            .filterNot { room -> roomSignature(room) in detectedSignatures }
+            .map { room ->
+                room.copy(
+                    tags = room.tags
+                        .withNormalizedFloorTag(floorTag)
+                        .withTradeScope(room.tags.takeoffScopeOrNull())
+                )
+            }
+        preservedManualRooms + preservedExplicitAutoRooms + detectedWithMetadata
     }
 }
 
@@ -189,11 +202,6 @@ internal fun Room.takeoffScopeOrNull(wallsById: Map<String, WallSegment>): Takeo
 internal fun BlueprintOpening.takeoffScopeOrNull(wallsById: Map<String, WallSegment>): TakeoffScope? {
     return tags.takeoffScopeOrNull() ?: wallsById[wallId]?.takeoffScopeOrNull()
 }
-
-private data class RoomScopeKey(
-    val floorTag: String,
-    val scopeBucket: String
-)
 
 private fun BlueprintDocument.hasExplicitTradeScopeTags(): Boolean {
     return walls.any { wall -> wall.tags.hasExplicitTradeScopeTag() } ||
@@ -242,6 +250,34 @@ private fun TakeoffScope?.matchesTakeoffScope(
 private fun Room.referencesOnlyWalls(visibleWallIds: Set<String>): Boolean {
     val references = (wallSegmentIds + wallLoopRef).toSet()
     return references.isEmpty() || references.all(visibleWallIds::contains)
+}
+
+private fun Room.hasExplicitTradeScopeFor(scope: TakeoffScope): Boolean {
+    return tags.hasExplicitTradeScopeTag() && tags.takeoffScopeOrNull() == scope
+}
+
+private fun Room.preferredTakeoffScope(
+    wallsById: Map<String, WallSegment>,
+    preferredScope: TakeoffScope?
+): TakeoffScope? {
+    val referencedScopes = referencedWallScopes(wallsById)
+    return when {
+        referencedScopes.size == 1 -> referencedScopes.single()
+        preferredScope == null -> null
+        referencedScopes.isEmpty() -> preferredScope
+        preferredScope in referencedScopes -> preferredScope
+        else -> null
+    }
+}
+
+private fun Room.referencedWallScopes(
+    wallsById: Map<String, WallSegment>
+): Set<TakeoffScope> {
+    return (wallSegmentIds + wallLoopRef)
+        .asSequence()
+        .distinct()
+        .mapNotNull { wallId -> wallsById[wallId]?.takeoffScopeOrNull() }
+        .toSet()
 }
 
 private fun mergeRoomMetadata(
@@ -307,12 +343,4 @@ private fun canonicalFloorTag(rawTag: String?): String {
 
 private fun floorSortValue(floorTag: String): Int {
     return canonicalFloorTag(floorTag).removePrefix(FLOOR_TAG_PREFIX).toIntOrNull() ?: 0
-}
-
-private fun String.takeoffScopeBucketValue(): TakeoffScope? {
-    return if (this == UNTAGGED_SCOPE_BUCKET) {
-        null
-    } else {
-        TakeoffScope.valueOf(this)
-    }
 }

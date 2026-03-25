@@ -189,8 +189,12 @@ private fun ControlClusterShell(
 internal fun DualJoystickOverlay(
     leftVector: Offset,
     rightVector: Offset,
+    fineLeftVector: Offset,
+    fineRightVector: Offset,
     onLeftVectorChange: (Offset) -> Unit,
     onRightVectorChange: (Offset) -> Unit,
+    onFineLeftVectorChange: (Offset) -> Unit,
+    onFineRightVectorChange: (Offset) -> Unit,
     onLeftPressChange: ((Boolean) -> Unit)? = null,
     onRightPressChange: (Boolean) -> Unit,
     onLeftTap: () -> Unit,
@@ -225,6 +229,22 @@ internal fun DualJoystickOverlay(
             else -> 50.dp
         }
         val labelFontSize = if (compact) 7.sp else 8.sp
+        val miniPadSize = when {
+            ultraCompact -> 42.dp
+            compact -> 48.dp
+            else -> 56.dp
+        }
+        val miniKnobSize = when {
+            ultraCompact -> 18.dp
+            compact -> 20.dp
+            else -> 24.dp
+        }
+        val miniPadGap = if (compact) 6.dp else 8.dp
+        val miniPadCenterInset = ((joystickSize - miniPadSize) / 2f) + when {
+            ultraCompact -> 18.dp
+            compact -> 22.dp
+            else -> 26.dp
+        }
         val joystickBottomLift = if (compact) 10.dp else 14.dp
         val centerColumnBottom = if (compact) 20.dp else 30.dp
         val controlRowSpacing = if (compact) 5.dp else 6.dp
@@ -237,23 +257,37 @@ internal fun DualJoystickOverlay(
                 .fillMaxWidth()
                 .padding(horizontal = sidePadding)
         ) {
-            JoystickPad(
-                insideLabel = "Pan / Alt",
-                vector = leftVector,
-                onVectorChange = onLeftVectorChange,
-                onTap = onLeftTap,
-                onPressChange = onLeftPressChange,
-                tapZoneScale = 0.90f,
-                tapMoveThresholdPx = if (compact) 30f else 34f,
-                centerTapRequired = false,
-                padSize = joystickSize,
-                knobSize = knobSize,
-                labelFontSize = labelFontSize,
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(bottom = joystickBottomLift),
-                boundsModifier = leftPadModifier
-            )
+                verticalArrangement = Arrangement.spacedBy(miniPadGap)
+            ) {
+                JoystickPad(
+                    insideLabel = null,
+                    vector = fineLeftVector,
+                    onVectorChange = onFineLeftVectorChange,
+                    onTap = null,
+                    padSize = miniPadSize,
+                    knobSize = miniKnobSize,
+                    showCenterLabel = false,
+                    modifier = Modifier.padding(start = miniPadCenterInset)
+                )
+                JoystickPad(
+                    insideLabel = "Pan / Alt",
+                    vector = leftVector,
+                    onVectorChange = onLeftVectorChange,
+                    onTap = onLeftTap,
+                    onPressChange = onLeftPressChange,
+                    tapZoneScale = 0.90f,
+                    tapMoveThresholdPx = if (compact) 30f else 34f,
+                    centerTapRequired = false,
+                    padSize = joystickSize,
+                    knobSize = knobSize,
+                    labelFontSize = labelFontSize,
+                    boundsModifier = leftPadModifier
+                )
+            }
             CenteredOverlayControls(
                 canUndo = canUndo,
                 canRedo = canRedo,
@@ -276,23 +310,38 @@ internal fun DualJoystickOverlay(
                     .padding(bottom = centerColumnBottom),
                 boundsModifier = centerControlsModifier
             )
-            JoystickPad(
-                insideLabel = "Cursor / Select",
-                vector = rightVector,
-                onVectorChange = onRightVectorChange,
-                onTap = onRightTap,
-                onPressChange = onRightPressChange,
-                tapZoneScale = 0.92f,
-                tapMoveThresholdPx = if (compact) 34f else 38f,
-                centerTapRequired = false,
-                padSize = joystickSize,
-                knobSize = knobSize,
-                labelFontSize = labelFontSize,
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(bottom = joystickBottomLift),
-                boundsModifier = rightPadModifier
-            )
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(miniPadGap)
+            ) {
+                JoystickPad(
+                    insideLabel = null,
+                    vector = fineRightVector,
+                    onVectorChange = onFineRightVectorChange,
+                    onTap = null,
+                    padSize = miniPadSize,
+                    knobSize = miniKnobSize,
+                    showCenterLabel = false,
+                    modifier = Modifier.padding(end = miniPadCenterInset)
+                )
+                JoystickPad(
+                    insideLabel = "Cursor / Select",
+                    vector = rightVector,
+                    onVectorChange = onRightVectorChange,
+                    onTap = onRightTap,
+                    onPressChange = onRightPressChange,
+                    tapZoneScale = 0.92f,
+                    tapMoveThresholdPx = if (compact) 34f else 38f,
+                    centerTapRequired = false,
+                    padSize = joystickSize,
+                    knobSize = knobSize,
+                    labelFontSize = labelFontSize,
+                    boundsModifier = rightPadModifier
+                )
+            }
         }
     }
 }
@@ -966,7 +1015,7 @@ private fun TouchToolButton(
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
 internal fun JoystickPad(
-    insideLabel: String,
+    insideLabel: String?,
     vector: Offset,
     onVectorChange: (Offset) -> Unit,
     onTap: (() -> Unit)?,
@@ -977,6 +1026,7 @@ internal fun JoystickPad(
     padSize: Dp = 126.dp,
     knobSize: Dp = 50.dp,
     labelFontSize: TextUnit = 8.sp,
+    showCenterLabel: Boolean = true,
     modifier: Modifier = Modifier,
     boundsModifier: Modifier = Modifier
 ) {
@@ -1185,20 +1235,22 @@ internal fun JoystickPad(
                     border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)),
                     shadowElevation = 10.dp
                 ) {}
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.74f)),
-                    shadowElevation = 0.dp,
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    Text(
-                        text = insideLabel,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                        color = joystickLabelColor,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                if (showCenterLabel && !insideLabel.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.74f)),
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.align(Alignment.Center)
+                    ) {
+                        Text(
+                            text = insideLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
+                            color = joystickLabelColor,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
