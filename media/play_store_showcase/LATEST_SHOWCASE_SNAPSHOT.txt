@@ -1,0 +1,15 @@
+Snapshot Label: play-store-v1.0.19-build-21
+Captured At: 2026-03-25 17:41:23 -04:00
+Device Model: SM-S928U
+Expected Package: com.tradesketch.estimator.local
+Activity: com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity
+Raw Video: C:\Users\grand\tool\media\play_store_showcase\tradesketch_showcase_raw.mp4
+Raw Duration: 30.638656
+Source Mode: screenshot-frozen montage from the latest Play screenshot set
+Source Screenshot Manifest: C:\Users\grand\tool\store-assets\screenshots\LATEST_SCREENSHOT_SNAPSHOT.txt
+Source Screens: 01_projects.png, 02_spaces.png, 03_editor.png, 04_drywall.png, 05_concrete.png, 06_export.png
+Final Video: C:\Users\grand\tool\media\play_store_showcase\tradesketch_showcase_play_store_30s.mp4
+Final Duration: 30.000000
+Final Rendered At: 2026-03-25 18:09:10 -04:00
+Final SHA-256: BDEB587FF1415A593E33FEBD010F23D073DC1A0225C1DC03129E37C0FB734D65
+Rule: newest signed build only

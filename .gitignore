@@ -23,10 +23,19 @@ local.properties
 *.iml
 .idea/
 *.keystore
-!release.keystore
+*.jks
+release.keystore
+tradesketch-release.keystore
 
 # Temporary
 /tmp/
 *.swp
 *.swo
 *~
+.android-home/
+.gradle-home/
+_*.png
+_*.xml
+screen*.png
+tutorial-*.png
+uidump*.xml

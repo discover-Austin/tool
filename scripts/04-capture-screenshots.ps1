@@ -1,7 +1,13 @@
+param(
+    [string]$PackageActivity = "com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity",
+    [string]$ExpectedPackage = "com.tradesketch.estimator.local",
+    [string]$SnapshotLabel = "play-store-v1.0.19-build-21"
+)
+
 <#
 .SYNOPSIS
     TradeSketch Estimator - Screenshot Capture
-    Automates capturing all 6 Play Store screenshots from a connected device.
+    Automates capturing all 8 Play Store screenshots from a connected device.
 
 .DESCRIPTION
     This script:
@@ -12,18 +18,19 @@
       5. Pulls the screenshots to store-assets\screenshots\ on your PC
       6. Exits demo mode when done
 
-    BEFORE RUNNING: Install the app on your phone/emulator and open it at least once.
+    BEFORE RUNNING: Install the newest signed sideload build on your phone/emulator and open it at least once.
 
 .NOTES
     Email:   built.to.cell@gmail.com
     App:     TradeSketch Estimator
-    Package: com.tradesketch.estimator
+    Package: com.tradesketch.estimator.local
 #>
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $screenshotDir = Join-Path $projectRoot "store-assets\screenshots"
+$manifestPath = Join-Path $screenshotDir "LATEST_SCREENSHOT_SNAPSHOT.txt"
 
 # Find ADB
 $adb = "adb"
@@ -97,9 +104,12 @@ Write-Host "  DONE: Status bar is now clean (9:41, full battery, Wi-Fi, no notif
 
 Write-Host ""
 Write-Host "[Step 3] Launching TradeSketch Estimator..." -ForegroundColor Yellow
-& $adb shell am start -n com.tradesketch.estimator/.MainActivity 2>&1 | Out-Null
+& $adb shell am start -n $PackageActivity 2>&1 | Out-Null
 Start-Sleep -Seconds 2
 Write-Host "  App launched." -ForegroundColor Green
+
+$deviceModel = (& $adb shell getprop ro.product.model).Trim()
+$captureStarted = Get-Date
 
 function Assert-TradeSketchForeground {
     param(
@@ -110,11 +120,11 @@ function Assert-TradeSketchForeground {
         Select-String -Pattern "mCurrentFocus|mFocusedApp" |
         Select-Object -First 1
     $focusText = if ($focusLine) { $focusLine.ToString() } else { "" }
-    if ($focusText -notmatch "com\.tradesketch\.estimator") {
+    if ($focusText -notmatch [regex]::Escape($ExpectedPackage)) {
         Write-Host ""
         Write-Host "  WARNING: TradeSketch does not appear to be in the foreground." -ForegroundColor Yellow
         Write-Host "  Focus line: $focusText" -ForegroundColor DarkGray
-        Write-Host "  Expected package: com.tradesketch.estimator" -ForegroundColor White
+        Write-Host "  Expected package: $ExpectedPackage" -ForegroundColor White
         Write-Host "  Reason: $Reason" -ForegroundColor White
         $continue = Read-Host "  Continue anyway? (y/N)"
         if ($continue -notin @("y", "Y")) {
@@ -130,9 +140,9 @@ $screenshots = @(
         File = "01_projects.png"
         Screen = "WORKSPACE WITH SAVED PROJECTS"
         Instructions = @(
-            "Open the workspace and expand the left rail."
-            "Tap Saved so the Saved Projects panel is visible."
-            "Ensure New+, Saved, Blueprint, Materials, Export, and Settings/About are visible."
+            "Open the workspace for an active project."
+            "Expand the left rail and keep project context visible."
+            "Show the saved-project workflow or left-rail context clearly."
         )
     },
     @{
@@ -181,6 +191,24 @@ $screenshots = @(
             "Include the preview deck and action card in the shot."
             "Keep the professional disclaimer visible."
         )
+    },
+    @{
+        File = "07_settings.png"
+        Screen = "SETTINGS AND HELP"
+        Instructions = @(
+            "Navigate to the Settings screen."
+            "Show preferences, reduced motion, and the Help & Onboarding card."
+            "Keep the Replay Control Tour action visible."
+        )
+    },
+    @{
+        File = "08_open.png"
+        Screen = "OPEN PROJECTS PANEL"
+        Instructions = @(
+            "Open the Saved/Open projects panel from the rail."
+            "Keep at least one project visible in the list."
+            "Show this as the quick-return workflow for existing jobs."
+        )
     }
 )
 
@@ -197,7 +225,7 @@ foreach ($i in 0..($screenshots.Count - 1)) {
 
     Write-Host ""
     Write-Host "────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-    Write-Host "  Screenshot $num of 6: $($shot.Screen)" -ForegroundColor Yellow
+    Write-Host "  Screenshot $num of 8: $($shot.Screen)" -ForegroundColor Yellow
     Write-Host "────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     foreach ($line in $shot.Instructions) {
         Write-Host "  >> $line" -ForegroundColor White
@@ -246,3 +274,16 @@ Write-Host "  Optional: Add text overlays using Canva or Figma." -ForegroundColo
 Write-Host "  Next step: Run .\05-deploy-privacy-policy.ps1" -ForegroundColor Green
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
+
+@(
+    "Snapshot Label: $SnapshotLabel"
+    "Captured At: $($captureStarted.ToString("yyyy-MM-dd HH:mm:ss zzz"))"
+    "Device Model: $deviceModel"
+    "Expected Package: $ExpectedPackage"
+    "Activity: $PackageActivity"
+    "Rule: newest signed build only"
+    ""
+    "Files:"
+) + ($captured | Sort-Object Name | ForEach-Object {
+    "$($_.Name)`t$($_.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss zzz"))`t$($_.Length)"
+}) | Set-Content -Path $manifestPath

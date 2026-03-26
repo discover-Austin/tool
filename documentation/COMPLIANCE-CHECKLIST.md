@@ -1,6 +1,6 @@
 # Play Store Compliance Checklist
 
-Updated: March 23, 2026
+Updated: March 25, 2026
 
 ## Platform
 
@@ -8,7 +8,7 @@ Updated: March 23, 2026
 - [x] `minSdk = 26`
 - [x] `targetSdk = 35`
 - [x] `compileSdk = 35`
-- [x] Current release version is `versionCode = 20`, `versionName = "1.0.18"`
+- [x] Current release version is `versionCode = 21`, `versionName = "1.0.19"`
 
 ## Privacy / Data Safety
 
@@ -24,6 +24,9 @@ Updated: March 23, 2026
 - [x] Listing text files present in `store-assets/listing/`
 - [x] Feature graphic and icon present in `store-assets/graphics/`
 - [x] Screenshot set present in `store-assets/screenshots/`
+- [x] All 8 screenshots refreshed from the newest signed sideload build only
+- [x] 30-second narrated showcase refreshed from the newest signed sideload build only
+- [x] Showcase promo is frozen to the latest verified screenshot set for deterministic review consistency
 
 ## Build / Quality Gates
 
@@ -31,13 +34,14 @@ Updated: March 23, 2026
 - [x] `:core:test`
 - [x] `:app:lint`
 - [x] `:app:lintRelease`
-- [ ] `:app:bundleRelease` on the current worktree
+- [x] `:app:bundleRelease` on the current worktree
+- [x] `:app:assembleSideload` on the current worktree
 
 ## Manual Pre-Rollout Checks
 
 - [ ] Validate smoke flow on the exact upload commit
-- [ ] Confirm Play Console parses `versionCode 20` and `versionName 1.0.18`
-- [ ] Confirm screenshots/listing text match current UI
+- [ ] Confirm Play Console parses `versionCode 21` and `versionName 1.0.19`
+- [x] Confirm screenshots/video/listing text all match the newest UI build
 - [x] Confirm privacy policy URL is publicly reachable
 
 

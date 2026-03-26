@@ -210,13 +210,16 @@ internal fun DualJoystickOverlay(
     controlStateLabel: String?,
     belowHistoryContent: (@Composable () -> Unit)? = null,
     leftPadModifier: Modifier = Modifier,
+    fineLeftPadModifier: Modifier = Modifier,
     centerControlsModifier: Modifier = Modifier,
+    fineRightPadModifier: Modifier = Modifier,
     rightPadModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
         val compact = maxWidth < 420.dp
         val ultraCompact = maxWidth < 360.dp
+        val density = LocalDensity.current
         val sidePadding = if (compact) 4.dp else 8.dp
         val joystickSize = when {
             ultraCompact -> 94.dp
@@ -239,12 +242,6 @@ internal fun DualJoystickOverlay(
             compact -> 20.dp
             else -> 24.dp
         }
-        val miniPadGap = if (compact) 6.dp else 8.dp
-        val miniPadCenterInset = ((joystickSize - miniPadSize) / 2f) + when {
-            ultraCompact -> 18.dp
-            compact -> 22.dp
-            else -> 26.dp
-        }
         val joystickBottomLift = if (compact) 10.dp else 14.dp
         val centerColumnBottom = if (compact) 20.dp else 30.dp
         val controlRowSpacing = if (compact) 5.dp else 6.dp
@@ -252,42 +249,37 @@ internal fun DualJoystickOverlay(
         val zoomIconSize = if (compact) 14.dp else 16.dp
         val historyButtonSize = if (compact) 30.dp else 34.dp
         val historyIconSize = if (compact) 13.dp else 15.dp
+        val miniPadPocketGapPx = with(density) { (if (compact) 11.dp else 13.dp).toPx() }
+        val miniPadSizePx = with(density) { miniPadSize.toPx() }
+        var overlayTopLeft by remember { mutableStateOf(Offset.Zero) }
+        var overlayWidthPx by remember { mutableFloatStateOf(0f) }
+        var zoomRowBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = sidePadding)
+                .onGloballyPositioned { coordinates ->
+                    overlayTopLeft = coordinates.positionInRoot()
+                    overlayWidthPx = coordinates.size.width.toFloat()
+                }
         ) {
-            Column(
+            JoystickPad(
+                insideLabel = "Pan / Alt",
+                vector = leftVector,
+                onVectorChange = onLeftVectorChange,
+                onTap = onLeftTap,
+                onPressChange = onLeftPressChange,
+                tapZoneScale = 0.90f,
+                tapMoveThresholdPx = if (compact) 30f else 34f,
+                centerTapRequired = false,
+                padSize = joystickSize,
+                knobSize = knobSize,
+                labelFontSize = labelFontSize,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(bottom = joystickBottomLift),
-                verticalArrangement = Arrangement.spacedBy(miniPadGap)
-            ) {
-                JoystickPad(
-                    insideLabel = null,
-                    vector = fineLeftVector,
-                    onVectorChange = onFineLeftVectorChange,
-                    onTap = null,
-                    padSize = miniPadSize,
-                    knobSize = miniKnobSize,
-                    showCenterLabel = false,
-                    modifier = Modifier.padding(start = miniPadCenterInset)
-                )
-                JoystickPad(
-                    insideLabel = "Pan / Alt",
-                    vector = leftVector,
-                    onVectorChange = onLeftVectorChange,
-                    onTap = onLeftTap,
-                    onPressChange = onLeftPressChange,
-                    tapZoneScale = 0.90f,
-                    tapMoveThresholdPx = if (compact) 30f else 34f,
-                    centerTapRequired = false,
-                    padSize = joystickSize,
-                    knobSize = knobSize,
-                    labelFontSize = labelFontSize,
-                    boundsModifier = leftPadModifier
-                )
-            }
+                boundsModifier = leftPadModifier
+            )
             CenteredOverlayControls(
                 canUndo = canUndo,
                 canRedo = canRedo,
@@ -308,15 +300,36 @@ internal fun DualJoystickOverlay(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = centerColumnBottom),
-                boundsModifier = centerControlsModifier
+                boundsModifier = centerControlsModifier,
+                onZoomRowBoundsChanged = { bounds ->
+                    zoomRowBoundsInRoot = bounds
+                }
             )
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = joystickBottomLift),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(miniPadGap)
-            ) {
+            zoomRowBoundsInRoot?.let { zoomRowBounds ->
+                val pocketTop = zoomRowBounds.top - overlayTopLeft.y +
+                    ((zoomRowBounds.height - miniPadSizePx) / 2f)
+                val leftPocketX = (zoomRowBounds.left - overlayTopLeft.x - miniPadPocketGapPx - miniPadSizePx)
+                    .coerceAtLeast(0f)
+                val rightPocketX = (zoomRowBounds.right - overlayTopLeft.x + miniPadPocketGapPx)
+                    .coerceAtMost((overlayWidthPx - miniPadSizePx).coerceAtLeast(0f))
+                val pocketYOffset = pocketTop.roundToInt()
+                JoystickPad(
+                    insideLabel = null,
+                    vector = fineLeftVector,
+                    onVectorChange = onFineLeftVectorChange,
+                    onTap = null,
+                    padSize = miniPadSize,
+                    knobSize = miniKnobSize,
+                    showCenterLabel = false,
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = leftPocketX.roundToInt(),
+                                y = pocketYOffset
+                            )
+                        }
+                        .then(fineLeftPadModifier)
+                )
                 JoystickPad(
                     insideLabel = null,
                     vector = fineRightVector,
@@ -325,23 +338,33 @@ internal fun DualJoystickOverlay(
                     padSize = miniPadSize,
                     knobSize = miniKnobSize,
                     showCenterLabel = false,
-                    modifier = Modifier.padding(end = miniPadCenterInset)
-                )
-                JoystickPad(
-                    insideLabel = "Cursor / Select",
-                    vector = rightVector,
-                    onVectorChange = onRightVectorChange,
-                    onTap = onRightTap,
-                    onPressChange = onRightPressChange,
-                    tapZoneScale = 0.92f,
-                    tapMoveThresholdPx = if (compact) 34f else 38f,
-                    centerTapRequired = false,
-                    padSize = joystickSize,
-                    knobSize = knobSize,
-                    labelFontSize = labelFontSize,
-                    boundsModifier = rightPadModifier
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = rightPocketX.roundToInt(),
+                                y = pocketYOffset
+                            )
+                        }
+                        .then(fineRightPadModifier)
                 )
             }
+            JoystickPad(
+                insideLabel = "Cursor / Select",
+                vector = rightVector,
+                onVectorChange = onRightVectorChange,
+                onTap = onRightTap,
+                onPressChange = onRightPressChange,
+                tapZoneScale = 0.92f,
+                tapMoveThresholdPx = if (compact) 34f else 38f,
+                centerTapRequired = false,
+                padSize = joystickSize,
+                knobSize = knobSize,
+                labelFontSize = labelFontSize,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = joystickBottomLift),
+                boundsModifier = rightPadModifier
+            )
         }
     }
 }
@@ -364,6 +387,7 @@ private fun CenteredOverlayControls(
     historyButtonSize: Dp,
     historyIconSize: Dp,
     belowHistoryContent: (@Composable () -> Unit)? = null,
+    onZoomRowBoundsChanged: ((Rect) -> Unit)? = null,
     modifier: Modifier = Modifier,
     boundsModifier: Modifier = Modifier
 ) {
@@ -379,6 +403,14 @@ private fun CenteredOverlayControls(
                 )
             }
             Row(
+                modifier = Modifier.onGloballyPositioned { coordinates ->
+                    onZoomRowBoundsChanged?.invoke(
+                        Rect(
+                            offset = coordinates.positionInRoot(),
+                            size = coordinates.size.toSize()
+                        )
+                    )
+                },
                 horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
                 verticalAlignment = Alignment.CenterVertically
             ) {

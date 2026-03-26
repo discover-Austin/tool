@@ -63,12 +63,13 @@ class BlueprintControlTutorialTest {
                 BlueprintControlTutorialTarget.HELP_BUTTON,
                 BlueprintControlTutorialTarget.CANVAS,
                 BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
-                BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
+                BlueprintControlTutorialTarget.JOYSTICK_FINE_LEFT_PAD,
                 BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
+                BlueprintControlTutorialTarget.JOYSTICK_FINE_RIGHT_PAD,
+                BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
                 BlueprintControlTutorialTarget.EDGE_DIALS,
                 BlueprintControlTutorialTarget.TOP_START_STACK,
                 BlueprintControlTutorialTarget.TOP_END_STACK,
-                BlueprintControlTutorialTarget.FLOOR_SWITCHER,
                 BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON
             ),
             steps.map(BlueprintControlTutorialStep::target)

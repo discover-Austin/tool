@@ -1,5 +1,18 @@
 # Asset Creation Notes
 
+## Frozen Release Snapshot Standard
+
+Use the newest build for everything.
+
+- Release upload artifact: `app/build/outputs/bundle/release/app-release.aab`
+- Media capture artifact: `app/build/outputs/apk/sideload/app-sideload.apk`
+- Current release identity: `1.0.19` (`versionCode = 21`)
+- Play upload package: `com.tradesketch.estimator`
+- Screenshot/video capture package: `com.tradesketch.estimator.local`
+- Device baseline for the current media pass: `1440 x 3120`
+- Do not mix screenshots or showcase video from older builds.
+- When the version changes, refresh all 8 screenshots and the 30-second showcase together.
+
 ## Graphics Assets Required
 
 This file documents the graphics assets needed for Play Store submission and provides specifications for creating them.
@@ -81,7 +94,7 @@ Once you have the 512×512 master, generate adaptive icons:
 
 **Dimensions:** 1080 × 2400 pixels (or device native)  
 **Format:** PNG (recommended) or JPEG  
-**Count:** 6 required
+**Count:** Up to 8 supported on Google Play phone listings
 
 **Current Repo Path:**
 
@@ -98,6 +111,9 @@ adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 
 adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
 adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
 
+# Launch the newest signed sideload capture build
+adb shell am start -n com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity
+
 # Navigate to desired screen in app
 
 # Capture
@@ -112,10 +128,9 @@ adb pull /sdcard/screenshot.png 01_projects.png
 
 **Required Screens:**
 
-1. **01_projects.png** - Workspace + saved projects
-   - Left rail expanded (New+, Saved, Blueprint, Materials, Export, Settings/About)
-   - Saved projects panel open
-   - Project context visible
+1. **01_projects.png** - Workspace + project context
+   - Left rail expanded or project context clearly visible
+   - Shows the active estimating workspace
 
 2. **02_spaces.png** - Blueprint overview
    - Blueprint canvas with geometry visible
@@ -146,6 +161,15 @@ adb pull /sdcard/screenshot.png 01_projects.png
    - Preview deck visible
    - Disclaimer visible
 
+7. **07_settings.png** - Settings and onboarding help
+   - Preferences and accessibility controls visible
+   - Help & Onboarding card visible
+   - Replay Control Tour CTA visible
+
+8. **08_open.png** - Saved/Open projects panel
+   - Existing project list visible
+   - Quick-return workflow for prior jobs visible
+
 **Screenshot Enhancement (Optional):**
 
 Add text overlays using image editor:
@@ -158,21 +182,21 @@ Keep overlays minimal and professional.
 
 ### 4. Promo Video (Optional but Recommended)
 
-**Duration:** 30-120 seconds  
-**Format:** MP4 or WebM  
-**Max Size:** 100 MB  
+**Duration:** 30 seconds for the Play preview master  
+**Play Console Submission:** Upload the final video to YouTube, then add the preview video URL in Play Console  
+**Local Working Format:** 1080 × 1920 MP4 is ideal for editing/review  
 
-**Script:**
-1. (0-5s) "Estimating materials for your next project?"
-2. (5-15s) Show creating project from template
-3. (15-25s) Show takeoff calculation
-4. (25-30s) Show export to PDF
-5. (30s) "TradeSketch Estimator - Available now"
+**Current Showcase Flow:**
+1. Open an active project in the newest signed sideload build.
+2. Show blueprint editing with measured arcs and sketch curves.
+3. Move through trade-specific takeoff results.
+4. End on the Export screen with PDF/PNG/CSV/JSON actions.
+5. Render with subtitles and narration from `media/play_store_showcase/showcase_voiceover.txt` and `media/play_store_showcase/showcase_captions.srt`.
 
 **Tools:**
 - Screen recording: ADB, Android Studio, OBS
-- Editing: DaVinci Resolve (free), iMovie, Kdenlive
-- Narration: Optional voiceover or text overlays
+- Rendering: `scripts/render_play_store_showcase.ps1`
+- Narration: `scripts/generate_play_store_voiceover.ps1`
 
 ## Asset Delivery Checklist
 
@@ -183,13 +207,14 @@ Before submission, verify:
 - [ ] App icon is recognizable at 48×48 (test by shrinking)
 - [ ] Feature graphic is 1024×500
 - [ ] Feature graphic text is readable at thumbnail size
-- [ ] All 6 screenshots are captured
+- [ ] All 8 screenshots are captured from the newest signed sideload build
 - [ ] Screenshots show real, working features (not mockups)
 - [ ] Screenshots are same aspect ratio
 - [ ] Screenshots are high resolution (≥1080px short side)
 - [ ] No placeholder text in screenshots
 - [ ] Status bar is clean in screenshots (demo mode)
-- [ ] Screenshots demonstrate key features
+- [ ] Screenshots demonstrate key features from the newest build only
+- [ ] Preview video matches the same build as the screenshots
 - [ ] All assets use consistent color scheme
 
 ## Brand Guidelines

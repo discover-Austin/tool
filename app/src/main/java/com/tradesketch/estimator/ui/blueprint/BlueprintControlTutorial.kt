@@ -74,7 +74,9 @@ internal enum class BlueprintControlTutorialTarget {
     TOUCH_CENTER_CONTROLS,
     TOUCH_RIGHT_TOOLS,
     JOYSTICK_LEFT_PAD,
+    JOYSTICK_FINE_LEFT_PAD,
     JOYSTICK_CENTER_CONTROLS,
+    JOYSTICK_FINE_RIGHT_PAD,
     JOYSTICK_RIGHT_PAD,
     EDGE_DIALS,
     OPENING_PANEL,
@@ -118,7 +120,9 @@ internal data class BlueprintControlTutorialStep(
     val demoPointerWorld: PointMm? = null,
     val demoPendingGrabSelection: Boolean = false,
     val demoLeftVector: Offset = Offset.Zero,
-    val demoRightVector: Offset = Offset.Zero
+    val demoRightVector: Offset = Offset.Zero,
+    val demoFineLeftVector: Offset = Offset.Zero,
+    val demoFineRightVector: Offset = Offset.Zero
 )
 
 internal fun BlueprintControlTutorialStep.resolvedDemoTool(): BlueprintDraftTool? {
@@ -157,7 +161,9 @@ internal fun BlueprintControlTutorialStep.hasLiveExample(): Boolean {
         showGridScaleEditor ||
         forceEdgeDials ||
         demoLeftVector != Offset.Zero ||
-        demoRightVector != Offset.Zero
+        demoRightVector != Offset.Zero ||
+        demoFineLeftVector != Offset.Zero ||
+        demoFineRightVector != Offset.Zero
 }
 
 internal fun BlueprintControlTutorialStep.prefersPinnedTopTooltip(): Boolean {
@@ -205,7 +211,10 @@ internal fun blueprintControlTutorialSteps(
     } else {
         touchModeTutorialSteps()
     }
-    val hudSteps = commonHudTutorialSteps(includeGridScaleBadge = !dualJoysticksEnabled)
+    val hudSteps = commonHudTutorialSteps(
+        includeFloorSwitcher = !dualJoysticksEnabled,
+        includeGridScaleBadge = !dualJoysticksEnabled
+    )
     return railSteps + modeSteps + hudSteps
 }
 
@@ -371,55 +380,80 @@ private fun joystickModeTutorialSteps(): List<BlueprintControlTutorialStep> {
         BlueprintControlTutorialStep(
             target = BlueprintControlTutorialTarget.CANVAS,
             title = "Canvas Flow",
-            message = "In joystick mode, you aim with the cursor, tap to confirm, then fine-tune.",
+            message = "In joystick mode, the big right pad aims, the big left pad pans, and the mini pads handle tiny nudges.",
             details = listOf(
-                "The right pad moves the cursor.",
-                "The left pad moves the drawing.",
-                "You still get a preview before you place anything."
+                "Move the cursor with the right pad, then tap it to confirm at that point.",
+                "Use the left pad to move the canvas under the cursor.",
+                "The mini pads beside zoom help when you need slower, tighter movement."
             ),
-            seeIt = "The sample wall shows what the cursor flow creates.",
+            seeIt = "The sample wall shows the preview you line up before you commit it.",
             demoDrawingStart = TUTORIAL_WALL_DEMO_START,
             demoDrawingPreview = TUTORIAL_WALL_DEMO_END
         ),
         BlueprintControlTutorialStep(
             target = BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
-            title = "Left Pad",
-            message = "The left pad moves the blueprint around.",
+            title = "Pan / Alt",
+            message = "The big left pad is your fast pan control, and its tap or press helps you back out of the current state.",
             details = listOf(
-                "Use big pushes to travel farther.",
-                "Use small pushes for smaller moves."
+                "Push it to move the canvas.",
+                "Tap it to cancel a draft, clear a picked-up wall, or clear selection.",
+                "Press and hold it when you want wall targeting to feel more forgiving."
             ),
-            seeIt = "The moving arrow shows a pan motion.",
+            seeIt = "The moving arrow shows the broad pan motion from the big pad.",
             demoLeftVector = Offset(-0.62f, 0.26f)
         ),
         BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
-            title = "Right Pad",
-            message = "The right pad moves the cursor and handles most taps.",
+            target = BlueprintControlTutorialTarget.JOYSTICK_FINE_LEFT_PAD,
+            title = "Fine Pan",
+            message = "The small left mini pad nudges the canvas in slower, shorter moves.",
             details = listOf(
-                "Small moves help with precision.",
-                "Line the cursor up before you place a point."
+                "Use it after zooming in.",
+                "It is for framing and tiny alignment, not long travel."
             ),
-            seeIt = "The moving arrow shows the aiming motion.",
-            demoRightVector = Offset(0.56f, -0.54f)
+            seeIt = "This mini pad sits beside zoom so fine movement stays near the center controls.",
+            demoFineLeftVector = Offset(-0.46f, 0.18f)
         ),
         BlueprintControlTutorialStep(
             target = BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
             title = "Zoom and History",
-            message = "These buttons are for zoom, undo, and redo.",
+            message = "This center stack keeps zoom, undo, redo, and the live state label together.",
             details = listOf(
                 "Zoom in before precise work.",
-                "Undo and redo fix quick mistakes."
+                "Undo and redo fix quick mistakes.",
+                "The state label tells you when you are drawing, boxing, or selecting."
             ),
             seeIt = "This group stays in the middle because you may need it at any time."
         ),
         BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.JOYSTICK_FINE_RIGHT_PAD,
+            title = "Fine Cursor",
+            message = "The small right mini pad micro-aims the cursor without overshooting.",
+            details = listOf(
+                "Use it to line up corners, openings, and wall picks.",
+                "It moves slower than the big right pad."
+            ),
+            seeIt = "This mini pad sits beside zoom so precise cursor moves stay close to the center controls.",
+            demoFineRightVector = Offset(0.42f, -0.22f)
+        ),
+        BlueprintControlTutorialStep(
+            target = BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
+            title = "Cursor / Select",
+            message = "The big right pad moves the cursor, and a tap confirms or selects at that point.",
+            details = listOf(
+                "Move first, then tap to place corners, boxes, openings, and selections.",
+                "Use small moves before you commit."
+            ),
+            seeIt = "The moving arrow shows the aiming motion from the big right pad.",
+            demoRightVector = Offset(0.56f, -0.54f)
+        ),
+        BlueprintControlTutorialStep(
             target = BlueprintControlTutorialTarget.EDGE_DIALS,
             title = "Precision Dials",
-            message = "These dials are for tiny changes after a draft is already on screen.",
+            message = "After a draft is on screen, the dials reshape it while the mini pads keep positioning precise.",
             details = listOf(
                 "Left dial changes angle or sweep.",
-                "Right dial changes length, rise, or bend."
+                "Right dial changes length, rise, or bend.",
+                "Use the mini pads first if the cursor or canvas needs a tiny nudge."
             ),
             seeIt = "A sample wall is active so the dials are visible right now.",
             demoTool = BlueprintDraftTool.DRAW_WALL,
@@ -518,7 +552,10 @@ private fun touchModeTutorialSteps(): List<BlueprintControlTutorialStep> {
     )
 }
 
-private fun commonHudTutorialSteps(includeGridScaleBadge: Boolean): List<BlueprintControlTutorialStep> {
+private fun commonHudTutorialSteps(
+    includeFloorSwitcher: Boolean,
+    includeGridScaleBadge: Boolean
+): List<BlueprintControlTutorialStep> {
     return buildList {
         add(
             BlueprintControlTutorialStep(
@@ -535,27 +572,29 @@ private fun commonHudTutorialSteps(includeGridScaleBadge: Boolean): List<Bluepri
         add(
             BlueprintControlTutorialStep(
                 target = BlueprintControlTutorialTarget.TOP_END_STACK,
-                title = "Project and Trade",
-                message = "The top-right area holds project info and bigger control buttons.",
+                title = "Project Controls",
+                message = "The top-right corner keeps save, trade scope, and reset actions together.",
                 details = listOf(
-                    "This is where scope and project context live.",
-                    "Big actions stay here instead of covering the canvas."
+                    "Tap the trade chip to cycle drywall, concrete, gravel, and paint.",
+                    "Save and clear stay here instead of covering the canvas."
                 ),
                 seeIt = "Think of this corner as the project-control corner."
             )
         )
-        add(
-            BlueprintControlTutorialStep(
-                target = BlueprintControlTutorialTarget.FLOOR_SWITCHER,
-                title = "Floor Switcher",
-                message = "Use this to switch floors without leaving the drawing.",
-                details = listOf(
-                    "Pick the floor before you draw on it.",
-                    "Ground is always one tap away."
-                ),
-                seeIt = "It stays separate because changing floors changes which drawing you are editing."
+        if (includeFloorSwitcher) {
+            add(
+                BlueprintControlTutorialStep(
+                    target = BlueprintControlTutorialTarget.FLOOR_SWITCHER,
+                    title = "Floor Switcher",
+                    message = "Use this to switch floors without leaving the drawing.",
+                    details = listOf(
+                        "Pick the floor before you draw on it.",
+                        "Ground is always one tap away."
+                    ),
+                    seeIt = "It stays separate because changing floors changes which drawing you are editing."
+                )
             )
-        )
+        }
         if (includeGridScaleBadge) {
             add(
                 BlueprintControlTutorialStep(

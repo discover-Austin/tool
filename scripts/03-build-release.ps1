@@ -23,6 +23,13 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $gradlew = Join-Path $projectRoot "gradlew.bat"
 $aabOutput = Join-Path $projectRoot "app\build\outputs\bundle\release\app-release.aab"
+$androidUserHome = Join-Path $projectRoot ".android-home"
+$gradleUserHome = Join-Path $projectRoot ".gradle-home"
+
+New-Item -ItemType Directory -Force -Path $androidUserHome | Out-Null
+New-Item -ItemType Directory -Force -Path $gradleUserHome | Out-Null
+$env:ANDROID_USER_HOME = $androidUserHome
+$env:GRADLE_USER_HOME = $gradleUserHome
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
@@ -33,6 +40,8 @@ Write-Host ""
 # ── 1. CHECK SIGNING CONFIG ─────────────────────────────────────────────────
 
 Write-Host "[1/4] Checking signing configuration..." -ForegroundColor Yellow
+Write-Host "  Using ANDROID_USER_HOME=$androidUserHome" -ForegroundColor DarkGray
+Write-Host "  Using GRADLE_USER_HOME=$gradleUserHome" -ForegroundColor DarkGray
 
 $localProps = Join-Path $projectRoot "local.properties"
 $requiredSigningKeys = @("KEYSTORE_FILE", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD")

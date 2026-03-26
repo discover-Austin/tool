@@ -1,24 +1,36 @@
 # TradeSketch Estimator - Release Status (Authoritative)
 
-Last updated: March 23, 2026
+Last updated: March 25, 2026
 
 This file is the single source of truth for current release readiness in this repository.
 
 ## Build Identity
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.18` (`versionCode = 20`)
+- Version: `1.0.19` (`versionCode = 21`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`isMinifyEnabled = true`, `isShrinkResources = true`)
 - Current worktree verification:
-  - `:app:testDebugUnitTest` passed on `2026-03-23`
-  - `:core:test` passed on `2026-03-23`
-  - `:app:lint` and `:app:lintRelease` generated reports with `0` lint errors on `2026-03-23`
-  - `:app:bundleRelease` is still pending for the current worktree
+  - `:app:testDebugUnitTest` passed on `2026-03-25`
+  - `:core:test` passed on `2026-03-25`
+  - `:app:lint` passed on `2026-03-25`
+  - `:app:lintRelease` passed on `2026-03-25`
+  - `:app:bundleRelease` passed on `2026-03-25`
+  - `:app:assembleSideload` passed on `2026-03-25`
+  - `jarsigner -verify app-release.aab` returned `jar verified` on `2026-03-25`
 - Last bundle artifact on disk: `app/build/outputs/bundle/release/app-release.aab`
-- Artifact timestamp on disk: `2026-03-23 10:30:54 -04:00`
-- Artifact SHA-256 on disk: `99E20C96F0B527C498BFF88D7F3084F0728A5A9E3511B384484FBAEF0C16270D`
-- Note: the on-disk bundle was not revalidated after the current audit fixes.
+- Artifact timestamp on disk: `2026-03-25 16:22:03 -04:00`
+- Artifact SHA-256 on disk: `35F2F4F1D68645D8ACA1817BBE96A95ECBE614BEA9D74BE52699C8BAE16324F2`
+- Last sideload artifact on disk: `app/build/outputs/apk/sideload/app-sideload.apk`
+- Sideload timestamp on disk: `2026-03-25 16:34:03 -04:00`
+- Sideload SHA-256 on disk: `0EC161B03CEC901AC1F769C62DF72EEB65995F4BA10592F8926137925BC44DC6`
+- Capture package for screenshots/video: `com.tradesketch.estimator.local`
+- Screenshot set status: refreshed on `2026-03-25`; manifest recorded in `store-assets/screenshots/LATEST_SCREENSHOT_SNAPSHOT.txt`
+- Showcase video status: fresh raw capture recorded on `2026-03-25 17:41:59 -04:00`; verified screenshot-frozen narrated/subtitled render completed on `2026-03-25 18:09:10 -04:00`
+- Showcase video artifact: `media/play_store_showcase/tradesketch_showcase_play_store_30s.mp4`
+- Showcase video duration: `30.000000s`
+- Showcase video SHA-256: `BDEB587FF1415A593E33FEBD010F23D073DC1A0225C1DC03129E37C0FB734D65`
+- Note: older March 24 media artifacts are stale. An earlier March 25 raw-capture render was rejected during frame verification and superseded by the screenshot-frozen March 25 screenshot/video set.
 
 ## Truly Complete
 
@@ -64,6 +76,7 @@ This file is the single source of truth for current release readiness in this re
   - Manifest app label now uses `@string/app_name`.
   - Added explicit `dataExtractionRules` + `fullBackupContent` XML to keep backup behavior explicit with `allowBackup=false`.
   - Adaptive launcher icon resources moved off obsolete `mipmap-anydpi-v26` qualifier for `minSdk 26`.
+  - Release tooling now fails fast on missing signing config, keeps keystore names ignored, supports an 8-shot Play listing, and renders a 30-second production showcase video.
 - Test additions:
   - Ceiling-enabled drywall regression coverage.
   - CSV escaping/injection regression coverage.
@@ -81,6 +94,6 @@ This file is the single source of truth for current release readiness in this re
 - More comprehensive keyboard/mouse shortcuts for blueprint editing on Chromebook/desktop Android.
 - Additional `androidTest` journeys for deep export/share edge cases (beyond current onboarding + workspace navigation smoke).
 - Additional premium report theming/branding controls (logo upload, template themes).
-- Recapture Play Store screenshots from current app UI before submission.
+- Wider multi-device smoke coverage before rollout.
 
 

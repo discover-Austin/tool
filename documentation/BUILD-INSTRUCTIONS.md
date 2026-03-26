@@ -1,6 +1,6 @@
 # Build Instructions
 
-Updated: March 9, 2026
+Updated: March 25, 2026
 
 ## Baseline
 
@@ -17,6 +17,7 @@ Updated: March 9, 2026
 ./gradlew.bat :app:lint
 ./gradlew.bat :app:lintRelease
 ./gradlew.bat :app:bundleRelease
+./gradlew.bat :app:assembleSideload
 ```
 
 ## Scripted Release Path
@@ -25,11 +26,22 @@ Updated: March 9, 2026
 ./scripts/01-check-prerequisites.ps1
 ./scripts/02-generate-keystore.ps1
 ./scripts/03-build-release.ps1
+./scripts/04-capture-screenshots.ps1
+./scripts/generate_play_store_voiceover.ps1
+./scripts/record_play_store_showcase.ps1
+./scripts/render_play_store_showcase.ps1
 ```
 
 Expected artifact:
 
 - `app/build/outputs/bundle/release/app-release.aab`
+- `app/build/outputs/apk/sideload/app-sideload.apk`
+
+## Frozen Release Rule
+
+- Build the upload bundle and capture build from the same commit.
+- Capture screenshots and preview video from the newest signed sideload build only.
+- When the version changes, replace all 8 screenshots and the 30-second showcase together.
 
 ## Signing Keys
 

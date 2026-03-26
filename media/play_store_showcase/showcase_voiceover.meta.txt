@@ -1,0 +1,7 @@
+Generated At: 2026-03-25 08:30:25 -04:00
+Voice: Microsoft David Desktop
+Rate: 2
+Volume: 100
+Script: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.txt
+Wav: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.wav
+Mp3: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.mp3

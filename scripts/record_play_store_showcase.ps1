@@ -1,6 +1,8 @@
 param(
     [string]$OutputDir = "C:\Users\grand\tool\media\play_store_showcase",
-    [string]$PackageActivity = "com.tradesketch.estimator/.MainActivity"
+    [string]$PackageActivity = "com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity",
+    [string]$ExpectedPackage = "com.tradesketch.estimator.local",
+    [string]$SnapshotLabel = "play-store-v1.0.19-build-21"
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,10 +47,19 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 $deviceFile = "/sdcard/tradesketch_showcase_raw.mp4"
 $hostFile = Join-Path $OutputDir "tradesketch_showcase_raw.mp4"
+$manifestFile = Join-Path $OutputDir "LATEST_SHOWCASE_SNAPSHOT.txt"
+$deviceModel = (& adb shell getprop ro.product.model).Trim()
+$captureStarted = Get-Date
 
-Invoke-Adb shell rm -f $deviceFile
-Invoke-Adb shell settings put system show_touches 1
-Invoke-Adb shell am start -n $PackageActivity
+Invoke-Adb @("shell", "rm", "-f", $deviceFile)
+Invoke-Adb @("shell", "settings", "put", "system", "show_touches", "1")
+Invoke-Adb @("shell", "settings", "put", "global", "sysui_demo_allowed", "1")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "clock", "-e", "hhmm", "0941")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "network", "-e", "wifi", "show", "-e", "level", "4")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "notifications", "-e", "visible", "false")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "status", "-e", "volume", "hide")
+Invoke-Adb @("shell", "am", "start", "-n", $PackageActivity)
 Start-Sleep -Seconds 2
 
 $screenRecord = Start-Process adb `
@@ -95,7 +106,18 @@ Tap 120 1505 1600
 Start-Sleep -Seconds 5
 
 $screenRecord.WaitForExit()
-Invoke-Adb pull $deviceFile $hostFile | Out-Null
-Invoke-Adb shell settings put system show_touches 0
+Invoke-Adb @("pull", $deviceFile, $hostFile)
+Invoke-Adb @("shell", "settings", "put", "system", "show_touches", "0")
+Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "exit")
+
+@(
+    "Snapshot Label: $SnapshotLabel"
+    "Captured At: $($captureStarted.ToString("yyyy-MM-dd HH:mm:ss zzz"))"
+    "Device Model: $deviceModel"
+    "Expected Package: $ExpectedPackage"
+    "Activity: $PackageActivity"
+    "Raw Video: $hostFile"
+    "Rule: newest signed build only"
+) | Set-Content -Path $manifestFile
 
 Write-Output $hostFile
