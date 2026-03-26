@@ -1,23 +1,23 @@
 1
-00:00:00,000 --> 00:00:04,000
-Sketch, measure, and estimate in one workspace.
+00:00:00,000 --> 00:00:05,000
+Start the job in one offline workspace.
 
 2
-00:00:04,000 --> 00:00:08,000
-Open Shape Tools.
+00:00:05,000 --> 00:00:10,000
+Open blueprint tools fast.
 
 3
-00:00:08,000 --> 00:00:14,000
-Add curved walls with three taps.
+00:00:10,000 --> 00:00:15,000
+Sketch walls, measured arcs, and sketch curves.
 
 4
-00:00:14,000 --> 00:00:20,000
-Drop circles fast for pads and columns.
+00:00:15,000 --> 00:00:20,000
+Trade-specific quantities and pricing update live.
 
 5
 00:00:20,000 --> 00:00:25,000
-Update field quantities in Materials.
+Review totals and refine field values in Materials.
 
 6
 00:00:25,000 --> 00:00:30,000
-Finish in Export with a clean estimate summary.
+Finish in Export with PDF, PNG, CSV, and JSON output.

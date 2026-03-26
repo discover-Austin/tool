@@ -255,7 +255,9 @@ fun BlueprintScreen(
     var railHelpBounds by remember { mutableStateOf<Rect?>(null) }
     var wallRotateButtonBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialLeftControlsBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialFineLeftControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialCenterControlsBounds by remember { mutableStateOf<Rect?>(null) }
+    var tutorialFineRightControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialRightControlsBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialTouchSelectBounds by remember { mutableStateOf<Rect?>(null) }
     var tutorialTouchDrawBounds by remember { mutableStateOf<Rect?>(null) }
@@ -309,6 +311,18 @@ fun BlueprintScreen(
     val resetCircleDraft = {
         circleCenter = null
         circlePreviewEdge = null
+    }
+    val resetDraftState = {
+        drawingStart = null
+        drawingPreview = null
+        chainOrigin = null
+        boxStart = null
+        boxPreview = null
+        boxRotationRadians = 0.0
+        resetCurveDraft()
+        resetCircleDraft()
+        movingWallPreview = null
+        pendingGrabSelection = false
     }
     val normalizeMeasuredArcPreviewPoint: (PointMm, PointMm, PointMm) -> PointMm = { start, end, preview ->
         pointFromMeasuredArcRise(
@@ -507,11 +521,14 @@ fun BlueprintScreen(
             }
         )
     } ?: doc
-    val displayWallsById = displayDoc.walls.associateBy { it.id }
-    val renderedDoc = displayDoc.copy(
-        walls = displayDoc.walls.filter { wall -> wall.isOnFloor(selectedFloor) },
-        rooms = displayDoc.rooms.filter { room -> room.isOnFloor(selectedFloor) },
-        openings = displayDoc.openings.filter { opening -> opening.isOnFloor(selectedFloor, displayWallsById) }
+    val scopedDisplayDoc = displayDoc.scopedToTakeoffScope(currentScope)
+    val displayWallsById = scopedDisplayDoc.walls.associateBy { it.id }
+    val renderedDoc = scopedDisplayDoc.copy(
+        walls = scopedDisplayDoc.walls.filter { wall -> wall.isOnFloor(selectedFloor) },
+        rooms = scopedDisplayDoc.rooms.filter { room -> room.isOnFloor(selectedFloor) },
+        openings = scopedDisplayDoc.openings.filter { opening ->
+            opening.isOnFloor(selectedFloor, displayWallsById)
+        }
     )
     val selectedWall = uiState.selectedWallId?.let { id -> renderedDoc.walls.find { it.id == id } }
     val selectedOpening = uiState.selectedOpeningId?.let { id -> renderedDoc.openings.find { it.id == id } }
@@ -1819,8 +1836,10 @@ fun BlueprintScreen(
         BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON -> listOfNotNull(tutorialTouchCancelBounds)
         BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
         BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD -> listOfNotNull(tutorialLeftControlsBounds)
+        BlueprintControlTutorialTarget.JOYSTICK_FINE_LEFT_PAD -> listOfNotNull(tutorialFineLeftControlsBounds)
         BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
         BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS -> listOfNotNull(tutorialCenterControlsBounds)
+        BlueprintControlTutorialTarget.JOYSTICK_FINE_RIGHT_PAD -> listOfNotNull(tutorialFineRightControlsBounds)
         BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
         BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD -> listOfNotNull(tutorialRightControlsBounds)
         BlueprintControlTutorialTarget.EDGE_DIALS -> tutorialEdgeDialBounds
@@ -1841,6 +1860,16 @@ fun BlueprintScreen(
     }
     val tutorialRightVector = if (tutorialMode) {
         animatedTutorialJoystickVector(currentTutorialStep?.demoRightVector ?: Offset.Zero)
+    } else {
+        Offset.Zero
+    }
+    val tutorialFineLeftVector = if (tutorialMode) {
+        animatedTutorialJoystickVector(currentTutorialStep?.demoFineLeftVector ?: Offset.Zero)
+    } else {
+        Offset.Zero
+    }
+    val tutorialFineRightVector = if (tutorialMode) {
+        animatedTutorialJoystickVector(currentTutorialStep?.demoFineRightVector ?: Offset.Zero)
     } else {
         Offset.Zero
     }
@@ -2687,9 +2716,7 @@ fun BlueprintScreen(
                                 recordBlueprintMetric(BlueprintMetricAction.CLEAR_ALL)
                             }
                             viewModel.clearAllGeometry()
-                            drawingStart = null
-                            drawingPreview = null
-                            chainOrigin = null
+                            resetDraftState()
                             showClearAllConfirm = false
                         }
                     ) {
@@ -2976,8 +3003,8 @@ fun BlueprintScreen(
             DualJoystickOverlay(
                 leftVector = if (tutorialMode) tutorialLeftVector else leftJoystickVector,
                 rightVector = if (tutorialMode) tutorialRightVector else rightJoystickVector,
-                fineLeftVector = fineLeftJoystickVector,
-                fineRightVector = fineRightJoystickVector,
+                fineLeftVector = if (tutorialMode) tutorialFineLeftVector else fineLeftJoystickVector,
+                fineRightVector = if (tutorialMode) tutorialFineRightVector else fineRightJoystickVector,
                 onLeftVectorChange = { leftJoystickVector = it },
                 onRightVectorChange = { rightJoystickVector = it },
                 onFineLeftVectorChange = { fineLeftJoystickVector = it },
@@ -2999,8 +3026,14 @@ fun BlueprintScreen(
                 leftPadModifier = Modifier.onGloballyPositioned {
                     tutorialLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
+                fineLeftPadModifier = Modifier.onGloballyPositioned {
+                    tutorialFineLeftControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
                 centerControlsModifier = Modifier.onGloballyPositioned {
                     tutorialCenterControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
+                },
+                fineRightPadModifier = Modifier.onGloballyPositioned {
+                    tutorialFineRightControlsBounds = Rect(it.positionInRoot(), it.size.toSize())
                 },
                 rightPadModifier = Modifier.onGloballyPositioned {
                     tutorialRightControlsBounds = Rect(it.positionInRoot(), it.size.toSize())

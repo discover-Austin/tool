@@ -1,13 +1,13 @@
 # TradeSketch Estimator - Project Status
 
-Updated: March 23, 2026
+Updated: March 25, 2026
 
 See `RELEASE_STATUS.md` for authoritative release state.
 
 ## Current Technical Baseline
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.18` (`versionCode = 20`)
+- Version: `1.0.19` (`versionCode = 21`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
 - Release shrinking: enabled (`minify + resource shrink`)
 
@@ -24,7 +24,8 @@ See `RELEASE_STATUS.md` for authoritative release state.
 - Unit tests in `app` and `core`
 - Lint (`debug` + `release`)
 - Signed AAB generation pipeline via `scripts/03-build-release.ps1`
-- Latest local bundle artifact fingerprint recorded in `RELEASE_STATUS.md` (current-worktree bundle revalidation pending)
+- Signed sideload capture build via `:app:assembleSideload`
+- Latest local bundle and media snapshot recorded in `RELEASE_STATUS.md`
 
 ## Remaining Manual Gates
 
