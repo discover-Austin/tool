@@ -1,7 +1,14 @@
 package com.tradesketch.estimator.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.widget.Toast
 import com.tradesketch.estimator.ui.components.DangerActionButton
 import com.tradesketch.estimator.ui.components.QuietActionButton
+import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,16 +38,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tradesketch.estimator.R
 import com.tradesketch.estimator.BuildConfig
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.ui.components.BufferedInputField
 import com.tradesketch.estimator.ui.components.TitledSectionCard
+import com.tradesketch.estimator.ui.components.WorkspaceHeaderBackButton
 import com.tradesketch.estimator.ui.components.appCardBorder
 import com.tradesketch.estimator.ui.components.appCardColors
 import com.tradesketch.estimator.ui.components.appCardElevation
@@ -52,10 +63,12 @@ import com.tradesketch.estimator.utils.Formatters
 @Composable
 fun SettingsScreen(
     onReplayTutorial: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val haptics = rememberAppHaptics()
     var showResetConfirm by rememberSaveable { mutableStateOf(false) }
 
@@ -82,18 +95,29 @@ fun SettingsScreen(
                 border = appCardBorder(accented = true),
                 elevation = appCardElevation()
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = "Settings",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Keep only what matters: project preferences, quantities, and pricing.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    onBack?.let { backAction ->
+                        WorkspaceHeaderBackButton(onClick = backAction)
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Settings",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "Keep only what matters: project preferences, quantities, and pricing.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
@@ -176,7 +200,7 @@ fun SettingsScreen(
             item {
                 TitledSectionCard(
                     title = "Help & Onboarding",
-                    subtitle = "Replay the blueprint control tour for the current input mode."
+                    subtitle = "Replay the blueprint control tour."
                 ) {
                     Text(
                         text = "Need a refresher? Replay the control tour to spotlight each blueprint control with brief guidance.",
@@ -408,6 +432,22 @@ fun SettingsScreen(
                         text = "All project data stays on your device.",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.feedback_section_message, stringResource(R.string.support_email)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.tap()
+                            launchFeedbackEmail(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.send_feedback))
+                    }
                 }
             }
         }
@@ -433,8 +473,8 @@ fun SettingsScreen(
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset Settings") },
-            text = { Text("Reset all values back to factory defaults?") },
+            title = { Text(stringResource(R.string.reset_settings_title)) },
+            text = { Text(stringResource(R.string.reset_settings_message)) },
             confirmButton = {
                 DangerActionButton(
                     onClick = {
@@ -468,7 +508,6 @@ internal fun BlueprintControlsCard(
         Double?
     ) -> Unit,
     onUpdateBlueprintControlDefaults: (
-        Boolean?,
         Float?,
         Float?,
         Boolean?,
@@ -478,7 +517,7 @@ internal fun BlueprintControlsCard(
 ) {
     TitledSectionCard(
         title = "Blueprint Controls",
-        subtitle = "Snap and control-mode defaults for the Blueprint tab."
+        subtitle = "Snap and joystick defaults for the Blueprint tab."
     ) {
         Text(
             text = "Snap Toggles",
@@ -594,37 +633,14 @@ internal fun BlueprintControlsCard(
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Control mode",
+            text = "Control layout",
             style = MaterialTheme.typography.bodyMedium
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = !settings.blueprintDualJoysticksEnabled,
-                onClick = {
-                    if (settings.blueprintDualJoysticksEnabled) {
-                        onHapticTap()
-                        onUpdateBlueprintControlDefaults(false, null, null, null, null)
-                    }
-                },
-                label = { Text("Touch mode") }
-            )
-            FilterChip(
-                selected = settings.blueprintDualJoysticksEnabled,
-                onClick = {
-                    if (!settings.blueprintDualJoysticksEnabled) {
-                        onHapticTap()
-                        onUpdateBlueprintControlDefaults(true, null, null, null, null)
-                    }
-                },
-                label = { Text("Dual joysticks") }
-            )
-        }
+        Text(
+            text = "Blueprint now uses the dual-joystick layout full time so the lower control zones stay predictable on every job.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(modifier = Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -643,7 +659,7 @@ internal fun BlueprintControlsCard(
                 checked = settings.blueprintCursorVisible,
                 onCheckedChange = {
                     onHapticTap()
-                    onUpdateBlueprintControlDefaults(null, null, null, it, null)
+                    onUpdateBlueprintControlDefaults(null, null, it, null)
                 }
             )
         }
@@ -656,7 +672,7 @@ internal fun BlueprintControlsCard(
         Slider(
             value = settings.blueprintCursorScale.coerceIn(0.75f, 2.1f),
             onValueChange = {
-                onUpdateBlueprintControlDefaults(null, null, null, null, it.coerceIn(0.75f, 2.1f))
+                onUpdateBlueprintControlDefaults(null, null, null, it.coerceIn(0.75f, 2.1f))
             },
             valueRange = 0.75f..2.1f,
             steps = 12,
@@ -667,54 +683,43 @@ internal fun BlueprintControlsCard(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (settings.blueprintDualJoysticksEnabled) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Joystick sensitivity: ${"%.2f".format(settings.blueprintJoystickSensitivity)}x",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Slider(
-                value = settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
-                onValueChange = {
-                    onUpdateBlueprintControlDefaults(
-                        null,
-                        it.coerceIn(0.55f, 2.2f),
-                        null,
-                        null,
-                        null
-                    )
-                },
-                valueRange = 0.55f..2.2f,
-                steps = 16
-            )
-            Text(
-                text = "Joystick deadzone: ${(settings.blueprintJoystickDeadzone * 100f).toInt()}%",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Slider(
-                value = settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
-                onValueChange = {
-                    onUpdateBlueprintControlDefaults(
-                        null,
-                        null,
-                        it.coerceIn(0.08f, 0.30f),
-                        null,
-                        null
-                    )
-                },
-                valueRange = 0.08f..0.30f,
-                steps = 10
-            )
-        } else {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Joystick tuning appears when Dual joysticks is active.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Joystick sensitivity: ${"%.2f".format(settings.blueprintJoystickSensitivity)}x",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
+            onValueChange = {
+                onUpdateBlueprintControlDefaults(
+                    it.coerceIn(0.55f, 2.2f),
+                    null,
+                    null,
+                    null
+                )
+            },
+            valueRange = 0.55f..2.2f,
+            steps = 16
+        )
+        Text(
+            text = "Joystick deadzone: ${(settings.blueprintJoystickDeadzone * 100f).toInt()}%",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
+            onValueChange = {
+                onUpdateBlueprintControlDefaults(
+                    null,
+                    it.coerceIn(0.08f, 0.30f),
+                    null,
+                    null
+                )
+            },
+            valueRange = 0.08f..0.30f,
+            steps = 10
+        )
     }
 }
 
@@ -789,5 +794,35 @@ private fun BufferedField(
         keyboardType = keyboardType,
         onValueChange = onTextChanged
     )
+}
+
+private fun launchFeedbackEmail(context: Context) {
+    val supportEmail = context.getString(R.string.support_email)
+    val subject = context.getString(R.string.feedback_email_subject, BuildConfig.VERSION_NAME)
+    val body = buildString {
+        appendLine(context.getString(R.string.feedback_email_prompt))
+        appendLine()
+        appendLine("App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        appendLine("Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+        appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+    }
+    val intent = Intent(
+        Intent.ACTION_SENDTO,
+        Uri.parse("mailto:${Uri.encode(supportEmail)}")
+    ).apply {
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+
+    runCatching {
+        context.startActivity(intent)
+    }.onFailure { error ->
+        val message = if (error is ActivityNotFoundException) {
+            context.getString(R.string.feedback_no_mail_app, supportEmail)
+        } else {
+            context.getString(R.string.feedback_open_failed, supportEmail)
+        }
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+    }
 }
 

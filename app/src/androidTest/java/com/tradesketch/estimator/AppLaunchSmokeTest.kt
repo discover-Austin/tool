@@ -30,8 +30,8 @@ class AppLaunchSmokeTest {
             return
         }
 
-        if (rule.hasContentDescription("Saved")) {
-            rule.onNodeWithContentDescription("Saved").performClick()
+        if (rule.hasContentDescription("Open")) {
+            rule.onNodeWithContentDescription("Open").performClick()
             rule.onNodeWithText("Saved Projects").assertIsDisplayed()
             return
         }

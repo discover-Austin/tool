@@ -78,6 +78,14 @@ internal fun BlueprintDocument.assignUnscopedGeometryTo(scope: TakeoffScope): Bl
     )
 }
 
+internal fun BlueprintDocument.clearGeometry(): BlueprintDocument {
+    return copy(
+        walls = emptyList(),
+        rooms = emptyList(),
+        openings = emptyList()
+    )
+}
+
 internal fun detectRoomsByFloorAndScope(
     walls: List<WallSegment>,
     existingRooms: List<Room>,

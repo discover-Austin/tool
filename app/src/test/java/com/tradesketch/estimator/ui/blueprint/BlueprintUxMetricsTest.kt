@@ -6,25 +6,11 @@ import kotlin.test.assertEquals
 class BlueprintUxMetricsTest {
 
     @Test
-    fun `screen opened metric key is emitted only when the control mode changes`() {
-        assertEquals(
-            "blueprint_screen_opened_touch",
-            blueprintScreenOpenedMetricKey(
-                lastTrackedModeSuffix = null,
-                controlMode = BlueprintControlMode.TOUCH
-            )
-        )
-        assertEquals(
-            null,
-            blueprintScreenOpenedMetricKey(
-                lastTrackedModeSuffix = BlueprintControlMode.TOUCH.metricSuffix,
-                controlMode = BlueprintControlMode.TOUCH
-            )
-        )
+    fun `screen opened metric key is emitted only when the joystick mode changes`() {
         assertEquals(
             "blueprint_screen_opened_joystick",
             blueprintScreenOpenedMetricKey(
-                lastTrackedModeSuffix = BlueprintControlMode.TOUCH.metricSuffix,
+                lastTrackedModeSuffix = null,
                 controlMode = BlueprintControlMode.JOYSTICK
             )
         )
@@ -38,34 +24,8 @@ class BlueprintUxMetricsTest {
     }
 
     @Test
-    fun `metric key uses touch suffix for all blueprint actions`() {
-        val controlMode = blueprintControlMode(dualJoysticksEnabled = false)
-
-        assertEquals(
-            "blueprint_screen_opened_touch",
-            blueprintMetricKey(BlueprintMetricAction.SCREEN_OPENED, controlMode)
-        )
-        assertEquals(
-            "blueprint_wall_placed_touch",
-            blueprintMetricKey(BlueprintMetricAction.WALL_PLACED, controlMode)
-        )
-        assertEquals(
-            "blueprint_box_placed_touch",
-            blueprintMetricKey(BlueprintMetricAction.BOX_PLACED, controlMode)
-        )
-        assertEquals(
-            "blueprint_opening_placed_touch",
-            blueprintMetricKey(BlueprintMetricAction.OPENING_PLACED, controlMode)
-        )
-        assertEquals(
-            "blueprint_clear_all_touch",
-            blueprintMetricKey(BlueprintMetricAction.CLEAR_ALL, controlMode)
-        )
-    }
-
-    @Test
     fun `metric key uses joystick suffix for all blueprint actions`() {
-        val controlMode = blueprintControlMode(dualJoysticksEnabled = true)
+        val controlMode = blueprintControlMode()
 
         assertEquals(
             "blueprint_screen_opened_joystick",

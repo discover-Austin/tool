@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,8 +62,11 @@ import com.tradesketch.estimator.domain.model.TakeoffLine
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
 import com.tradesketch.estimator.domain.model.nonZeroItems
+import com.tradesketch.estimator.ui.components.AppFilterChip
 import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.components.TitledSectionCard
+import com.tradesketch.estimator.ui.components.WorkspaceHeaderBackButton
+import com.tradesketch.estimator.ui.components.WorkspaceSectionHeading
 import com.tradesketch.estimator.ui.components.rememberAppHaptics
 import com.tradesketch.estimator.ui.viewmodel.ExportActionResult
 import com.tradesketch.estimator.ui.viewmodel.ExportViewModel
@@ -100,6 +102,7 @@ private enum class EstimatePreviewPage(
 fun ExportScreen(
     projectId: String,
     modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
     onOpenTakeoff: () -> Unit = {},
     viewModel: ExportViewModel = hiltViewModel()
 ) {
@@ -191,6 +194,7 @@ fun ExportScreen(
         val sessionInputMode = uiState.project?.takeoffSession?.inputMode ?: TakeoffInputMode.BLUEPRINT
         val hasBlueprintGeometry = uiState.projectBlueprint?.hasGeometry() == true
         val hasMeasuredQuantities = uiState.result?.hasMeasuredQuantities() == true
+        val includesCombinedExports = uiState.presentTradeLabels.size > 1
         ExportProjectHeaderCard(
             projectName = uiState.project?.name.orEmpty(),
             businessName = uiState.settings.businessName.ifBlank { null },
@@ -201,7 +205,8 @@ fun ExportScreen(
             inputMode = sessionInputMode,
             hasMeasuredQuantities = hasMeasuredQuantities,
             hasBlueprintGeometry = hasBlueprintGeometry,
-            hasSelectedTradeGeometry = uiState.selectedTradeHasGeometry
+            hasSelectedTradeGeometry = uiState.selectedTradeHasGeometry,
+            onBack = onBack
         )
 
         TitledSectionCard(
@@ -230,7 +235,7 @@ fun ExportScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TakeoffType.entries.forEach { type ->
-                        FilterChip(
+                        AppFilterChip(
                             selected = uiState.selectedType == type,
                             onClick = {
                                 haptics.tap()
@@ -238,7 +243,7 @@ fun ExportScreen(
                                 viewModel.selectTakeoffType(type)
                                 showScopeSelector = false
                             },
-                            label = { Text(type.displayLabel) }
+                            label = type.displayLabel
                         )
                     }
                 }
@@ -257,33 +262,6 @@ fun ExportScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.animateContentSize(),
-            colors = appCardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = appCardBorder(),
-            elevation = appCardElevation()
-        ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "Need to adjust quantities or pricing?",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                SecondaryActionButton(
-                    onClick = {
-                        haptics.tap()
-                        viewModel.recordTap("export_open_takeoff")
-                        onOpenTakeoff()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Open Materials & Pricing")
                 }
             }
         }
@@ -322,18 +300,15 @@ fun ExportScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Text(
-                        text = "Share",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
+                    WorkspaceSectionHeading(
+                        title = "Share Report",
+                        detail = if (includesCombinedExports) {
+                            "Full report, CSV, JSON, and blueprint exports include all present blueprint trades and skip empty ones. Selected-trade PDFs stay tied to the active trade."
+                        } else {
+                            "Share the client-facing report or the selected-trade PDF directly from this device."
+                        },
+                        showDivider = false
                     )
-                    if (uiState.presentTradeLabels.isNotEmpty()) {
-                        Text(
-                            text = "Full report, CSV, JSON, and blueprint exports include all present blueprint trades and skip empty ones. Estimate PDFs stay tied to the selected trade.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     PrimaryActionButton(
                         onClick = {
                             haptics.confirm()
@@ -351,7 +326,7 @@ fun ExportScreen(
                         Icon(Icons.Default.Share, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (uiState.presentTradeLabels.size > 1) {
+                            if (includesCombinedExports) {
                                 "Share Combined Report"
                             } else {
                                 "Share Full Report"
@@ -387,6 +362,17 @@ fun ExportScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Share Selected Trade PDF")
                     }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    WorkspaceSectionHeading(
+                        title = "Share Blueprint",
+                        detail = if (hasBlueprintGeometry) {
+                            "Share the blueprint PDF for the currently selected trade."
+                        } else {
+                            "Blueprint exports require at least one wall, room, or opening."
+                        },
+                        showDivider = false
+                    )
                     SecondaryActionButton(
                         onClick = {
                             haptics.confirm()
@@ -424,15 +410,10 @@ fun ExportScreen(
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                    Text(
-                        text = "Save to device",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = defaultDeviceSaveHint(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    WorkspaceSectionHeading(
+                        title = "Save Report Files",
+                        detail = defaultDeviceSaveHint(),
+                        showDivider = false
                     )
                     SecondaryActionButton(
                         onClick = {
@@ -455,6 +436,71 @@ fun ExportScreen(
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isPreparingEstimatePdf) "Preparing PDF..." else "Download Selected Trade PDF")
+                    }
+                    SecondaryActionButton(
+                        onClick = {
+                            val name = uiState.project?.name ?: "project"
+                            runCatching {
+                                pdfSafLauncher.launch(
+                                    ExportStorage.buildFileName(
+                                        projectName = name,
+                                        suffix = "estimate",
+                                        extension = "pdf"
+                                    )
+                                )
+                            }.onFailure {
+                                val message = if (it is ActivityNotFoundException) {
+                                    "No file picker found on this device."
+                                } else {
+                                    "Could not open save dialog."
+                                }
+                                viewModel.reportExternalFailure(message)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save Selected Trade PDF As...")
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    WorkspaceSectionHeading(
+                        title = "Save Blueprint Files",
+                        detail = if (hasBlueprintGeometry) {
+                            "Blueprint PDF and PNG exports follow the grid setting below."
+                        } else {
+                            "Blueprint exports require at least one wall, room, or opening."
+                        },
+                        showDivider = false
+                    )
+                    Text(
+                        text = "Blueprint Grid Overlay",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppFilterChip(
+                            selected = uiState.blueprintExportShowGrid,
+                            onClick = {
+                                haptics.tap()
+                                viewModel.setBlueprintGridExport(true)
+                            },
+                            label = "Grid On"
+                        )
+                        AppFilterChip(
+                            selected = !uiState.blueprintExportShowGrid,
+                            onClick = {
+                                haptics.tap()
+                                viewModel.setBlueprintGridExport(false)
+                            },
+                            label = "Grid Off"
+                        )
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -483,32 +529,6 @@ fun ExportScreen(
                                 "Download Blueprint PDF"
                             }
                         )
-                    }
-                    SecondaryActionButton(
-                        onClick = {
-                            val name = uiState.project?.name ?: "project"
-                            runCatching {
-                                pdfSafLauncher.launch(
-                                    ExportStorage.buildFileName(
-                                        projectName = name,
-                                        suffix = "estimate",
-                                        extension = "pdf"
-                                    )
-                                )
-                            }.onFailure {
-                                val message = if (it is ActivityNotFoundException) {
-                                    "No file picker found on this device."
-                                } else {
-                                    "Could not open save dialog."
-                                }
-                                viewModel.reportExternalFailure(message)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Save Selected Trade PDF As...")
                     }
                     SecondaryActionButton(
                         onClick = {
@@ -545,34 +565,6 @@ fun ExportScreen(
                             } else {
                                 "Save Blueprint PDF As... (No Grid)"
                             }
-                        )
-                    }
-                    Text(
-                        text = "Blueprint PNG Grid",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = uiState.blueprintExportShowGrid,
-                            onClick = {
-                                haptics.tap()
-                                viewModel.setBlueprintGridExport(true)
-                            },
-                            label = { Text("Grid On") }
-                        )
-                        FilterChip(
-                            selected = !uiState.blueprintExportShowGrid,
-                            onClick = {
-                                haptics.tap()
-                                viewModel.setBlueprintGridExport(false)
-                            },
-                            label = { Text("Grid Off") }
                         )
                     }
                     SecondaryActionButton(
@@ -612,19 +604,16 @@ fun ExportScreen(
                             }
                         )
                     }
-                    if (!hasBlueprintGeometry) {
-                        Text(
-                            text = "Blueprint exports require at least one wall, room, or opening.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                    Text(
-                        text = "Data Files",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
+                    WorkspaceSectionHeading(
+                        title = "Data Files",
+                        detail = if (includesCombinedExports) {
+                            "Combined data exports include every present blueprint trade with quantities."
+                        } else {
+                            "Use CSV for spreadsheets and JSON for a full project backup."
+                        },
+                        showDivider = false
                     )
                     SecondaryActionButton(
                         onClick = {
@@ -651,7 +640,7 @@ fun ExportScreen(
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (uiState.presentTradeLabels.size > 1) {
+                            if (includesCombinedExports) {
                                 "Save Combined CSV"
                             } else {
                                 "Save CSV"
@@ -683,12 +672,44 @@ fun ExportScreen(
                         Icon(Icons.Default.FileDownload, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (uiState.presentTradeLabels.size > 1) {
+                            if (includesCombinedExports) {
                                 "Save Combined JSON Backup"
                             } else {
                                 "Save JSON Backup"
                             }
                         )
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.animateContentSize(),
+                colors = appCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Need to revise quantities or pricing first?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Jump back to Materials & Pricing, make the change, then return here to export the updated estimate.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SecondaryActionButton(
+                        onClick = {
+                            haptics.tap()
+                            viewModel.recordTap("export_open_takeoff")
+                            onOpenTakeoff()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Materials & Pricing")
                     }
                 }
             }
@@ -783,7 +804,8 @@ private fun ExportProjectHeaderCard(
     inputMode: TakeoffInputMode,
     hasMeasuredQuantities: Boolean,
     hasBlueprintGeometry: Boolean,
-    hasSelectedTradeGeometry: Boolean
+    hasSelectedTradeGeometry: Boolean,
+    onBack: (() -> Unit)? = null
 ) {
     val estimateSource = when {
         inputMode == TakeoffInputMode.MANUAL -> "Manual quantities"
@@ -812,11 +834,20 @@ private fun ExportProjectHeaderCard(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Export Summary",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                onBack?.let { backAction ->
+                    WorkspaceHeaderBackButton(onClick = backAction)
+                }
+                Text(
+                    text = "Export Summary",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             PreviewMetricRow(
                 label = "Project",
                 value = projectName.ifBlank { "Untitled project" }
@@ -958,10 +989,10 @@ private fun ProfessionalPreviewDeck(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 EstimatePreviewPage.entries.forEach { page ->
-                    FilterChip(
+                    AppFilterChip(
                         selected = selectedPage == page,
                         onClick = { onSelectPage(page) },
-                        label = { Text(page.label) }
+                        label = page.label
                     )
                 }
             }

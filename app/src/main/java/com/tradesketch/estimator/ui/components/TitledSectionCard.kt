@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -46,18 +46,18 @@ fun TitledSectionCard(
             ) {
                 Surface(
                     modifier = Modifier.padding(top = 2.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)
                     )
                 ) {
                     Box(
                         modifier = Modifier
                             .padding(7.dp)
                             .size(8.dp)
-                            .clip(CircleShape)
+                            .clip(RoundedCornerShape(2.dp))
                             .background(MaterialTheme.colorScheme.primary)
                     )
                 }
@@ -76,7 +76,7 @@ fun TitledSectionCard(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.82f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.9f))
             content()
         }
     }

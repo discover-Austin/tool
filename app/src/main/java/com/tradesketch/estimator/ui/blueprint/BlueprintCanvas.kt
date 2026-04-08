@@ -176,6 +176,7 @@ private val CORNER_ANGLE_BUCKET_COLORS = mapOf(
 internal fun BlueprintCanvas(
     modifier: Modifier = Modifier,
     document: BlueprintDocument,
+    interactionDocument: BlueprintDocument = document,
     scope: TakeoffScope,
     tool: BlueprintDraftTool,
     snapSettings: BlueprintSnapSettings,
@@ -322,7 +323,7 @@ internal fun BlueprintCanvas(
                 drawingStart,
                 boxStart,
                 snapSettings,
-                document.walls,
+                interactionDocument.walls,
                 touchEnabled,
                 lineSnappingEnabled
             ) {
@@ -390,7 +391,7 @@ internal fun BlueprintCanvas(
                                 closureEnabled = false
                             )
                         }
-                        val effectiveSnapWalls = if (lineSnappingEnabled) document.walls else emptyList()
+                        val effectiveSnapWalls = if (lineSnappingEnabled) interactionDocument.walls else emptyList()
                         val snappedWorld = BlueprintSnapMath.applySnapping(
                             rawPoint = rawWorld,
                             drawingStart = drawingStart,
@@ -559,7 +560,7 @@ internal fun BlueprintCanvas(
         } else {
             emptyList()
         }
-        val wallsForAngleHints = document.walls + listOfNotNull(previewWall) + previewBoxWalls
+        val wallsForAngleHints = interactionDocument.walls + listOfNotNull(previewWall) + previewBoxWalls
         val cornerAngleHints = collectCornerAngleHints(
             walls = wallsForAngleHints,
             highlightedWallId = previewWall?.id ?: previewBoxWalls.firstOrNull()?.id
@@ -580,7 +581,16 @@ internal fun BlueprintCanvas(
         }
         val rightAngleHints = collapseRightAngleHints(rightAngleCandidates)
         val roomWallsById = document.walls.associateBy { it.id }
-        document.rooms.forEach { room ->
+        document.rooms
+            .sortedBy { room ->
+                val roomScope = resolveVisibleRoomTradeScope(
+                    room = room,
+                    wallsById = roomWallsById,
+                    activeScope = scope
+                )
+                if (roomScope == scope) 1 else 0
+            }
+            .forEach { room ->
             val roomScope = resolveVisibleRoomTradeScope(
                 room = room,
                 wallsById = roomWallsById,
@@ -604,11 +614,13 @@ internal fun BlueprintCanvas(
             )
         }
         val wallLengthLabels = collectCommittedWallLengthLabels(
-            document = document,
+            document = interactionDocument,
             selectedWallId = selectedWallId,
             worldToScreen = ::worldToScreen
         ).toMutableList()
-        document.walls.forEach { wall ->
+        document.walls
+            .sortedBy { wall -> if (wall.visualTradeScope() == scope || wall.visualTradeScope() == null) 1 else 0 }
+            .forEach { wall ->
             val isSelected = wall.id == selectedWallId
             val wallStyle = if (isSelected) {
                 null
@@ -629,7 +641,7 @@ internal fun BlueprintCanvas(
             val parallelMatch = wallHasParallelLengthMatch(wall, document.walls)
             val isCircleSegment = wall.tags.contains(CURVE_SHAPE_CIRCLE_TAG)
             val isCurveSegment = wall.curveGroupTag() != null
-            val strokeWidth = if (isSelected) 6.4f else if (parallelMatch) 5.2f else 4.4f
+            val strokeWidth = if (isSelected) 8.2f else if (parallelMatch) 6.8f else 5.8f
             val wallStartScreen = worldToScreen(wall.start)
             val wallEndScreen = worldToScreen(wall.end)
             drawStyledWallSegment(
@@ -660,7 +672,12 @@ internal fun BlueprintCanvas(
                 )
             }
         }
-        document.openings.forEach { opening ->
+        document.openings
+            .sortedBy { opening ->
+                val openingScope = document.walls.firstOrNull { wall -> wall.id == opening.wallId }?.visualTradeScope()
+                if (openingScope == scope || openingScope == null) 1 else 0
+            }
+            .forEach { opening ->
             val wall = document.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
             val isSelected = opening.id == selectedOpeningId
             val color = if (isSelected) {
@@ -723,8 +740,8 @@ internal fun BlueprintCanvas(
             drawStyledWallSegment(
                 start = draftStart,
                 end = draftEnd,
-                color = DRAFT_WALL_COLOR,
-                strokeWidth = if (previewParallelMatch) 5.6f else 4.8f,
+                color = scope.wallColor(),
+                strokeWidth = if (previewParallelMatch) 6.8f else 5.8f,
                 roundedCaps = false,
                 selected = true,
                 pulse = snapPulse
@@ -743,8 +760,8 @@ internal fun BlueprintCanvas(
                 drawStyledWallSegment(
                     start = draftStart,
                     end = draftEnd,
-                    color = DRAFT_WALL_COLOR,
-                    strokeWidth = 4.8f,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.8f,
                     roundedCaps = false,
                     selected = true,
                     pulse = snapPulse
@@ -766,8 +783,8 @@ internal fun BlueprintCanvas(
                 drawStyledWallSegment(
                     start = draftStart,
                     end = draftEnd,
-                    color = DRAFT_WALL_COLOR,
-                    strokeWidth = 4.8f,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.8f,
                     roundedCaps = true,
                     selected = true,
                     pulse = snapPulse
@@ -789,8 +806,8 @@ internal fun BlueprintCanvas(
                 drawStyledWallSegment(
                     start = draftStart,
                     end = draftEnd,
-                    color = DRAFT_WALL_COLOR,
-                    strokeWidth = 4.6f,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.6f,
                     roundedCaps = true,
                     selected = true,
                     pulse = snapPulse
@@ -1268,19 +1285,19 @@ private fun DrawScope.drawTradeWallAccent(
     val uy = (end.y - start.y) / magnitude
     when (pattern) {
         BlueprintWallAccentPattern.DRYWALL_PARALLEL -> {
-            val offset = Offset(-nx * 2.4f, -ny * 2.4f)
+            val offset = Offset(-nx * 2.9f, -ny * 2.9f)
             drawLine(
                 color = color,
                 start = start + offset,
                 end = end + offset,
-                strokeWidth = 1.1f,
+                strokeWidth = 1.6f,
                 cap = strokeCap
             )
         }
 
         BlueprintWallAccentPattern.CONCRETE_TICKS -> {
             val spacing = 26f
-            val tickHalf = 2.8f
+            val tickHalf = 3.2f
             val usableLength = (magnitude - (spacing * 0.8f)).coerceAtLeast(0f)
             val tickCount = (usableLength / spacing).toInt().coerceAtLeast(1)
             repeat(tickCount) { index ->
@@ -1294,7 +1311,7 @@ private fun DrawScope.drawTradeWallAccent(
                     color = color,
                     start = anchor - tickOffset,
                     end = anchor + tickOffset,
-                    strokeWidth = 1.35f,
+                    strokeWidth = 1.7f,
                     cap = StrokeCap.Round
                 )
             }
@@ -1305,14 +1322,14 @@ private fun DrawScope.drawTradeWallAccent(
             val pebbleCount = ((magnitude - 10f) / spacing).toInt().coerceAtLeast(1)
             repeat(pebbleCount) { index ->
                 val t = (index + 1f) / (pebbleCount + 1f)
-                val lateral = if (index % 2 == 0) 2.2f else -2.2f
+                val lateral = if (index % 2 == 0) 2.5f else -2.5f
                 val center = Offset(
                     x = start.x + (ux * magnitude * t) + (nx * lateral),
                     y = start.y + (uy * magnitude * t) + (ny * lateral)
                 )
                 drawCircle(
                     color = color,
-                    radius = if (index % 3 == 0) 1.55f else 1.25f,
+                    radius = if (index % 3 == 0) 1.85f else 1.5f,
                     center = center
                 )
             }
@@ -1335,7 +1352,7 @@ private fun DrawScope.drawTradeWallAccent(
                     color = color,
                     start = dashStart,
                     end = dashEnd,
-                    strokeWidth = 1.2f,
+                    strokeWidth = 1.55f,
                     cap = StrokeCap.Round
                 )
                 distance += dashLength + gapLength

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -49,9 +48,13 @@ import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
 import com.tradesketch.estimator.domain.model.nonZeroItems
+import com.tradesketch.estimator.ui.components.AppFilterChip
 import com.tradesketch.estimator.ui.components.AnimatedEntry
 import com.tradesketch.estimator.ui.components.BufferedInputField
+import com.tradesketch.estimator.ui.components.WorkspaceHeaderBackButton
 import com.tradesketch.estimator.ui.components.TitledSectionCard
+import com.tradesketch.estimator.ui.components.WorkspacePageHeaderCard
+import com.tradesketch.estimator.ui.components.WorkspaceSectionHeading
 import com.tradesketch.estimator.ui.components.appCardBorder
 import com.tradesketch.estimator.ui.components.appCardColors
 import com.tradesketch.estimator.ui.components.appCardElevation
@@ -71,6 +74,7 @@ fun TakeoffScreen(
     projectId: String,
     modifier: Modifier = Modifier,
     screenMode: TakeoffScreenMode = TakeoffScreenMode.MATERIALS,
+    onBack: (() -> Unit)? = null,
     onOpenModel: () -> Unit = {},
     onOpenBlueprint: () -> Unit = {},
     onOpenMaterials: () -> Unit = {},
@@ -108,6 +112,47 @@ fun TakeoffScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            AnimatedEntry(delayMs = staggeredDelay(20)) {
+                WorkspacePageHeaderCard(
+                    title = if (isMaterialsMode) {
+                        "Materials & Pricing"
+                    } else {
+                        "Quantity Review"
+                    },
+                    subtitle = if (isManualMode) {
+                        "Enter quantities and pricing directly by trade without changing project workflow."
+                    } else {
+                        "Review estimate inputs that stay synced to the active blueprint scope."
+                    },
+                    eyebrow = if (isManualMode) {
+                        "Manual Entry"
+                    } else {
+                        "Blueprint Linked"
+                    },
+                    leadingContent = onBack?.let { backAction ->
+                        {
+                            WorkspaceHeaderBackButton(onClick = backAction)
+                        }
+                    }
+                )
+            }
+        }
+
+        item {
+            AnimatedEntry(delayMs = staggeredDelay(30)) {
+                WorkspaceSectionHeading(
+                    title = "Setup",
+                    detail = if (isMaterialsMode) {
+                        "Choose the measurement source, then confirm the trade this estimate is tied to."
+                    } else {
+                        "Choose the measurement source and confirm the trade being reviewed."
+                    },
+                    showDivider = false
+                )
+            }
+        }
+
+        item {
             AnimatedEntry(delayMs = staggeredDelay(40)) {
                 TitledSectionCard(
                     title = "Input Method",
@@ -120,15 +165,15 @@ fun TakeoffScreen(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilterChip(
+                        AppFilterChip(
                             selected = uiState.inputMode == TakeoffInputMode.BLUEPRINT,
                             onClick = { viewModel.setInputMode(TakeoffInputMode.BLUEPRINT) },
-                            label = { Text("Blueprint") }
+                            label = "Blueprint"
                         )
-                        FilterChip(
+                        AppFilterChip(
                             selected = uiState.inputMode == TakeoffInputMode.MANUAL,
                             onClick = { viewModel.setInputMode(TakeoffInputMode.MANUAL) },
-                            label = { Text("Manual") }
+                            label = "Manual"
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -167,10 +212,10 @@ fun TakeoffScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             TakeoffType.entries.forEach { type ->
-                                FilterChip(
+                                AppFilterChip(
                                     selected = selectedType == type,
                                     onClick = { viewModel.selectTakeoffType(type) },
-                                    label = { Text(type.displayLabel) }
+                                    label = type.displayLabel
                                 )
                             }
                         }
@@ -228,6 +273,17 @@ fun TakeoffScreen(
             )
             val warnings = takeoffWarnings(uiState, type, scopeSummary)
             item {
+                WorkspaceSectionHeading(
+                    title = "Estimate Inputs",
+                    detail = if (isManualMode) {
+                        "Review the active scope, enter measured values, and tune trade assumptions."
+                    } else {
+                        "Review what the blueprint is contributing, then tune trade assumptions for this estimate."
+                    },
+                    showDivider = false
+                )
+            }
+            item {
                 Card(
                     colors = appCardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -258,39 +314,25 @@ fun TakeoffScreen(
                         )
                         if (scopeSummary.spaceCount == 0) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (isManualMode) {
-                                    SecondaryActionButton(
-                                        onClick = {
-                                            viewModel.recordTap("takeoff_open_export")
-                                            onOpenModel()
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text("Open Export")
-                                    }
+                            Text(
+                                text = if (isManualMode) {
+                                    "Enter the measurements below to generate quantities for this trade."
                                 } else {
-                                    SecondaryActionButton(
-                                        onClick = {
-                                            viewModel.recordTap("takeoff_open_export")
-                                            onOpenModel()
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("Open Export")
-                                    }
-                                    SecondaryActionButton(
-                                        onClick = {
-                                            viewModel.recordTap("takeoff_open_blueprint")
-                                            onOpenBlueprint()
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("Open Blueprint")
-                                    }
+                                    "Open Blueprint to add or adjust geometry for this trade before exporting."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!isManualMode) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                SecondaryActionButton(
+                                    onClick = {
+                                        viewModel.recordTap("takeoff_open_blueprint")
+                                        onOpenBlueprint()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Open Blueprint")
                                 }
                             }
                         }
@@ -600,6 +642,16 @@ fun TakeoffScreen(
 
             if (isMaterialsMode) {
                 item {
+                    WorkspaceSectionHeading(
+                        title = "Pricing",
+                        detail = "Review unit pricing and business percentages before moving this estimate to export.",
+                        showDivider = false
+                    )
+                }
+            }
+
+            if (isMaterialsMode) {
+                item {
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -611,7 +663,7 @@ fun TakeoffScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "Pricing Inputs",
+                                text = "Pricing Summary",
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
@@ -631,7 +683,7 @@ fun TakeoffScreen(
                                     if (showPricingInputs) {
                                         "Hide Pricing Inputs"
                                     } else {
-                                        "Show Pricing Inputs"
+                                        "Show Pricing Details"
                                     }
                                 )
                             }
@@ -727,7 +779,7 @@ fun TakeoffScreen(
                         }
 
                         ParameterCard(
-                            title = "Pricing",
+                            title = "Pricing Details",
                             description = "Material costs and business percentages used in this estimate.",
                             fields = typeSpecificPricing + listOf(
                                 NumberFieldSpec(
@@ -766,6 +818,17 @@ fun TakeoffScreen(
                 }
             }
 
+            item {
+                WorkspaceSectionHeading(
+                    title = if (isMaterialsMode) "Results" else "Quantity Output",
+                    detail = if (isMaterialsMode) {
+                        "Review the estimate total and detailed line items before continuing to Export."
+                    } else {
+                        "Review measured line items here, then jump to Materials & Pricing when you need costs."
+                    },
+                    showDivider = false
+                )
+            }
 
             uiState.result?.let { result ->
                 val measuredItems = result.nonZeroItems()

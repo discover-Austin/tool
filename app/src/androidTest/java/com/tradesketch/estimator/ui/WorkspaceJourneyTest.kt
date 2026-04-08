@@ -26,8 +26,8 @@ class WorkspaceJourneyTest {
     fun workspace_allows_tab_navigation_and_saved_projects_access() {
         ensureWorkspaceReady()
 
-        if (rule.hasContentDescription("Saved")) {
-            rule.onNodeWithContentDescription("Saved").performClick()
+        if (rule.hasContentDescription("Open")) {
+            rule.onNodeWithContentDescription("Open").performClick()
             rule.assertAnyTextDisplayed("Saved Projects")
             rule.onNodeWithText("Close").performClick()
         }
@@ -38,7 +38,7 @@ class WorkspaceJourneyTest {
         rule.onNodeWithContentDescription("Export").performClick()
         rule.assertAnyTextDisplayed("Estimate Type")
 
-        rule.onNodeWithContentDescription("Settings/About").performClick()
+        rule.onNodeWithContentDescription("Settings").performClick()
         rule.assertAnyTextDisplayed("Settings")
     }
 
@@ -54,13 +54,13 @@ class WorkspaceJourneyTest {
         }
         if (rule.hasText("Project Setup 2 of 2")) {
             rule.onNodeWithText("Drywall").performClick()
-            rule.onNodeWithText("Open Project").performClick()
+            rule.onNodeWithText("Create Project").performClick()
         }
 
         dismissInteractiveTourIfShown()
 
         rule.waitUntil(timeoutMillis = 10_000) {
-            rule.hasContentDescription("Blueprint") || rule.hasContentDescription("Saved")
+            rule.hasContentDescription("Blueprint") || rule.hasContentDescription("Open")
         }
     }
 

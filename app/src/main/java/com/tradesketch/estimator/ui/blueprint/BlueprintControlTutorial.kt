@@ -66,13 +66,6 @@ internal enum class BlueprintControlTutorialTarget {
     STAIR_DOWN_BUTTON,
     PARAMS_BUTTON,
     HELP_BUTTON,
-    TOUCH_SELECT_BUTTON,
-    TOUCH_DRAW_BUTTON,
-    TOUCH_GRAB_BUTTON,
-    TOUCH_CANCEL_BUTTON,
-    TOUCH_LEFT_TOOLS,
-    TOUCH_CENTER_CONTROLS,
-    TOUCH_RIGHT_TOOLS,
     JOYSTICK_LEFT_PAD,
     JOYSTICK_FINE_LEFT_PAD,
     JOYSTICK_CENTER_CONTROLS,
@@ -136,11 +129,7 @@ internal fun BlueprintControlTutorialStep.resolvedDemoTool(): BlueprintDraftTool
 }
 
 internal fun BlueprintControlTutorialStep.resolvedTutorialTool(): BlueprintDraftTool {
-    return resolvedDemoTool() ?: when (target) {
-        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON -> BlueprintDraftTool.SELECT
-        else -> BlueprintDraftTool.DRAW_WALL
-    }
+    return resolvedDemoTool() ?: BlueprintDraftTool.DRAW_WALL
 }
 
 internal fun BlueprintControlTutorialStep.hasLiveExample(): Boolean {
@@ -202,20 +191,13 @@ internal fun BlueprintControlTutorialStep.resolvedPlacementWalls(): List<WallSeg
     }
 }
 
-internal fun blueprintControlTutorialSteps(
-    dualJoysticksEnabled: Boolean
-): List<BlueprintControlTutorialStep> {
-    val railSteps = commonRailTutorialSteps()
-    val modeSteps = if (dualJoysticksEnabled) {
-        joystickModeTutorialSteps()
-    } else {
-        touchModeTutorialSteps()
-    }
-    val hudSteps = commonHudTutorialSteps(
-        includeFloorSwitcher = !dualJoysticksEnabled,
-        includeGridScaleBadge = !dualJoysticksEnabled
-    )
-    return railSteps + modeSteps + hudSteps
+internal fun blueprintControlTutorialSteps(): List<BlueprintControlTutorialStep> {
+    return commonRailTutorialSteps() +
+        joystickModeTutorialSteps() +
+        commonHudTutorialSteps(
+            includeFloorSwitcher = true,
+            includeGridScaleBadge = true
+        )
 }
 
 private fun commonRailTutorialSteps(): List<BlueprintControlTutorialStep> {
@@ -456,94 +438,6 @@ private fun joystickModeTutorialSteps(): List<BlueprintControlTutorialStep> {
                 "Use the mini pads first if the cursor or canvas needs a tiny nudge."
             ),
             seeIt = "A sample wall is active so the dials are visible right now.",
-            demoTool = BlueprintDraftTool.DRAW_WALL,
-            forceEdgeDials = true,
-            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
-            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
-        )
-    )
-}
-
-private fun touchModeTutorialSteps(): List<BlueprintControlTutorialStep> {
-    return listOf(
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.CANVAS,
-            title = "Canvas Flow",
-            message = "In touch mode, you tap the canvas to start, preview, and finish shapes.",
-            details = listOf(
-                "You see a preview before you place the final shape.",
-                "You can still pinch to zoom and move the drawing."
-            ),
-            seeIt = "The sample wall shows the preview you get before you finish drawing.",
-            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
-            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
-            title = "Select",
-            message = "Select is for looking at something that is already there.",
-            details = listOf(
-                "Use it to inspect or edit a wall or opening.",
-                "It helps you avoid drawing by mistake."
-            ),
-            seeIt = "This button changes the mode, so it is highlighted by itself.",
-            demoTool = BlueprintDraftTool.SELECT
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
-            title = "Draw",
-            message = "Draw puts you back into normal drawing mode.",
-            details = listOf(
-                "This is the mode you use most of the time.",
-                "Many tools bring you back here when they are done."
-            ),
-            seeIt = "The sample wall shows what draw mode looks like.",
-            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
-            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
-            title = "Grab",
-            message = "Grab lets you move a wall instead of redrawing it.",
-            details = listOf(
-                "If nothing is selected yet, the app waits for you to pick a wall.",
-                "After that, the wall moves like a live preview."
-            ),
-            seeIt = "This step shows Grab waiting for a wall to pick up.",
-            demoTool = BlueprintDraftTool.SELECT,
-            demoPendingGrabSelection = true
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
-            title = "Cancel",
-            message = "Cancel stops the thing you are doing right now.",
-            details = listOf(
-                "Use it when you started the wrong action.",
-                "Use it before switching tools if the screen feels stuck."
-            ),
-            seeIt = "A sample draft is active so you can picture what Cancel clears.",
-            demoDrawingStart = TUTORIAL_WALL_DEMO_START,
-            demoDrawingPreview = TUTORIAL_WALL_DEMO_END
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-            title = "Zoom and History",
-            message = "These buttons are for zoom, undo, and redo.",
-            details = listOf(
-                "Zoom in before precise work.",
-                "Undo and redo are the fastest way to fix a small mistake."
-            ),
-            seeIt = "This group stays in the same place while the other tools change."
-        ),
-        BlueprintControlTutorialStep(
-            target = BlueprintControlTutorialTarget.EDGE_DIALS,
-            title = "Precision Dials",
-            message = "These dials are for tiny changes after a draft is already on screen.",
-            details = listOf(
-                "Use them after you start a wall or shape.",
-                "The labels change based on the tool you are using."
-            ),
-            seeIt = "A sample wall is active so the dials are shown in a real working state.",
             demoTool = BlueprintDraftTool.DRAW_WALL,
             forceEdgeDials = true,
             demoDrawingStart = TUTORIAL_WALL_DEMO_START,
@@ -911,9 +805,6 @@ private fun tutorialHighlightPadding(target: BlueprintControlTutorialTarget): Dp
         BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
         BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
         BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
-        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
-        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
         BlueprintControlTutorialTarget.EDGE_DIALS,
         BlueprintControlTutorialTarget.FLOOR_SWITCHER,
         BlueprintControlTutorialTarget.GRID_SCALE_BADGE,
@@ -941,13 +832,6 @@ private fun tutorialHighlightVerticalOffset(target: BlueprintControlTutorialTarg
         BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON,
         BlueprintControlTutorialTarget.PARAMS_BUTTON,
         BlueprintControlTutorialTarget.HELP_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
-        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
         BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
         BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
         BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,
@@ -978,13 +862,6 @@ private fun tutorialHighlightBottomTrim(target: BlueprintControlTutorialTarget):
         BlueprintControlTutorialTarget.STAIR_DOWN_BUTTON,
         BlueprintControlTutorialTarget.PARAMS_BUTTON,
         BlueprintControlTutorialTarget.HELP_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_SELECT_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_DRAW_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_GRAB_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_CANCEL_BUTTON,
-        BlueprintControlTutorialTarget.TOUCH_LEFT_TOOLS,
-        BlueprintControlTutorialTarget.TOUCH_CENTER_CONTROLS,
-        BlueprintControlTutorialTarget.TOUCH_RIGHT_TOOLS,
         BlueprintControlTutorialTarget.JOYSTICK_LEFT_PAD,
         BlueprintControlTutorialTarget.JOYSTICK_CENTER_CONTROLS,
         BlueprintControlTutorialTarget.JOYSTICK_RIGHT_PAD,

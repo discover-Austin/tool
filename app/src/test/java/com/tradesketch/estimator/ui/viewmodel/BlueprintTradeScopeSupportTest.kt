@@ -2,6 +2,7 @@ package com.tradesketch.estimator.ui.viewmodel
 
 import com.tradesketch.estimator.domain.calc.BlueprintTakeoffCalculator
 import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.BlueprintParams
 import com.tradesketch.estimator.domain.model.BlueprintOpening
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.PointMm
@@ -172,6 +173,73 @@ class BlueprintTradeScopeSupportTest {
         assertEquals(1, concreteBlueprint.rooms.size)
         assertEquals(4, paintBlueprint.walls.size)
         assertEquals(1, paintBlueprint.rooms.size)
+    }
+
+    @Test
+    fun clearGeometry_removesAllTradeLayersButPreservesBlueprintSettings() {
+        val concreteWalls = rectangleWalls(
+            prefix = "conc",
+            scope = TakeoffScope.CONCRETE,
+            origin = PointMm(0, 0)
+        )
+        val paintWalls = rectangleWalls(
+            prefix = "paint",
+            scope = TakeoffScope.PAINT,
+            origin = PointMm(Millimeters.fromFeet(20.0).value, 0)
+        )
+        val concreteRoom = Room(
+            id = "conc-room",
+            name = "Concrete Pad",
+            polygon = listOf(
+                PointMm(0, 0),
+                PointMm(Millimeters.fromFeet(10.0).value, 0),
+                PointMm(Millimeters.fromFeet(10.0).value, Millimeters.fromFeet(10.0).value),
+                PointMm(0, Millimeters.fromFeet(10.0).value)
+            ),
+            wallSegmentIds = concreteWalls.map(WallSegment::id),
+            tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+        )
+        val paintRoom = Room(
+            id = "paint-room",
+            name = "Paint Room",
+            polygon = listOf(
+                PointMm(Millimeters.fromFeet(20.0).value, 0),
+                PointMm(Millimeters.fromFeet(30.0).value, 0),
+                PointMm(Millimeters.fromFeet(30.0).value, Millimeters.fromFeet(10.0).value),
+                PointMm(Millimeters.fromFeet(20.0).value, Millimeters.fromFeet(10.0).value)
+            ),
+            wallSegmentIds = paintWalls.map(WallSegment::id),
+            tags = setOf(TakeoffScope.PAINT.tradeScopeTag())
+        )
+        val opening = BlueprintOpening(
+            id = "conc-door",
+            wallId = concreteWalls.first().id,
+            t = 0.5,
+            widthMm = Millimeters.fromFeet(3.0).value,
+            heightMm = Millimeters.fromFeet(7.0).value,
+            sillMm = 0L,
+            tags = setOf(TakeoffScope.CONCRETE.tradeScopeTag())
+        )
+        val params = BlueprintParams(
+            wallHeightMm = 3_000L,
+            paintCoats = 3,
+            concreteThicknessMm = 200L
+        )
+        val document = BlueprintDocument(
+            projectId = "project-clear",
+            params = params,
+            walls = concreteWalls + paintWalls,
+            rooms = listOf(concreteRoom, paintRoom),
+            openings = listOf(opening)
+        )
+
+        val cleared = document.clearGeometry()
+
+        assertTrue(cleared.walls.isEmpty())
+        assertTrue(cleared.rooms.isEmpty())
+        assertTrue(cleared.openings.isEmpty())
+        assertEquals(params, cleared.params)
+        assertEquals(document.projectId, cleared.projectId)
     }
 
     @Test

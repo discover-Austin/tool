@@ -1,7 +1,8 @@
-Generated At: 2026-03-25 08:30:25 -04:00
-Voice: Microsoft David Desktop
-Rate: 2
-Volume: 100
+Generated At: 2026-04-08 04:19:33 -04:00
+Engine: edge-tts
+Voice: en-US-JennyNeural
+Rate: -5%
+Volume: +0%
 Script: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.txt
 Wav: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.wav
 Mp3: C:\Users\grand\tool\media\play_store_showcase\showcase_voiceover.mp3
