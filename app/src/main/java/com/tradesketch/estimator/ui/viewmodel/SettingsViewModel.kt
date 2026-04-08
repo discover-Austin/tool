@@ -100,14 +100,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setTouchModeQuickToolsTutorialSeen(seen: Boolean) {
-        viewModelScope.launch {
-            val current = _uiState.value.settings
-            if (current.hasSeenTouchModeQuickToolsTutorial == seen) return@launch
-            saveSettingsUseCase(current.copy(hasSeenTouchModeQuickToolsTutorial = seen))
-        }
-    }
-
     fun updateDrywallDefaults(sheetArea: Double? = null, screwsPerSheet: Int? = null, mudGallons: Double? = null) {
         viewModelScope.launch {
             val current = _uiState.value.settings
@@ -220,7 +212,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateBlueprintControlDefaults(
-        dualJoysticksEnabled: Boolean? = null,
         joystickSensitivity: Float? = null,
         joystickDeadzone: Float? = null,
         cursorVisible: Boolean? = null,
@@ -230,7 +221,6 @@ class SettingsViewModel @Inject constructor(
             val current = _uiState.value.settings
             saveSettingsUseCase(
                 current.copy(
-                    blueprintDualJoysticksEnabled = dualJoysticksEnabled ?: current.blueprintDualJoysticksEnabled,
                     blueprintJoystickSensitivity = joystickSensitivity ?: current.blueprintJoystickSensitivity,
                     blueprintJoystickDeadzone = joystickDeadzone ?: current.blueprintJoystickDeadzone,
                     blueprintCursorVisible = cursorVisible ?: current.blueprintCursorVisible,
@@ -242,7 +232,7 @@ class SettingsViewModel @Inject constructor(
 
     fun resetToDefaults() {
         viewModelScope.launch {
-            saveSettingsUseCase(Settings.DEFAULT)
+            saveSettingsUseCase(_uiState.value.settings.resettableDefaults())
         }
     }
 

@@ -66,11 +66,14 @@ android {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "1.0.19"
+        versionCode = 24
+        versionName = "1.0.22"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            debugSymbolLevel = "SYMBOL_TABLE"
         }
     }
 

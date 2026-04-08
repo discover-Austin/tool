@@ -1,7 +1,6 @@
 package com.tradesketch.estimator.ui.blueprint
 
 internal enum class BlueprintControlMode(val metricSuffix: String) {
-    TOUCH("touch"),
     JOYSTICK("joystick")
 }
 
@@ -13,12 +12,8 @@ internal enum class BlueprintMetricAction {
     CLEAR_ALL
 }
 
-internal fun blueprintControlMode(dualJoysticksEnabled: Boolean): BlueprintControlMode {
-    return if (dualJoysticksEnabled) {
-        BlueprintControlMode.JOYSTICK
-    } else {
-        BlueprintControlMode.TOUCH
-    }
+internal fun blueprintControlMode(): BlueprintControlMode {
+    return BlueprintControlMode.JOYSTICK
 }
 
 internal fun blueprintMetricKey(

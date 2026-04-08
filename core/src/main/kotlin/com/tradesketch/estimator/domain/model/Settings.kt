@@ -21,7 +21,6 @@ data class Settings(
     val firstRun: Boolean = true,
     val hasCompletedTradeOnboarding: Boolean = false,
     val hasCompletedAppTutorial: Boolean = false,
-    val hasSeenTouchModeQuickToolsTutorial: Boolean = false,
     val defaultWastePercent: Double = 10.0,
     val useMetric: Boolean = false,
     val defaultDrywallSheetArea: Double = 32.0, // 4'×8' = 32 sq ft
@@ -50,12 +49,19 @@ data class Settings(
     val blueprintSnapAngleEnabled: Boolean = true,
     val blueprintSnapClosureEnabled: Boolean = true,
     val blueprintSnapThresholdFeet: Double = 0.75,
-    val blueprintDualJoysticksEnabled: Boolean = true,
     val blueprintJoystickSensitivity: Float = 1.0f,
     val blueprintJoystickDeadzone: Float = 0.08f,
     val blueprintCursorVisible: Boolean = true,
     val blueprintCursorScale: Float = 1.0f
 ) {
+    fun resettableDefaults(): Settings {
+        return DEFAULT.copy(
+            firstRun = firstRun,
+            hasCompletedTradeOnboarding = hasCompletedTradeOnboarding,
+            hasCompletedAppTutorial = hasCompletedAppTutorial
+        )
+    }
+
     companion object {
         val DEFAULT = Settings()
     }

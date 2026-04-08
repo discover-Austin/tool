@@ -379,22 +379,11 @@ class BlueprintEditorViewModel @Inject constructor(
     }
 
     fun clearAllGeometry() {
-        val currentScope = _uiState.value.project?.takeoffSession?.selectedScope ?: return
         updateDocument(label = "Clear Blueprint") { document ->
-            val scopedDocument = document.scopedToTakeoffScope(currentScope)
-            val scopedWallIds = scopedDocument.walls.mapTo(mutableSetOf()) { wall -> wall.id }
-            val scopedOpeningIds = scopedDocument.openings.mapTo(mutableSetOf()) { opening -> opening.id }
-            val scopedRoomIds = scopedDocument.rooms.mapTo(mutableSetOf()) { room -> room.id }
-            if (scopedWallIds.isEmpty() && scopedOpeningIds.isEmpty() && scopedRoomIds.isEmpty()) {
+            if (document.walls.isEmpty() && document.openings.isEmpty() && document.rooms.isEmpty()) {
                 document
             } else {
-                document.copy(
-                    walls = document.walls.filterNot { wall -> wall.id in scopedWallIds },
-                    openings = document.openings.filterNot { opening ->
-                        opening.id in scopedOpeningIds || opening.wallId in scopedWallIds
-                    },
-                    rooms = document.rooms.filterNot { room -> room.id in scopedRoomIds }
-                ).withUndoMeta(undoDepth = undoStack.size + 1)
+                document.clearGeometry().withUndoMeta(undoDepth = undoStack.size + 1)
             }
         }
         _uiState.update {

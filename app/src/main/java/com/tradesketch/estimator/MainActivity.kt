@@ -24,12 +24,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,11 +103,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.PrimaryTrade
+import com.tradesketch.estimator.ui.blueprint.calculateDockedRailOverlayInset
+import com.tradesketch.estimator.ui.blueprint.calculateWorkspaceBlueprintChromeLayout
 import com.tradesketch.estimator.ui.screens.BlueprintScreen
 import com.tradesketch.estimator.ui.screens.ExportScreen
 import com.tradesketch.estimator.ui.screens.ProjectRitualScreen1_Name
@@ -181,12 +184,12 @@ private enum class RootStage {
     WORKSPACE
 }
 
-private val WorkspaceRailShell = Color(0xFFEAF1F8)
-private val WorkspaceRailSurface = Color(0xFFFFFFFF)
-private val WorkspaceRailAccent = Color(0xFF276997)
-private val WorkspaceRailAccentBright = Color(0xFF3F84B8)
-private val WorkspaceRailAccentBorder = Color(0xFF93A9BD)
-private val WorkspaceRailTextPrimary = Color(0xFF1B2A39)
+private val WorkspaceRailShell = Color(0xFFE3EBF2)
+private val WorkspaceRailSurface = Color(0xFFFBFDFE)
+private val WorkspaceRailAccent = Color(0xFF1F628D)
+private val WorkspaceRailAccentBright = Color(0xFF2E7CAC)
+private val WorkspaceRailAccentBorder = Color(0xFF869BAC)
+private val WorkspaceRailTextPrimary = Color(0xFF162532)
 private val WorkspaceRailTextOnAccent = Color(0xFFFFFFFF)
 
 @Composable
@@ -476,6 +479,8 @@ private fun WorkspaceShell(
     var selectedProjectId by rememberSaveable { mutableStateOf<String?>(initialProjectId) }
     var showSavedProjects by rememberSaveable { mutableStateOf(false) }
     var showNewProjectConfirm by rememberSaveable { mutableStateOf(false) }
+    var showSaveProjectConfirm by rememberSaveable { mutableStateOf(false) }
+    var pendingProjectDeletionId by rememberSaveable { mutableStateOf<String?>(null) }
     var leftRailCollapsed by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -489,10 +494,20 @@ private fun WorkspaceShell(
     LaunchedEffect(Unit) {
         projectsViewModel.events.collect { event ->
             if (event is ProjectsEvent.NavigateToProject) {
+                val projectIdToDelete = pendingProjectDeletionId
+                    ?.takeIf { pendingId -> pendingId != event.projectId }
+                pendingProjectDeletionId = null
                 selectedProjectId = event.projectId
                 selectedTab = DetailTab.BLUEPRINT
                 showSavedProjects = false
+                projectIdToDelete?.let(projectsViewModel::deleteProject)
             }
+        }
+    }
+
+    LaunchedEffect(projectsUiState.error) {
+        if (projectsUiState.error != null) {
+            pendingProjectDeletionId = null
         }
     }
 
@@ -562,54 +577,115 @@ private fun WorkspaceShell(
             showSavedProjects = false
         }
     }
-    val launchNewProject: (Boolean) -> Unit = { keepCurrent ->
-        if (!keepCurrent) {
-            activeProject?.id?.let { projectId ->
-                projectsViewModel.deleteProject(projectId)
-                if (selectedProjectId == projectId) {
-                    selectedProjectId = null
-                }
+    val persistProjectNameDraft: (Boolean) -> Boolean = persistProjectName@{ showFeedback ->
+        val project = activeProject ?: return@persistProjectName false
+        val normalizedName = projectNameDraft.trim()
+        if (normalizedName.isEmpty()) {
+            if (showFeedback) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.project_name_required),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                projectNameDraft = project.name
+                focusManager.clearFocus()
             }
+            return@persistProjectName false
         }
+        if (project.name != normalizedName) {
+            projectsViewModel.recordTap("workspace_project_save")
+            projectsViewModel.renameProject(project.id, normalizedName)
+        }
+        focusManager.clearFocus()
+        if (showFeedback) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.project_saved),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        true
+    }
+    val launchNewProject: (Boolean) -> Unit = { keepCurrent ->
+        persistProjectNameDraft(false)
+        pendingProjectDeletionId = if (keepCurrent) null else activeProject?.id
         projectsViewModel.createEasyStartProject()
         showSavedProjects = false
     }
-
-    val configuration = LocalConfiguration.current
-    val railCompact = configuration.screenWidthDp < 600
-    val railExpandedForLargeWindow = configuration.screenWidthDp >= 840
-    val compactBlueprintHud = configuration.screenWidthDp < 420
-    val collapsedRailWidth = if (railCompact) 38.dp else 40.dp
-    val expandedRailWidth = if (railExpandedForLargeWindow) 64.dp else 60.dp
     val leftBlueprintOverlayInset = 0.dp
-    val dockRailForBlueprint = selectedTab == DetailTab.BLUEPRINT
-    val workspaceRailTopPadding = if (configuration.screenHeightDp < 760) 118.dp else 132.dp
-    val workspaceCollapsedRailTopPadding = if (configuration.screenHeightDp < 760) 56.dp else 68.dp
-    val workspaceRailBottomPadding = if (configuration.screenHeightDp < 760) 156.dp else 172.dp
-    val activeRailWidth = if (leftRailCollapsed) collapsedRailWidth else expandedRailWidth
-    val railAnchorTopPadding = if (leftRailCollapsed) {
-        workspaceCollapsedRailTopPadding
-    } else {
-        workspaceRailTopPadding
+    val saveActiveProject: () -> Unit = {
+        persistProjectNameDraft(true)
     }
-    val savedProjectsPanelStartPadding = 4.dp + activeRailWidth + 10.dp
-    val nonBlueprintContentStartPadding = if (dockRailForBlueprint) {
-        0.dp
-    } else {
-        if (leftRailCollapsed) collapsedRailWidth + 8.dp else expandedRailWidth + 12.dp
+    val requestSaveActiveProject: () -> Unit = {
+        val project = activeProject
+        if (project == null) {
+            saveActiveProject()
+        } else {
+            val normalizedName = projectNameDraft.trim()
+            if (normalizedName.isBlank() || normalizedName == project.name) {
+                saveActiveProject()
+            } else {
+                showSaveProjectConfirm = true
+            }
+        }
     }
-    val saveActiveProject: () -> Unit = saveProject@{
-        val project = activeProject ?: return@saveProject
-        projectsViewModel.recordTap("workspace_project_save")
-        projectsViewModel.renameProject(project.id, projectNameDraft)
-        focusManager.clearFocus()
-        Toast.makeText(
-            context,
-            context.getString(R.string.project_saved),
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val workspaceSafeWidth = maxWidth
+        val bottomSafeInset = WindowInsets.safeDrawing
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+        val chromeLayout = calculateWorkspaceBlueprintChromeLayout(
+            availableWidth = maxWidth,
+            availableHeight = maxHeight,
+            bottomInset = bottomSafeInset
+        )
+        val railCompact = chromeLayout.railCompact
+        val compactBlueprintHud = chromeLayout.compactBlueprintHud
+        val collapsedRailWidth = chromeLayout.collapsedRailWidth
+        val expandedRailWidth = chromeLayout.expandedRailWidth
+        val blueprintHeaderFieldHeight = chromeLayout.headerFieldHeight
+        val blueprintHeaderLanePadding = chromeLayout.headerLanePadding
+        val blueprintHeaderButtonSize = chromeLayout.headerButtonSize
+        val blueprintHeaderSpacing = chromeLayout.headerSpacing
+        val blueprintHeaderMinWidth = chromeLayout.headerMinWidth
+        val blueprintHeaderMaxWidthCap = chromeLayout.headerMaxWidthCap
+        val blueprintHeaderMaxWidth = (
+            workspaceSafeWidth -
+                (blueprintHeaderLanePadding * 2) -
+                blueprintHeaderButtonSize -
+                blueprintHeaderSpacing
+            ).coerceIn(blueprintHeaderMinWidth, blueprintHeaderMaxWidthCap)
+        val blueprintHeaderRowWidth =
+            blueprintHeaderMaxWidth + blueprintHeaderButtonSize + blueprintHeaderSpacing
+        val blueprintHeaderSideClearance = 18.dp
+        val blueprintCenterReservedWidth = if (selectedTab == DetailTab.BLUEPRINT && activeProject != null && !tutorialMode) {
+            blueprintHeaderRowWidth + (blueprintHeaderSideClearance * 2)
+        } else {
+            0.dp
+        }
+        val dockRailForBlueprint = selectedTab == DetailTab.BLUEPRINT
+        val workspaceRailTopPadding = chromeLayout.workspaceRailTopPadding
+        val workspaceCollapsedRailTopPadding = chromeLayout.workspaceCollapsedRailTopPadding
+        val workspaceRailBottomPadding = chromeLayout.workspaceRailBottomPadding
+        val activeRailWidth = if (leftRailCollapsed) collapsedRailWidth else expandedRailWidth
+        val railAnchorTopPadding = if (leftRailCollapsed) {
+            workspaceCollapsedRailTopPadding
+        } else {
+            workspaceRailTopPadding
+        }
+        val savedProjectsPanelStartPadding = calculateDockedRailOverlayInset(activeRailWidth)
+        val leftBlueprintDockedOverlayInset = if (dockRailForBlueprint) {
+            savedProjectsPanelStartPadding
+        } else {
+            0.dp
+        }
+        val nonBlueprintContentStartPadding = if (dockRailForBlueprint) {
+            0.dp
+        } else {
+            if (leftRailCollapsed) collapsedRailWidth + 8.dp else expandedRailWidth + 12.dp
+        }
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
@@ -619,7 +695,9 @@ private fun WorkspaceShell(
                         projectId = projectId,
                         initialShowAddons = false,
                         initialShowParams = false,
+                        topCenterReservedWidth = blueprintCenterReservedWidth,
                         leftEdgeDialInset = leftBlueprintOverlayInset,
+                        leftDockedOverlayInset = leftBlueprintDockedOverlayInset,
                         onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
                         tutorialMode = tutorialMode,
                         onExitTutorialMode = { onExitTutorialMode(true) },
@@ -631,6 +709,7 @@ private fun WorkspaceShell(
                     TakeoffScreen(
                         projectId = projectId,
                         screenMode = TakeoffScreenMode.MATERIALS,
+                        onBack = { navigateToTab(DetailTab.BLUEPRINT) },
                         onOpenModel = { navigateToTab(DetailTab.EXPORT) },
                         onOpenBlueprint = { navigateToTab(DetailTab.BLUEPRINT) },
                         onOpenMaterials = { navigateToTab(DetailTab.MATERIALS) },
@@ -643,6 +722,7 @@ private fun WorkspaceShell(
                 DetailTab.EXPORT -> { projectId ->
                     ExportScreen(
                         projectId = projectId,
+                        onBack = { navigateToTab(DetailTab.MATERIALS) },
                         onOpenTakeoff = { navigateToTab(DetailTab.MATERIALS) },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -665,6 +745,7 @@ private fun WorkspaceShell(
                         onRecordTap("settings_replay_tutorial")
                         onOpenTutorial()
                     },
+                    onBack = { navigateToTab(DetailTab.BLUEPRINT) },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(start = nonBlueprintContentStartPadding)
@@ -688,20 +769,6 @@ private fun WorkspaceShell(
             }
 
             if (selectedTab == DetailTab.BLUEPRINT && activeProject != null && !tutorialMode) {
-                val blueprintHeaderLanePadding = when {
-                    compactBlueprintHud -> (configuration.screenWidthDp * 0.26f).dp.coerceIn(108.dp, 144.dp)
-                    else -> (configuration.screenWidthDp * 0.22f).dp.coerceIn(128.dp, 188.dp)
-                }
-                val blueprintHeaderButtonSize = if (compactBlueprintHud) 34.dp else 38.dp
-                val blueprintHeaderSpacing = if (compactBlueprintHud) 6.dp else 8.dp
-                val blueprintHeaderMinWidth = if (compactBlueprintHud) 104.dp else 132.dp
-                val blueprintHeaderMaxWidthCap = if (compactBlueprintHud) 144.dp else 188.dp
-                val blueprintHeaderMaxWidth = (
-                    configuration.screenWidthDp.dp -
-                        (blueprintHeaderLanePadding * 2) -
-                        blueprintHeaderButtonSize -
-                        blueprintHeaderSpacing
-                    ).coerceIn(blueprintHeaderMinWidth, blueprintHeaderMaxWidthCap)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -723,7 +790,7 @@ private fun WorkspaceShell(
                                     min = blueprintHeaderMinWidth,
                                     max = blueprintHeaderMaxWidth
                                 )
-                                .height(if (compactBlueprintHud) 52.dp else 56.dp),
+                                .height(blueprintHeaderFieldHeight),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                             border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
@@ -744,7 +811,7 @@ private fun WorkspaceShell(
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { saveActiveProject() }),
+                                keyboardActions = KeyboardActions(onDone = { requestSaveActiveProject() }),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
                                     unfocusedContainerColor = Color.Transparent,
@@ -756,7 +823,7 @@ private fun WorkspaceShell(
                             )
                         }
                         Surface(
-                            onClick = saveActiveProject,
+                            onClick = requestSaveActiveProject,
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
                             border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.86f)),
@@ -781,6 +848,8 @@ private fun WorkspaceShell(
                 projects = projectsUiState.projects,
                 selectedProjectId = selectedProjectId,
                 onSelectProject = { projectId ->
+                    persistProjectNameDraft(false)
+                    pendingProjectDeletionId = null
                     selectedProjectId = projectId
                     selectedTab = DetailTab.BLUEPRINT
                     showSavedProjects = false
@@ -835,6 +904,64 @@ private fun WorkspaceShell(
                     }
                 )
             }
+
+            if (showSaveProjectConfirm) {
+                val pendingName = projectNameDraft.trim().ifBlank {
+                    activeProject?.name.orEmpty()
+                }
+                AlertDialog(
+                    onDismissRequest = { showSaveProjectConfirm = false },
+                    title = { Text(stringResource(R.string.save_project)) },
+                    text = {
+                        Text("Save this project name as \"$pendingName\"?")
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showSaveProjectConfirm = false
+                                saveActiveProject()
+                            }
+                        ) {
+                            Text(stringResource(R.string.save_project))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showSaveProjectConfirm = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
+            }
+
+            projectsUiState.error?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Button(onClick = projectsViewModel::clearError) {
+                            Text(stringResource(R.string.dismiss))
+                        }
+                    }
+                }
+            }
         }
 
         if (!tutorialMode) {
@@ -847,9 +974,7 @@ private fun WorkspaceShell(
                         top = railAnchorTopPadding,
                         bottom = if (!leftRailCollapsed) workspaceRailBottomPadding else 0.dp
                     )
-                    .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom)
-                    ),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
                 verticalAlignment = Alignment.Top
             ) {
                 WorkspaceLeftRail(
@@ -907,6 +1032,10 @@ private fun WorkspaceLeftRail(
     modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val blueprintDockedTopOffset = if (blueprintDocked) 22.dp else 0.dp
+    val railShellOuterPadding = 8.dp
+    val railContentTopPadding = 10.dp + blueprintDockedTopOffset
+    val collapsedToggleTopPadding = railShellOuterPadding + railContentTopPadding
     val primaryTabs = listOf(
         DetailTab.BLUEPRINT,
         DetailTab.MATERIALS,
@@ -917,17 +1046,17 @@ private fun WorkspaceLeftRail(
             modifier = modifier
                 .width(collapsedRailWidth)
                 .padding(
-                    top = if (compact) 12.dp else 14.dp,
+                    top = collapsedToggleTopPadding,
                     bottom = 8.dp
                 ),
             contentAlignment = Alignment.TopCenter
         ) {
             Surface(
                 onClick = onToggleCollapsed,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                 color = WorkspaceRailSurface,
-                border = BorderStroke(1.25.dp, WorkspaceRailAccentBorder),
-                shadowElevation = 7.dp,
+                border = BorderStroke(1.15.dp, WorkspaceRailAccentBorder),
+                shadowElevation = 4.dp,
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
@@ -943,24 +1072,29 @@ private fun WorkspaceLeftRail(
     Box(
         modifier = modifier
             .width(expandedRailWidth)
-            .padding(vertical = 8.dp)
+            .padding(vertical = railShellOuterPadding)
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
             color = WorkspaceRailShell,
             border = BorderStroke(
-                width = 1.3.dp,
+                width = 1.2.dp,
                 color = WorkspaceRailAccentBorder
             ),
-            tonalElevation = 3.dp,
-            shadowElevation = 10.dp
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 5.dp, vertical = 10.dp),
+                    .padding(
+                        start = 5.dp,
+                        end = 5.dp,
+                        top = railContentTopPadding,
+                        bottom = 10.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
@@ -1034,7 +1168,7 @@ private fun WorkspaceLeftRail(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(1.dp)
-                        .background(WorkspaceRailAccentBorder.copy(alpha = 0.8f))
+                        .background(WorkspaceRailAccentBorder.copy(alpha = 0.68f))
                         
                 )
                 WorkspaceRailButton(
@@ -1072,11 +1206,11 @@ private fun WorkspaceRailButton(
     iconOnly: Boolean = false,
     onLongPress: (() -> Unit)? = null
 ) {
-    val buttonShape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val buttonShape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
     val containerColor = when {
-        accented && selected -> Color(0xFF356A8F)
-        accented -> Color(0xFF1F425C)
-        selected -> WorkspaceRailAccentBright
+        accented && selected -> Color(0xFF234C6A)
+        accented -> Color(0xFF1A3A52)
+        selected -> WorkspaceRailAccent
         else -> WorkspaceRailSurface
     }
     val contentColor = when {
@@ -1085,9 +1219,9 @@ private fun WorkspaceRailButton(
         else -> WorkspaceRailTextPrimary
     }
     val borderColor = when {
-        accented && selected -> Color(0xFFD2E5F4)
-        accented -> Color(0xFFA8C3D6)
-        selected -> Color(0xFFC6DCF0)
+        accented && selected -> Color(0xFFCADDEA)
+        accented -> Color(0xFF9AB6C8)
+        selected -> Color(0xFFBFD4E5)
         else -> WorkspaceRailAccentBorder
     }
     Surface(
@@ -1098,7 +1232,7 @@ private fun WorkspaceRailButton(
             width = if (accented) 1.3.dp else 1.1.dp,
             color = borderColor
         ),
-        shadowElevation = if (selected || accented) 6.dp else 2.dp,
+        shadowElevation = if (selected || accented) 3.dp else 0.5.dp,
         modifier = Modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = label
@@ -1115,6 +1249,23 @@ private fun WorkspaceRailButton(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 4.dp)
+                        .fillMaxHeight(0.54f)
+                        .width(3.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                        .background(
+                            if (accented) {
+                                Color.White.copy(alpha = 0.94f)
+                            } else {
+                                Color(0xFFE5F1FA)
+                            }
+                        )
+                )
+            }
             if (iconOnly) {
                 Icon(
                     imageVector = icon,

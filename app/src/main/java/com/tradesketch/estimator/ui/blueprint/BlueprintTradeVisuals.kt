@@ -33,6 +33,20 @@ internal data class BlueprintRoomFillStyle(
 
 internal fun WallSegment.visualTradeScope(): TakeoffScope? = tags.takeoffScopeOrNull()
 
+internal fun TakeoffScope.tradeWallBaseColor(): Color = when (this) {
+    TakeoffScope.DRYWALL -> Color(0xFF12E7FF)
+    TakeoffScope.CONCRETE -> Color(0xFFFF6B4A)
+    TakeoffScope.GRAVEL_MULCH -> Color(0xFFFFF34D)
+    TakeoffScope.PAINT -> Color(0xFF3DFF8A)
+}
+
+internal fun TakeoffScope.tradeWallAccentColor(): Color = when (this) {
+    TakeoffScope.DRYWALL -> Color(0xFFD7FCFF)
+    TakeoffScope.CONCRETE -> Color(0xFFFFDED5)
+    TakeoffScope.GRAVEL_MULCH -> Color(0xFFFFFFBE)
+    TakeoffScope.PAINT -> Color(0xFFD8FFE8)
+}
+
 internal fun resolveWallDisplayStyle(
     wall: WallSegment,
     activeScope: TakeoffScope
@@ -42,23 +56,23 @@ internal fun resolveWallDisplayStyle(
     val isActive = wallScope == null || wallScope == activeScope
     return when (resolvedScope) {
         TakeoffScope.DRYWALL -> BlueprintWallDisplayStyle(
-            baseColor = (if (isActive) Color(0xFF9FDEFF) else Color(0xFF9FDEFF)).copy(alpha = if (isActive) 1f else 0.7f),
-            accentColor = Color(0xFFDDF6FF).copy(alpha = if (isActive) 0.82f else 0.54f),
+            baseColor = resolvedScope.tradeWallBaseColor().copy(alpha = if (isActive) 1f else 0.82f),
+            accentColor = resolvedScope.tradeWallAccentColor().copy(alpha = if (isActive) 0.96f else 0.74f),
             pattern = BlueprintWallAccentPattern.DRYWALL_PARALLEL
         )
         TakeoffScope.CONCRETE -> BlueprintWallDisplayStyle(
-            baseColor = (if (isActive) Color(0xFFFF9A82) else Color(0xFFFF9A82)).copy(alpha = if (isActive) 1f else 0.72f),
-            accentColor = Color(0xFFFFDFC8).copy(alpha = if (isActive) 0.8f else 0.52f),
+            baseColor = resolvedScope.tradeWallBaseColor().copy(alpha = if (isActive) 1f else 0.82f),
+            accentColor = resolvedScope.tradeWallAccentColor().copy(alpha = if (isActive) 0.94f else 0.72f),
             pattern = BlueprintWallAccentPattern.CONCRETE_TICKS
         )
         TakeoffScope.GRAVEL_MULCH -> BlueprintWallDisplayStyle(
-            baseColor = (if (isActive) Color(0xFFFFD54D) else Color(0xFFFFD54D)).copy(alpha = if (isActive) 1f else 0.72f),
-            accentColor = Color(0xFFFFF0B3).copy(alpha = if (isActive) 0.86f else 0.56f),
+            baseColor = resolvedScope.tradeWallBaseColor().copy(alpha = if (isActive) 1f else 0.84f),
+            accentColor = resolvedScope.tradeWallAccentColor().copy(alpha = if (isActive) 0.96f else 0.74f),
             pattern = BlueprintWallAccentPattern.GRAVEL_PEBBLES
         )
         TakeoffScope.PAINT -> BlueprintWallDisplayStyle(
-            baseColor = (if (isActive) Color(0xFF7FF0B0) else Color(0xFF7FF0B0)).copy(alpha = if (isActive) 1f else 0.72f),
-            accentColor = Color(0xFFD9FFE7).copy(alpha = if (isActive) 0.8f else 0.5f),
+            baseColor = resolvedScope.tradeWallBaseColor().copy(alpha = if (isActive) 1f else 0.82f),
+            accentColor = resolvedScope.tradeWallAccentColor().copy(alpha = if (isActive) 0.94f else 0.7f),
             pattern = BlueprintWallAccentPattern.PAINT_DASH
         )
     }
@@ -88,15 +102,15 @@ internal fun TakeoffScope.usesRoomSurfaceFill(): Boolean = when (this) {
 internal fun TakeoffScope.roomFillStyle(active: Boolean): BlueprintRoomFillStyle? {
     return when (this) {
         TakeoffScope.CONCRETE -> BlueprintRoomFillStyle(
-            fillColor = if (active) Color(0x38FF8D78) else Color(0x20FF8D78),
-            outlineColor = if (active) Color(0xFFFFB29A) else Color(0xB3FFB29A),
-            patternColor = if (active) Color(0x66FFE0D8) else Color(0x40FFD5CB),
+            fillColor = if (active) Color(0x42FF845C) else Color(0x22FF845C),
+            outlineColor = if (active) Color(0xFFFFB49F) else Color(0xBAFFB49F),
+            patternColor = if (active) Color(0x72FFE2D7) else Color(0x46FFE2D7),
             pattern = BlueprintRoomFillPattern.CONCRETE_HATCH
         )
         TakeoffScope.GRAVEL_MULCH -> BlueprintRoomFillStyle(
-            fillColor = if (active) Color(0x33FFD56B) else Color(0x1CFFD56B),
-            outlineColor = if (active) Color(0xFFFFE59C) else Color(0xB3FFE59C),
-            patternColor = if (active) Color(0x73FFF2BE) else Color(0x4DFFF2BE),
+            fillColor = if (active) Color(0x3AFFCF3A) else Color(0x1FFFCF3A),
+            outlineColor = if (active) Color(0xFFFFE69A) else Color(0xBAFFE69A),
+            patternColor = if (active) Color(0x78FFF2BA) else Color(0x50FFF2BA),
             pattern = BlueprintRoomFillPattern.GRAVEL_PEBBLES
         )
         TakeoffScope.DRYWALL,

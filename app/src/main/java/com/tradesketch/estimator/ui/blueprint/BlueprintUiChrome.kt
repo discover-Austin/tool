@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -104,7 +102,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
@@ -160,6 +157,7 @@ private fun blueprintHudBorderColor(alpha: Float = 0.96f): Color {
 
 @Composable
 internal fun BlueprintBottomBar(
+    compact: Boolean,
     canDeleteSelection: Boolean,
     detachedWalls: Boolean,
     boxModeEnabled: Boolean,
@@ -194,11 +192,10 @@ internal fun BlueprintBottomBar(
     helpButtonModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
-    val compactBottomBar = LocalConfiguration.current.screenWidthDp < 420
-    val actionButtonSize = if (compactBottomBar) 24.dp else 26.dp
-    val actionIconSize = if (compactBottomBar) 11.dp else 12.dp
-    val toggleButtonSize = if (compactBottomBar) 28.dp else 32.dp
-    val toggleIconSize = if (compactBottomBar) 13.dp else 15.dp
+    val actionButtonSize = if (compact) 24.dp else 26.dp
+    val actionIconSize = if (compact) 11.dp else 12.dp
+    val toggleButtonSize = if (compact) 28.dp else 32.dp
+    val toggleIconSize = if (compact) 13.dp else 15.dp
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(6.dp),
@@ -209,10 +206,10 @@ internal fun BlueprintBottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (compactBottomBar) 50.dp else 60.dp)
+                .height(if (compact) 50.dp else 60.dp)
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = if (compactBottomBar) 6.dp else 8.dp, vertical = if (compactBottomBar) 5.dp else 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (compactBottomBar) 2.dp else 5.dp),
+                .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = if (compact) 5.dp else 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SlimIconAction(
@@ -224,7 +221,7 @@ internal fun BlueprintBottomBar(
                 iconSize = actionIconSize,
                 minimumTouchTarget = false
             )
-            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
+            BarDivider(height = if (compact) 18.dp else 22.dp)
             SlimIconToggle(
                 icon = Icons.Filled.Workspaces,
                 contentDescription = "Detached walls",
@@ -275,7 +272,7 @@ internal fun BlueprintBottomBar(
                 minimumTouchTarget = false,
                 modifier = circleButtonModifier
             )
-            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
+            BarDivider(height = if (compact) 18.dp else 22.dp)
             SlimIconToggle(
                 icon = Icons.Filled.DoorFront,
                 contentDescription = "Doors panel",
@@ -326,7 +323,7 @@ internal fun BlueprintBottomBar(
                 minimumTouchTarget = false,
                 modifier = paramsButtonModifier
             )
-            BarDivider(height = if (compactBottomBar) 18.dp else 22.dp)
+            BarDivider(height = if (compact) 18.dp else 22.dp)
             SlimIconToggle(
                 icon = Icons.AutoMirrored.Filled.Help,
                 contentDescription = "Rail help",
@@ -486,6 +483,73 @@ internal fun ScopeSelector(
 }
 
 @Composable
+internal fun TradeLayerLegend(
+    activeScope: TakeoffScope,
+    visibleScopes: List<TakeoffScope>,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    if (visibleScopes.size <= 1) return
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(4.dp),
+        color = blueprintHudContainerColor(),
+        border = BorderStroke(1.2.dp, blueprintHudBorderColor(alpha = 0.84f)),
+        shadowElevation = 10.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = if (compact) 8.dp else 10.dp,
+                vertical = if (compact) 6.dp else 8.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
+        ) {
+            Text(
+                text = "Canvas Layers",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.SemiBold
+            )
+            visibleScopes.forEach { scope ->
+                val isActive = scope == activeScope
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(3.dp),
+                        color = scope.wallColor().copy(alpha = if (isActive) 1f else 0.84f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (isActive) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f)
+                            }
+                        ),
+                        modifier = Modifier.size(if (compact) 14.dp else 16.dp)
+                    ) {}
+                    Text(
+                        text = scope.shortLabel(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium
+                    )
+                    if (isActive) {
+                        Text(
+                            text = "Active",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun BarDivider(
     height: Dp = 22.dp
 ) {
@@ -500,11 +564,11 @@ internal fun BarDivider(
 @Composable
 internal fun ClearAllButton(
     onClick: () -> Unit,
+    compact: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val compactButton = LocalConfiguration.current.screenWidthDp < 420
-    val buttonSize = if (compactButton) 34.dp else 34.dp
-    val iconSize = if (compactButton) 14.dp else 15.dp
+    val buttonSize = 34.dp
+    val iconSize = if (compact) 14.dp else 15.dp
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(4.dp),
@@ -524,6 +588,54 @@ internal fun ClearAllButton(
                 modifier = Modifier.size(iconSize)
             )
         }
+    }
+}
+
+@Composable
+internal fun FloorArrowButtons(
+    level: BlueprintFloorLevel,
+    onLowerFloor: () -> Unit,
+    onUpperFloor: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val floorButtonSize = 22.dp
+    val floorIconSize = 14.dp
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = blueprintHudContainerColor(),
+            border = BorderStroke(1.2.dp, blueprintHudBorderColor(alpha = 0.9f)),
+            shadowElevation = 6.dp
+        ) {
+            Text(
+                text = level.inlineFloorLabel(),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 10.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+            )
+        }
+        SlimIconAction(
+            icon = Icons.Filled.KeyboardArrowDown,
+            contentDescription = "Lower floor",
+            enabled = true,
+            onClick = onLowerFloor,
+            buttonSize = floorButtonSize,
+            iconSize = floorIconSize
+        )
+        SlimIconAction(
+            icon = Icons.Filled.KeyboardArrowUp,
+            contentDescription = "Upper floor",
+            enabled = true,
+            onClick = onUpperFloor,
+            buttonSize = floorButtonSize,
+            iconSize = floorIconSize
+        )
     }
 }
 
@@ -722,6 +834,7 @@ internal fun GridScaleEditorPanel(
     onNudgeCentimeters: (Int) -> Unit,
     onDismiss: () -> Unit,
     onApply: () -> Unit,
+    panelWidth: Dp = 214.dp,
     modifier: Modifier = Modifier
 ) {
     if (!expanded) return
@@ -732,7 +845,7 @@ internal fun GridScaleEditorPanel(
         border = BorderStroke(1.3.dp, blueprintHudBorderColor())
     ) {
         Column(
-            modifier = Modifier.width(214.dp).padding(8.dp),
+            modifier = Modifier.width(panelWidth).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("Grid", style = MaterialTheme.typography.labelLarge)
@@ -819,6 +932,8 @@ internal fun ParamsPanel(
     onSelectDrawWallTool: () -> Unit,
     onWallHeightChange: (Long) -> Unit,
     onSnapThresholdFeetChange: (Double) -> Unit,
+    panelWidth: Dp = 238.dp,
+    panelMaxHeight: Dp = 420.dp,
     modifier: Modifier = Modifier
 ) {
     if (!expanded) return
@@ -832,8 +947,8 @@ internal fun ParamsPanel(
     Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.4.dp, blueprintHudBorderColor())) {
         Card(
             modifier = Modifier
-                .width(238.dp)
-                .heightIn(max = 420.dp),
+                .width(panelWidth)
+                .heightIn(max = panelMaxHeight),
             shape = RoundedCornerShape(4.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
@@ -910,6 +1025,8 @@ internal fun OpeningAddonsPanel(
     onCustomWidthChange: (String) -> Unit,
     onCustomHeightChange: (String) -> Unit,
     onCustomSillChange: (String) -> Unit,
+    panelWidth: Dp = 150.dp,
+    panelMaxHeight: Dp = 318.dp,
     modifier: Modifier = Modifier
 ) {
     val type = when (panelType) {
@@ -974,8 +1091,8 @@ internal fun OpeningAddonsPanel(
     ) {
         Column(
             modifier = Modifier
-                .width(150.dp)
-                .heightIn(max = 318.dp)
+                .width(panelWidth)
+                .heightIn(max = panelMaxHeight)
                 .verticalScroll(rememberScrollState())
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1131,7 +1248,8 @@ internal fun OpeningAddonsPanel(
 @Composable
 internal fun RailHelpPanel(
     expanded: Boolean,
-    dualJoysticksEnabled: Boolean,
+    panelWidth: Dp = 314.dp,
+    panelMaxHeight: Dp = 360.dp,
     modifier: Modifier = Modifier
 ) {
     if (!expanded) return
@@ -1143,8 +1261,8 @@ internal fun RailHelpPanel(
     ) {
         Column(
             modifier = Modifier
-                .width(314.dp)
-                .heightIn(max = 360.dp)
+                .width(panelWidth)
+                .heightIn(max = panelMaxHeight)
                 .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1182,12 +1300,8 @@ internal fun RailHelpPanel(
                 detail = "Use the split-curve rail icon when you want a freeform bend. The side dials fine-tune shift and bend after the end point is set."
             )
             RailHelpLine(
-                title = "Control mode",
-                detail = if (dualJoysticksEnabled) {
-                    "Dual joysticks uses the left pad for pan and the right pad for cursor placement."
-                } else {
-                    "Touch mode uses the bottom quick tools for Select, Draw, Grab, and Cancel."
-                }
+                title = "Control layout",
+                detail = "Dual joysticks uses the left pad for pan and the right pad for cursor placement."
             )
             RailHelpLine(title = "Trade", detail = "Top-right trade chip cycles drywall, concrete, gravel, and paint.")
             RailHelpLine(title = "Chain", detail = "Continue from last clicked corner on each wall.")
@@ -1202,11 +1316,7 @@ internal fun RailHelpPanel(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
             ) {
                 Text(
-                    text = if (dualJoysticksEnabled) {
-                        "Tip: Right stick moves the cursor and confirms at the active point. Left stick pans, and left-pad tap/press handles cancel, alt-select, and quick wall clear."
-                    } else {
-                        "Tip: Use the quick tools to switch Select, Draw, and Grab. Two-finger gestures still pan and zoom the canvas."
-                    },
+                    text = "Tip: Right stick moves the cursor and confirms at the active point. Left stick pans, and left-pad tap/press handles cancel, alt-select, and quick wall clear.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
@@ -1297,10 +1407,11 @@ internal fun SelectionPanel(
     onCircleRadiusStep: (Int) -> Unit,
     onCircleDiameterStep: (Int) -> Unit,
     onDeselect: () -> Unit,
+    maxWidth: Dp = 190.dp,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.widthIn(max = 190.dp),
+        modifier = modifier.widthIn(max = maxWidth),
         shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.97f)
@@ -1495,16 +1606,17 @@ internal fun LiveOverlay(
     linearFeet: Double,
     selectedFloor: BlueprintFloorLevel,
     useMetric: Boolean,
+    compact: Boolean,
+    maxWidth: Dp,
     modifier: Modifier = Modifier
 ) {
-    val compactHud = LocalConfiguration.current.screenWidthDp < 420
     val floorNumberLabel = selectedFloor.floorDisplayLabel()
     val compactFloorLabel = floorNumberLabel
         .removePrefix("Floor: ")
         .removePrefix("Floor ")
         .replace("Ground", "Gnd")
     Card(
-        modifier = modifier.widthIn(max = if (compactHud) 104.dp else 164.dp),
+        modifier = modifier.widthIn(max = maxWidth),
         shape = RoundedCornerShape(4.dp),
         colors = CardDefaults.cardColors(containerColor = blueprintHudContainerColor()),
         border = BorderStroke(1.4.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)),
@@ -1512,10 +1624,10 @@ internal fun LiveOverlay(
     ) {
         Column(
             modifier = Modifier.padding(
-                horizontal = if (compactHud) 5.dp else 10.dp,
-                vertical = if (compactHud) 5.dp else 8.dp
+                horizontal = if (compact) 5.dp else 10.dp,
+                vertical = if (compact) 5.dp else 8.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(if (compactHud) 2.dp else 4.dp)
+            verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1523,17 +1635,17 @@ internal fun LiveOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (compactHud) "TOTAL" else "PROJECT TOTAL",
+                    text = if (compact) "TOTAL" else "PROJECT TOTAL",
                     color = MaterialTheme.colorScheme.secondary,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compact) 7.5.sp else 9.sp),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Clip
                 )
                 Text(
-                    text = if (compactHud) compactFloorLabel else floorNumberLabel,
+                    text = if (compact) compactFloorLabel else floorNumberLabel,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compact) 7.5.sp else 9.sp),
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Clip
@@ -1542,47 +1654,47 @@ internal fun LiveOverlay(
             Text(
                 text = liveScopeQuantity.value,
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 8.sp else 10.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compact) 8.sp else 10.sp),
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
                 overflow = TextOverflow.Clip
             )
             Text(
                 text = if (useMetric) {
-                    if (compactHud) {
+                    if (compact) {
                         "Lin ${formatLiveValue(linearFeet * 0.3048, 2)} m"
                     } else {
                         "Linear: ${formatLiveValue(linearFeet * 0.3048, 2)} m"
                     }
                 } else {
-                    if (compactHud) {
+                    if (compact) {
                         "Lin ${formatLiveValue(linearFeet, 1)} ft"
                     } else {
                         "Linear Feet: ${formatLiveValue(linearFeet, 1)} ft"
                     }
                 },
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compact) 7.5.sp else 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
             Text(
                 text = if (useMetric) {
-                    if (compactHud) {
+                    if (compact) {
                         "Sq ${formatLiveValue(squareFeet * 0.09290304, 2)} m"
                     } else {
                         "Area: ${formatLiveValue(squareFeet * 0.09290304, 2)} sq m"
                     }
                 } else {
-                    if (compactHud) {
+                    if (compact) {
                         "Sq ${formatLiveValue(squareFeet, 1)} sf"
                     } else {
                         "Square Feet: ${formatLiveValue(squareFeet, 1)} sq ft"
                     }
                 },
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compactHud) 7.5.sp else 9.sp),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = if (compact) 7.5.sp else 9.sp),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Clip

@@ -23,10 +23,9 @@ class SettingsBlueprintControlsTest {
     val rule = createComposeRule()
 
     @Test
-    fun blueprintControls_touchModeHidesJoystickTuningUntilJoystickModeIsEnabled() {
+    fun blueprintControls_alwaysShowsJoystickTuning() {
         var settings by mutableStateOf(
             Settings.DEFAULT.copy(
-                blueprintDualJoysticksEnabled = false,
                 blueprintJoystickSensitivity = 1.31f,
                 blueprintJoystickDeadzone = 0.14f
             )
@@ -46,9 +45,8 @@ class SettingsBlueprintControlsTest {
                             threshold = threshold
                         )
                     },
-                    onUpdateBlueprintControlDefaults = { dual, sensitivity, deadzone, cursorVisible, cursorScale ->
+                    onUpdateBlueprintControlDefaults = { sensitivity, deadzone, cursorVisible, cursorScale ->
                         settings = settings.updatedBlueprintControls(
-                            dualJoysticksEnabled = dual,
                             joystickSensitivity = sensitivity,
                             joystickDeadzone = deadzone,
                             cursorVisible = cursorVisible,
@@ -60,20 +58,16 @@ class SettingsBlueprintControlsTest {
             }
         }
 
-        assertTextAbsent("Joystick sensitivity: 1.31x")
-        assertTextAbsent("Joystick deadzone: 14%")
-
-        rule.onNodeWithText("Dual joysticks").performClick()
-
         assertTextPresent("Joystick sensitivity: 1.31x")
         assertTextPresent("Joystick deadzone: 14%")
+        assertTextAbsent("Touch mode")
+        assertTextAbsent("Dual joysticks")
     }
 
     @Test
-    fun blueprintControls_switchingModesPreservesSavedJoystickValues() {
+    fun blueprintControls_hidesModeSectionButKeepsJoystickDefaultsVisible() {
         var settings by mutableStateOf(
             Settings.DEFAULT.copy(
-                blueprintDualJoysticksEnabled = true,
                 blueprintJoystickSensitivity = 1.42f,
                 blueprintJoystickDeadzone = 0.18f
             )
@@ -93,9 +87,8 @@ class SettingsBlueprintControlsTest {
                             threshold = threshold
                         )
                     },
-                    onUpdateBlueprintControlDefaults = { dual, sensitivity, deadzone, cursorVisible, cursorScale ->
+                    onUpdateBlueprintControlDefaults = { sensitivity, deadzone, cursorVisible, cursorScale ->
                         settings = settings.updatedBlueprintControls(
-                            dualJoysticksEnabled = dual,
                             joystickSensitivity = sensitivity,
                             joystickDeadzone = deadzone,
                             cursorVisible = cursorVisible,
@@ -109,16 +102,7 @@ class SettingsBlueprintControlsTest {
 
         assertTextPresent("Joystick sensitivity: 1.42x")
         assertTextPresent("Joystick deadzone: 18%")
-
-        rule.onNodeWithText("Touch mode").performClick()
-
-        assertTextAbsent("Joystick sensitivity: 1.42x")
-        assertTextAbsent("Joystick deadzone: 18%")
-
-        rule.onNodeWithText("Dual joysticks").performClick()
-
-        assertTextPresent("Joystick sensitivity: 1.42x")
-        assertTextPresent("Joystick deadzone: 18%")
+        assertTextAbsent("Control mode")
     }
 
     private fun assertTextPresent(value: String) {
@@ -155,14 +139,12 @@ private fun Settings.updatedBlueprintSnap(
 }
 
 private fun Settings.updatedBlueprintControls(
-    dualJoysticksEnabled: Boolean? = null,
     joystickSensitivity: Float? = null,
     joystickDeadzone: Float? = null,
     cursorVisible: Boolean? = null,
     cursorScale: Float? = null
 ): Settings {
     return copy(
-        blueprintDualJoysticksEnabled = dualJoysticksEnabled ?: blueprintDualJoysticksEnabled,
         blueprintJoystickSensitivity = joystickSensitivity ?: blueprintJoystickSensitivity,
         blueprintJoystickDeadzone = joystickDeadzone ?: blueprintJoystickDeadzone,
         blueprintCursorVisible = cursorVisible ?: blueprintCursorVisible,

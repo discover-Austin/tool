@@ -25,9 +25,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.components.WorkspacePageHeaderCard
+import com.tradesketch.estimator.ui.components.WorkspaceSectionHeading
 import com.tradesketch.estimator.ui.components.appCardBorder
 import com.tradesketch.estimator.ui.components.appCardColors
 import com.tradesketch.estimator.ui.components.appCardElevation
+import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
@@ -88,28 +91,22 @@ fun ReviewScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(
-                colors = appCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                border = appCardBorder(accented = true),
-                elevation = appCardElevation(raised = true)
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Review", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "Current scope geometry with trade-specific quantity traces.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text("Project: ${uiState.project?.name.orEmpty()}", fontWeight = FontWeight.SemiBold)
-                }
-            }
+            WorkspacePageHeaderCard(
+                title = "Review",
+                subtitle = "Current scope geometry with trade-specific quantity traces for ${uiState.project?.name.orEmpty()}.",
+                eyebrow = reviewType.displayLabel
+            )
         }
 
         item {
-            Text("Rooms", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Rooms",
+                detail = "Area, perimeter, and room-level tags for the active trade scope."
+            )
         }
         items(document.rooms, key = { it.id }) { room ->
             Card(
@@ -129,7 +126,10 @@ fun ReviewScreen(
         }
 
         item {
-            Text("Walls", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Walls",
+                detail = "Net wall geometry after openings are deducted from the measured surface."
+            )
         }
         items(document.walls, key = { it.id }) { wall ->
             val openingArea = document.openings
@@ -151,7 +151,10 @@ fun ReviewScreen(
         }
 
         item {
-            Text("Openings", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Openings",
+                detail = "Door, window, and stair placements linked to each measured wall."
+            )
         }
         items(document.openings, key = { it.id }) { opening ->
             Card(
@@ -171,7 +174,10 @@ fun ReviewScreen(
         }
 
         item {
-            Text("Trade Breakdown", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Trade Breakdown",
+                detail = "Calculated quantities and trace references for every supported trade."
+            )
         }
         item {
             ReviewTradeCard("Drywall", drywall)
