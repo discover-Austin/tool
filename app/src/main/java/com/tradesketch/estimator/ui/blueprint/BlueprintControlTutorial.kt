@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,13 +43,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.WallSegment
+import com.tradesketch.estimator.ui.tutorial.normalizeTutorialRectsToOverlaySpace
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import kotlin.math.roundToInt
 
@@ -551,7 +555,14 @@ internal fun BlueprintControlTutorialOverlay(
     onSkip: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    var overlayBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coordinates ->
+                overlayBoundsInRoot = Rect(coordinates.positionInRoot(), coordinates.size.toSize())
+            }
+    ) {
         val transition = rememberInfiniteTransition(label = "blueprint_tutorial_highlight")
         val highlightAlpha by transition.animateFloat(
             initialValue = 0.42f,
@@ -569,11 +580,17 @@ internal fun BlueprintControlTutorialOverlay(
         val cardHeightEstimate = 108.dp + (step.details.size * 14).dp
         val maxCardHeight = (maxHeight - 20.dp).coerceAtLeast(128.dp)
         val compactWindow = maxWidth < 420.dp || maxHeight < 720.dp
-        val targetRects = remember(targetBounds, step.target, density) {
+        val localizedTargetBounds = remember(targetBounds, overlayBoundsInRoot) {
+            normalizeTutorialRectsToOverlaySpace(
+                targetBounds = targetBounds,
+                overlayBoundsInRoot = overlayBoundsInRoot
+            )
+        }
+        val targetRects = remember(localizedTargetBounds, step.target, density) {
             val highlightPaddingPx = with(density) { tutorialHighlightPadding(step.target).toPx() }
             val highlightYOffsetPx = with(density) { tutorialHighlightVerticalOffset(step.target).toPx() }
             val highlightBottomTrimPx = with(density) { tutorialHighlightBottomTrim(step.target).toPx() }
-            targetBounds.map {
+            localizedTargetBounds.map {
                 it.inflate(highlightPaddingPx)
                     .offsetBy(dy = -highlightYOffsetPx)
                     .trimBottom(highlightBottomTrimPx)

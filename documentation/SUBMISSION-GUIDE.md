@@ -1,8 +1,8 @@
 # Google Play Submission Guide
 
-Updated: March 25, 2026
+Updated: April 13, 2026
 
-Use together with `RELEASE_STATUS.md`.
+Use together with `documentation/COMPLIANCE-CHECKLIST.md` and `README.md`.
 
 ## Build Gate (Must Pass)
 
@@ -19,14 +19,14 @@ Expected output:
 
 - `app/build/outputs/bundle/release/app-release.aab`
 - `app/build/outputs/apk/sideload/app-sideload.apk`
-- Record the bundle timestamp in `RELEASE_STATUS.md` after `:app:bundleRelease` completes on the release commit.
-- Record the bundle SHA-256 in `RELEASE_STATUS.md` after `:app:bundleRelease` completes on the release commit.
+- Record the bundle timestamp after `:app:bundleRelease` completes on the release commit.
+- Record the bundle SHA-256 after `:app:bundleRelease` completes on the release commit.
 - Refresh all 8 screenshots and the 30-second showcase from the newest signed sideload build on the same commit.
 
 Expected metadata:
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.19` (`versionCode = 21`)
+- Version: `1.0.22` (`versionCode = 24`)
 
 ## Signing Gate
 
@@ -46,7 +46,7 @@ Configure one of:
 ## Submission Steps
 
 1. Upload `app-release.aab` to Production.
-2. Confirm parsed version is `21 / 1.0.19`.
+2. Confirm parsed version is `24 / 1.0.22`.
 3. Apply release notes from `store-assets/listing/whats-new.txt`.
 4. Upload the newest screenshot set and the newest preview video that were captured from `com.tradesketch.estimator.local`.
 5. Complete listing, privacy, data safety, and content rating sections.

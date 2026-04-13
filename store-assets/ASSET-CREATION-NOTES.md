@@ -6,7 +6,7 @@ Use the newest build for everything.
 
 - Release upload artifact: `app/build/outputs/bundle/release/app-release.aab`
 - Media capture artifact: `app/build/outputs/apk/sideload/app-sideload.apk`
-- Current release identity: `1.0.19` (`versionCode = 21`)
+- Current release identity: `1.0.22` (`versionCode = 24`)
 - Play upload package: `com.tradesketch.estimator`
 - Screenshot/video capture package: `com.tradesketch.estimator.local`
 - Device baseline for the current media pass: `1440 x 3120`
@@ -118,7 +118,7 @@ adb shell am start -n com.tradesketch.estimator.local/com.tradesketch.estimator.
 
 # Capture
 adb shell screencap -p /sdcard/screenshot.png
-adb pull /sdcard/screenshot.png 01_projects.png
+adb pull /sdcard/screenshot.png 01_welcome.png
 ```
 
 **Option B: Emulator**
@@ -128,47 +128,37 @@ adb pull /sdcard/screenshot.png 01_projects.png
 
 **Required Screens:**
 
-1. **01_projects.png** - Workspace + project context
-   - Left rail expanded or project context clearly visible
-   - Shows the active estimating workspace
+1. **01_welcome.png** - Welcome home
+   - TradeSketch header and first-run value proposition visible
+   - Clean start state for a new user
 
-2. **02_spaces.png** - Blueprint overview
-   - Blueprint canvas with geometry visible
-   - Floor and scale overlays visible
-   - Clear active-project context
+2. **02_saved_projects.png** - Saved projects on home
+   - Saved-project card visible on the home screen
+   - Quick-return workflow readable for repeat jobs
 
-3. **03_editor.png** - Blueprint editing controls
-   - Bottom tool rail visible
-   - Doors/Windows/Params panel open
-   - Live quantity overlay visible
-   - Demonstrates active editing state
+3. **03_project_type.png** - Project type choice
+   - Blueprint and direct-entry paths visible together
+   - Shows both measured takeoff and fast manual entry
 
-4. **04_drywall.png** - Drywall results
-   - Preset selector showing "Drywall" selected
-   - Parameter cards (waste%, sheet size)
-   - Results card with totals
-   - Item list (sheets, screws, compound)
-   - Clear quantities and units
+4. **04_blueprint_overview.png** - Blueprint overview
+   - Active project with blueprint, overlays, and scale context visible
+   - Real in-progress workspace, not an empty canvas
 
-5. **05_concrete.png** - Concrete results
-   - Preset selector showing "Concrete" selected
-   - Parameters (thickness, waste%)
-   - Cubic yards calculation
-   - Optional bag equivalent
+5. **05_blueprint_controls.png** - Blueprint editing controls
+   - Bottom tool rail and precision editing controls visible
+   - Shows active drafting and adjustment flow
 
-6. **06_export.png** - Export screen
-   - Share/save actions for Estimate PDF, Blueprint PNG/PDF, CSV, JSON
-   - Preview deck visible
-   - Disclaimer visible
+6. **06_materials.png** - Materials and pricing
+   - Linked quantities, pricing controls, and totals visible together
+   - Emphasizes estimate clarity and trust
 
-7. **07_settings.png** - Settings and onboarding help
-   - Preferences and accessibility controls visible
-   - Help & Onboarding card visible
-   - Replay Control Tour CTA visible
+7. **07_export.png** - Export screen
+   - Share/save actions for Estimate PDF, Blueprint PNG/PDF, CSV, and JSON
+   - Preview deck and action card visible
 
-8. **08_open.png** - Saved/Open projects panel
-   - Existing project list visible
-   - Quick-return workflow for prior jobs visible
+8. **08_settings.png** - Settings and help
+   - Preferences, reduced motion, and Help & Onboarding visible
+   - Replay-tour or support actions visible
 
 **Screenshot Enhancement (Optional):**
 

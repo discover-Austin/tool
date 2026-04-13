@@ -1,23 +1,31 @@
 1
-00:00:00,000 --> 00:00:05,000
-One offline workspace for blueprint, materials, and export.
+00:00:00,000 --> 00:00:03,725
+TradeSketch helps you measure, price, and export jobs from one app.
 
 2
-00:00:05,000 --> 00:00:10,000
-Measure real trade geometry and keep live totals visible.
+00:00:03,725 --> 00:00:07,450
+Start fast, or jump right back into a saved project.
 
 3
-00:00:10,000 --> 00:00:15,000
-Use fast on-screen controls for precise blueprint edits.
+00:00:07,450 --> 00:00:11,175
+Use blueprint takeoff to measure, or manual entry when you already know the numbers.
 
 4
-00:00:15,000 --> 00:00:20,000
-Review linked quantities and tune material assumptions.
+00:00:11,175 --> 00:00:14,900
+See the layout, scale, and live totals together.
 
 5
-00:00:20,000 --> 00:00:25,000
-Confirm pricing, labor, markup, tax, and estimate totals.
+00:00:14,900 --> 00:00:18,625
+Add doors, windows, and edits without losing your place.
 
 6
-00:00:25,000 --> 00:00:30,000
-Export reports, blueprint files, CSV, and JSON backups.
+00:00:18,625 --> 00:00:22,350
+Materials and pricing stay tied to the takeoff.
+
+7
+00:00:22,350 --> 00:00:26,075
+Export PDF, PNG, CSV, or JSON in a few taps.
+
+8
+00:00:26,075 --> 00:00:29,800
+No account, no subscription, just faster estimating on your phone.

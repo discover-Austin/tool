@@ -1,7 +1,7 @@
 param(
     [string]$PackageActivity = "com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity",
     [string]$ExpectedPackage = "com.tradesketch.estimator.local",
-    [string]$SnapshotLabel = "play-store-v1.0.19-build-21"
+    [string]$SnapshotLabel = "play-store-v1.0.22-build-24"
 )
 
 <#
@@ -137,77 +137,75 @@ function Assert-TradeSketchForeground {
 
 $screenshots = @(
     @{
-        File = "01_projects.png"
-        Screen = "WORKSPACE WITH SAVED PROJECTS"
+        File = "01_welcome.png"
+        Screen = "WELCOME HOME"
         Instructions = @(
-            "Open the workspace for an active project."
-            "Expand the left rail and keep project context visible."
-            "Show the saved-project workflow or left-rail context clearly."
+            "Launch the app to the welcome screen."
+            "Keep the TradeSketch header and the first-run value proposition visible."
+            "Show this as the clean starting point for new users."
         )
     },
     @{
-        File = "02_spaces.png"
+        File = "02_saved_projects.png"
+        Screen = "SAVED PROJECTS ON HOME"
+        Instructions = @(
+            "Stay on the welcome screen with at least one saved project visible."
+            "Keep the saved-project card and tap-to-return workflow readable."
+            "Show this as the quick reopen path for repeat jobs."
+        )
+    },
+    @{
+        File = "03_project_type.png"
+        Screen = "PROJECT TYPE CHOICE"
+        Instructions = @(
+            "Open the project-type selection step."
+            "Keep both blueprint and direct-entry choices visible."
+            "Show the app supports both measured takeoffs and fast manual entry."
+        )
+    },
+    @{
+        File = "04_blueprint_overview.png"
         Screen = "BLUEPRINT OVERVIEW"
         Instructions = @(
-            "Switch to Blueprint tab for an active project."
-            "Show walls/rooms/openings with the top overlays visible."
-            "Keep floor and grid scale controls visible."
+            "Enter an active blueprint project."
+            "Show walls, rooms, or openings with the top overlays visible."
+            "Keep floor and scale controls readable."
         )
     },
     @{
-        File = "03_editor.png"
+        File = "05_blueprint_controls.png"
         Screen = "BLUEPRINT EDITING CONTROLS"
         Instructions = @(
-            "Open one editing panel (Doors, Windows, or Params)."
-            "Keep the bottom tool rail and live quantity overlay visible."
-            "Show this as an in-progress editing screen, not an empty canvas."
+            "Open one editing panel such as Doors, Windows, or Params."
+            "Keep the bottom tool rail and precision controls visible."
+            "Show this as an active drafting screen, not an empty canvas."
         )
     },
     @{
-        File = "04_drywall.png"
-        Screen = "DRYWALL TAKEOFF RESULTS"
+        File = "06_materials.png"
+        Screen = "MATERIALS AND PRICING"
         Instructions = @(
-            "Open Materials tab."
-            "Select Drywall."
-            "Show quantity summary, warnings (if present), and line items."
-            "Keep parameter cards and totals visible."
+            "Open the Materials tab for a real project."
+            "Show linked quantities, pricing controls, and totals together."
+            "Keep the screen focused on trust-building estimate detail."
         )
     },
     @{
-        File = "05_concrete.png"
-        Screen = "CONCRETE TAKEOFF RESULTS"
-        Instructions = @(
-            "Switch type to Concrete in Materials."
-            "Show cubic yards result and pricing summary."
-            "Keep assumptions/inputs visible for trust and clarity."
-        )
-    },
-    @{
-        File = "06_export.png"
+        File = "07_export.png"
         Screen = "EXPORT OPTIONS"
         Instructions = @(
             "Navigate to the Export screen."
             "Show Share/Save actions for Estimate PDF, Blueprint PNG/PDF, CSV, and JSON."
-            "Include the preview deck and action card in the shot."
-            "Keep the professional disclaimer visible."
+            "Keep the preview deck and action card in the shot."
         )
     },
     @{
-        File = "07_settings.png"
+        File = "08_settings.png"
         Screen = "SETTINGS AND HELP"
         Instructions = @(
             "Navigate to the Settings screen."
             "Show preferences, reduced motion, and the Help & Onboarding card."
-            "Keep the Replay Control Tour action visible."
-        )
-    },
-    @{
-        File = "08_open.png"
-        Screen = "OPEN PROJECTS PANEL"
-        Instructions = @(
-            "Open the Saved/Open projects panel from the rail."
-            "Keep at least one project visible in the list."
-            "Show this as the quick-return workflow for existing jobs."
+            "Keep the replay-tour or support actions visible."
         )
     }
 )

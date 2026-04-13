@@ -35,6 +35,7 @@ class SettingsBlueprintControlsTest {
             TradeSketchTheme {
                 BlueprintControlsCard(
                     settings = settings,
+                    useMetric = false,
                     onUpdateBlueprintSnapDefaults = { grid, endpoint, midpoint, angle, closure, threshold ->
                         settings = settings.updatedBlueprintSnap(
                             grid = grid,
@@ -77,6 +78,7 @@ class SettingsBlueprintControlsTest {
             TradeSketchTheme {
                 BlueprintControlsCard(
                     settings = settings,
+                    useMetric = false,
                     onUpdateBlueprintSnapDefaults = { grid, endpoint, midpoint, angle, closure, threshold ->
                         settings = settings.updatedBlueprintSnap(
                             grid = grid,

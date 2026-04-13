@@ -1,11 +1,15 @@
 param(
-    [string]$OutputDir = "C:\Users\grand\tool\media\play_store_showcase",
+    [string]$OutputDir = "",
     [string]$PackageActivity = "com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity",
     [string]$ExpectedPackage = "com.tradesketch.estimator.local",
     [string]$SnapshotLabel = "play-store-v1.0.22-build-24"
 )
 
 $ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $OutputDir = Join-Path $projectRoot "media\play_store_showcase"
+}
 
 function Invoke-Adb {
     param(
@@ -48,6 +52,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $deviceFile = "/sdcard/tradesketch_showcase_raw.mp4"
 $hostFile = Join-Path $OutputDir "tradesketch_showcase_raw.mp4"
 $manifestFile = Join-Path $OutputDir "LATEST_SHOWCASE_SNAPSHOT.txt"
+$relativeHostFile = [System.IO.Path]::GetRelativePath($projectRoot, $hostFile)
 $deviceModel = (& adb shell getprop ro.product.model).Trim()
 $captureStarted = Get-Date
 
@@ -104,7 +109,7 @@ Invoke-Adb @("shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e"
     "Device Model: $deviceModel"
     "Expected Package: $ExpectedPackage"
     "Activity: $PackageActivity"
-    "Raw Video: $hostFile"
+    "Raw Video: $relativeHostFile"
     "Rule: newest signed build only"
 ) | Set-Content -Path $manifestFile
 

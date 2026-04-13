@@ -92,11 +92,29 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun completeFirstOpenGreeting(skipTutorial: Boolean = false) {
+        viewModelScope.launch {
+            val current = _uiState.value.settings
+            if (!current.firstRun && (!skipTutorial || current.hasCompletedAppTutorial)) return@launch
+            saveSettingsUseCase(
+                current.copy(
+                    firstRun = false,
+                    hasCompletedAppTutorial = if (skipTutorial) true else current.hasCompletedAppTutorial
+                )
+            )
+        }
+    }
+
     fun setAppTutorialCompleted(completed: Boolean) {
         viewModelScope.launch {
             val current = _uiState.value.settings
             if (current.hasCompletedAppTutorial == completed) return@launch
-            saveSettingsUseCase(current.copy(hasCompletedAppTutorial = completed))
+            saveSettingsUseCase(
+                current.copy(
+                    firstRun = false,
+                    hasCompletedAppTutorial = completed
+                )
+            )
         }
     }
 

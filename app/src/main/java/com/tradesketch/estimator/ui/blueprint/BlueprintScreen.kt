@@ -128,6 +128,12 @@ import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
 import com.tradesketch.estimator.domain.model.Room
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
+import com.tradesketch.estimator.ui.tutorial.BlueprintGuidedTutorialStep
+import com.tradesketch.estimator.ui.tutorial.BlueprintGuidedTutorialTarget
+import com.tradesketch.estimator.ui.tutorial.GuidedTutorialBlipOverlay
+import com.tradesketch.estimator.ui.tutorial.GuidedTutorialProgress
+import com.tradesketch.estimator.ui.tutorial.resolvedDemoTool
+import com.tradesketch.estimator.ui.tutorial.resolvedPlacementWalls
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
@@ -151,7 +157,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 @Composable
-fun BlueprintScreen(
+internal fun BlueprintScreen(
     projectId: String,
     modifier: Modifier = Modifier,
     initialShowAddons: Boolean = false,
@@ -159,16 +165,36 @@ fun BlueprintScreen(
     topCenterReservedWidth: Dp = 0.dp,
     leftEdgeDialInset: Dp = 0.dp,
     leftDockedOverlayInset: Dp = 0.dp,
+    guidedTutorialSafeStartInset: Dp = 0.dp,
     onOpenTakeoff: () -> Unit = {},
+    railAutoCollapseEnabled: Boolean = false,
+    onWorkspaceActiveUseStarted: () -> Unit = {},
     onFullscreenBlueprintChanged: (Boolean) -> Unit = {},
     tutorialMode: Boolean = false,
     onExitTutorialMode: () -> Unit = {},
+    guidedTutorialStep: BlueprintGuidedTutorialStep? = null,
+    guidedTutorialProgress: GuidedTutorialProgress? = null,
+    onGuidedTutorialBack: (() -> Unit)? = null,
+    onGuidedTutorialNext: (() -> Unit)? = null,
+    onGuidedTutorialSkip: (() -> Unit)? = null,
     viewModel: BlueprintEditorViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val appSettings = settingsUiState.settings
+    val latestWorkspaceActiveUseStarted by androidx.compose.runtime.rememberUpdatedState(
+        onWorkspaceActiveUseStarted
+    )
+    var workspaceActiveUseSignalSent by remember(railAutoCollapseEnabled) {
+        mutableStateOf(false)
+    }
+    val signalWorkspaceActiveUseStarted = {
+        if (railAutoCollapseEnabled && !workspaceActiveUseSignalSent) {
+            workspaceActiveUseSignalSent = true
+            latestWorkspaceActiveUseStarted()
+        }
+    }
 
     var tool by remember { mutableStateOf(BlueprintDraftTool.DRAW_WALL) }
     var drawingStart by remember { mutableStateOf<PointMm?>(null) }
@@ -344,6 +370,14 @@ fun BlueprintScreen(
     val tutorialGuideWalls = remember(currentTutorialStep) {
         currentTutorialStep?.resolvedPlacementWalls().orEmpty()
     }
+    val guidedTutorialGuideWalls = remember(guidedTutorialStep) {
+        guidedTutorialStep?.resolvedPlacementWalls().orEmpty()
+    }
+    val activeGuideWalls = if (guidedTutorialStep != null) {
+        guidedTutorialGuideWalls
+    } else {
+        tutorialGuideWalls
+    }
 
     LaunchedEffect(projectId) { viewModel.setProjectId(projectId) }
     LaunchedEffect(projectId, currentControlMode) {
@@ -432,6 +466,26 @@ fun BlueprintScreen(
                 ?: tutorialStep.demoCurvePreview
                 ?: tutorialStep.demoCircleEdge
         }
+    }
+    LaunchedEffect(guidedTutorialStep) {
+        val step = guidedTutorialStep ?: return@LaunchedEffect
+        showGridScaleEditor = false
+        showClearAllConfirm = false
+        showRailHelp = false
+        showParams = false
+        activeOpeningPanel = step.demoOpeningPanel
+        pendingGrabSelection = false
+        movingWallPreview = null
+        tool = step.resolvedDemoTool()
+        drawingStart = step.demoDrawingStart
+        drawingPreview = step.demoDrawingPreview
+        chainOrigin = step.demoDrawingStart
+        boxStart = null
+        boxPreview = null
+        boxRotationRadians = 0.0
+        resetCurveDraft()
+        resetCircleDraft()
+        openingPointerWorld = step.demoPointerWorld ?: step.demoDrawingPreview
     }
     LaunchedEffect(appSettings.blueprintCursorVisible) {
         cursorVisible = appSettings.blueprintCursorVisible
@@ -636,7 +690,7 @@ fun BlueprintScreen(
             .coerceAtLeast(Millimeters.fromFeet(1.0).value)
     )
     val findPlacementCandidate: (PointMm, OpeningPreset) -> OpeningPlacementCandidate? = { worldPoint, preset ->
-        (renderedDoc.walls + tutorialGuideWalls)
+        (renderedDoc.walls + activeGuideWalls)
             .map { wall ->
                 val t = BlueprintSnapMath.projectToWallT(worldPoint, wall).coerceIn(0.0, 1.0)
                 val distance = BlueprintSnapMath.pointToWallDistanceMm(worldPoint, wall)
@@ -897,6 +951,7 @@ fun BlueprintScreen(
         openingPointerWorld = tap
         if (tool != BlueprintDraftTool.SELECT) {
             pendingGrabSelection = false
+            signalWorkspaceActiveUseStarted()
         }
         worldPointToCanvasLocal(
             worldPoint = tap,
@@ -1271,6 +1326,7 @@ fun BlueprintScreen(
                     nearestWall != null -> {
                         viewModel.selectWall(nearestWall.id)
                         if (pendingGrabSelection) {
+                            signalWorkspaceActiveUseStarted()
                             movingWallPreview = nearestWall
                             drawingStart = null
                             drawingPreview = null
@@ -1368,8 +1424,13 @@ fun BlueprintScreen(
             )
         }
     }
+    val visibleJoystickCursorLocal = joystickCursorLocal ?: if (canvasSize.width > 0f && canvasSize.height > 0f) {
+        Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+    } else {
+        null
+    }
     val joystickCursorWorldPoint = if (canvasSize.width > 0f && canvasSize.height > 0f) {
-        val cursorLocal = joystickCursorLocal ?: Offset(canvasSize.width / 2f, canvasSize.height / 2f)
+        val cursorLocal = visibleJoystickCursorLocal ?: Offset(canvasSize.width / 2f, canvasSize.height / 2f)
         screenPointToWorldPoint(
             rootPoint = canvasRoot + cursorLocal,
             canvasRoot = canvasRoot,
@@ -1503,23 +1564,42 @@ fun BlueprintScreen(
             )
         }
     }
+    val guidedLoopLeftVector = guidedTutorialStep?.demoLeftVector ?: Offset.Zero
+    val guidedLoopRightVector = guidedTutorialStep?.demoRightVector ?: Offset.Zero
+    val guidedLoopFineLeftVector = guidedTutorialStep?.demoFineLeftVector ?: Offset.Zero
+    val guidedLoopFineRightVector = guidedTutorialStep?.demoFineRightVector ?: Offset.Zero
+    val effectiveLoopLeftVector = if (guidedTutorialStep != null) guidedLoopLeftVector else leftJoystickVector
+    val effectiveLoopRightVector = if (guidedTutorialStep != null) guidedLoopRightVector else rightJoystickVector
+    val effectiveLoopFineLeftVector = if (guidedTutorialStep != null) guidedLoopFineLeftVector else fineLeftJoystickVector
+    val effectiveLoopFineRightVector = if (guidedTutorialStep != null) guidedLoopFineRightVector else fineRightJoystickVector
+    val latestEffectiveLoopLeftVector by androidx.compose.runtime.rememberUpdatedState(effectiveLoopLeftVector)
+    val latestEffectiveLoopRightVector by androidx.compose.runtime.rememberUpdatedState(effectiveLoopRightVector)
+    val latestEffectiveLoopFineLeftVector by androidx.compose.runtime.rememberUpdatedState(effectiveLoopFineLeftVector)
+    val latestEffectiveLoopFineRightVector by androidx.compose.runtime.rememberUpdatedState(effectiveLoopFineRightVector)
     val joystickFrameLoopActive = (
-        leftJoystickVector != Offset.Zero ||
-            fineLeftJoystickVector != Offset.Zero ||
-            rightJoystickVector != Offset.Zero ||
-            fineRightJoystickVector != Offset.Zero ||
+        effectiveLoopLeftVector != Offset.Zero ||
+            effectiveLoopFineLeftVector != Offset.Zero ||
+            effectiveLoopRightVector != Offset.Zero ||
+            effectiveLoopFineRightVector != Offset.Zero ||
             movingWallPreview != null
         )
-    LaunchedEffect(joystickFrameLoopActive) {
+    LaunchedEffect(joystickFrameLoopActive, guidedTutorialStep) {
         if (!joystickFrameLoopActive) return@LaunchedEffect
         var lastFrameNanos = 0L
-        while (
-            leftJoystickVector != Offset.Zero ||
-                fineLeftJoystickVector != Offset.Zero ||
-                rightJoystickVector != Offset.Zero ||
-                fineRightJoystickVector != Offset.Zero ||
-                movingWallPreview != null
-        ) {
+        while (true) {
+            val currentLeftVector = latestEffectiveLoopLeftVector
+            val currentFineLeftVector = latestEffectiveLoopFineLeftVector
+            val currentRightVector = latestEffectiveLoopRightVector
+            val currentFineRightVector = latestEffectiveLoopFineRightVector
+            if (
+                currentLeftVector == Offset.Zero &&
+                currentFineLeftVector == Offset.Zero &&
+                currentRightVector == Offset.Zero &&
+                currentFineRightVector == Offset.Zero &&
+                movingWallPreview == null
+            ) {
+                break
+            }
             val frameNanos = withFrameNanos { it }
             val frameDeltaSec = if (lastFrameNanos == 0L) {
                 1f / JOYSTICK_FRAME_RATE_BASE
@@ -1535,16 +1615,17 @@ fun BlueprintScreen(
                 var updatedMovingWall = movingWallPreview
                 val renderedDocSnapshot = latestRenderedDoc
                 val rightInput = applyJoystickDeadzone(
-                    input = rightJoystickVector,
+                    input = currentRightVector,
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_CURSOR_RESPONSE_EXPONENT
                 )
                 val fineRightInput = applyJoystickDeadzone(
-                    input = fineRightJoystickVector,
+                    input = currentFineRightVector,
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_CURSOR_RESPONSE_EXPONENT
                 )
                 if (rightInput != Offset.Zero || fineRightInput != Offset.Zero) {
+                    signalWorkspaceActiveUseStarted()
                     val coarseCursorStep =
                         JOYSTICK_CURSOR_SPEED_PX_PER_SEC * joystickSensitivity * frameDeltaSec
                     val fineCursorStep =
@@ -1570,16 +1651,17 @@ fun BlueprintScreen(
                     }
                 }
                 val leftInput = applyJoystickDeadzone(
-                    input = leftJoystickVector,
+                    input = currentLeftVector,
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_PAN_RESPONSE_EXPONENT
                 )
                 val fineLeftInput = applyJoystickDeadzone(
-                    input = fineLeftJoystickVector,
+                    input = currentFineLeftVector,
                     deadzone = joystickDeadzone,
                     responseExponent = JOYSTICK_PAN_RESPONSE_EXPONENT
                 )
                 if (leftInput != Offset.Zero || fineLeftInput != Offset.Zero) {
+                    signalWorkspaceActiveUseStarted()
                     val leftMagnitude =
                         hypot(leftInput.x.toDouble(), leftInput.y.toDouble()).toFloat().coerceIn(0f, 1f)
                     val panSpeed = (
@@ -1810,6 +1892,24 @@ fun BlueprintScreen(
         BlueprintControlTutorialTarget.CLEAR_ALL_BUTTON -> listOfNotNull(clearAllButtonBounds)
         null -> emptyList()
     }
+    val guidedTutorialTargetBounds = when (guidedTutorialStep?.target) {
+        BlueprintGuidedTutorialTarget.TOOL_RAIL -> listOfNotNull(tutorialBottomRailBounds)
+        BlueprintGuidedTutorialTarget.JOYSTICKS -> listOfNotNull(
+            tutorialLeftControlsBounds,
+            tutorialFineLeftControlsBounds,
+            tutorialCenterControlsBounds,
+            tutorialFineRightControlsBounds,
+            tutorialRightControlsBounds
+        )
+        BlueprintGuidedTutorialTarget.OPENING_TOOLS -> listOfNotNull(
+            doorsButtonBounds,
+            windowsButtonBounds,
+            stairUpButtonBounds,
+            stairDownButtonBounds,
+            openingPanelBounds
+        )
+        null -> emptyList()
+    }
     val tutorialLeftVector = if (tutorialMode) {
         animatedTutorialJoystickVector(currentTutorialStep?.demoLeftVector ?: Offset.Zero)
     } else {
@@ -1827,6 +1927,26 @@ fun BlueprintScreen(
     }
     val tutorialFineRightVector = if (tutorialMode) {
         animatedTutorialJoystickVector(currentTutorialStep?.demoFineRightVector ?: Offset.Zero)
+    } else {
+        Offset.Zero
+    }
+    val guidedTutorialLeftVector = if (guidedTutorialStep != null) {
+        animatedTutorialJoystickVector(guidedTutorialStep.demoLeftVector)
+    } else {
+        Offset.Zero
+    }
+    val guidedTutorialRightVector = if (guidedTutorialStep != null) {
+        animatedTutorialJoystickVector(guidedTutorialStep.demoRightVector)
+    } else {
+        Offset.Zero
+    }
+    val guidedTutorialFineLeftVector = if (guidedTutorialStep != null) {
+        animatedTutorialJoystickVector(guidedTutorialStep.demoFineLeftVector)
+    } else {
+        Offset.Zero
+    }
+    val guidedTutorialFineRightVector = if (guidedTutorialStep != null) {
+        animatedTutorialJoystickVector(guidedTutorialStep.demoFineRightVector)
     } else {
         Offset.Zero
     }
@@ -2267,10 +2387,12 @@ fun BlueprintScreen(
             useMetric = appSettings.useMetric,
             lineSnappingEnabled = lineSnappingEnabledForDraft,
             dragPreview = dragPreview,
-            tutorialGuideWalls = tutorialGuideWalls,
+            tutorialGuideWalls = activeGuideWalls,
             onPanScaleChange = { updatedPan, updatedScale ->
                 val panDelta = updatedPan - pan
-                val transformed = panDelta.getDistance() > 0.5f || kotlin.math.abs(updatedScale - scale) > 0.001f
+                if (panDelta.getDistance() > 0.5f) {
+                    signalWorkspaceActiveUseStarted()
+                }
                 joystickCursorLocal = joystickCursorLocal?.let { cursor ->
                     if (canvasSize.width > 0f && canvasSize.height > 0f) {
                         Offset(
@@ -2290,7 +2412,7 @@ fun BlueprintScreen(
             },
             touchEnabled = false,
             onTouchBlocked = {},
-            virtualPointerScreenPoint = joystickCursorLocal,
+            virtualPointerScreenPoint = visibleJoystickCursorLocal,
             rightSelectBoostActive = rightSelectBoostActive,
             onLivePointerWorld = handleLivePointerWorld,
             onTapWorld = handleTapWorld
@@ -2910,16 +3032,32 @@ fun BlueprintScreen(
         )
 
         DualJoystickOverlay(
-            leftVector = if (tutorialMode) tutorialLeftVector else leftJoystickVector,
-            rightVector = if (tutorialMode) tutorialRightVector else rightJoystickVector,
-            fineLeftVector = if (tutorialMode) tutorialFineLeftVector else fineLeftJoystickVector,
-            fineRightVector = if (tutorialMode) tutorialFineRightVector else fineRightJoystickVector,
+            leftVector = when {
+                tutorialMode -> tutorialLeftVector
+                guidedTutorialStep != null -> guidedTutorialLeftVector
+                else -> leftJoystickVector
+            },
+            rightVector = when {
+                tutorialMode -> tutorialRightVector
+                guidedTutorialStep != null -> guidedTutorialRightVector
+                else -> rightJoystickVector
+            },
+            fineLeftVector = when {
+                tutorialMode -> tutorialFineLeftVector
+                guidedTutorialStep != null -> guidedTutorialFineLeftVector
+                else -> fineLeftJoystickVector
+            },
+            fineRightVector = when {
+                tutorialMode -> tutorialFineRightVector
+                guidedTutorialStep != null -> guidedTutorialFineRightVector
+                else -> fineRightJoystickVector
+            },
             onLeftVectorChange = { leftJoystickVector = it },
             onRightVectorChange = { rightJoystickVector = it },
             onFineLeftVectorChange = { fineLeftJoystickVector = it },
             onFineRightVectorChange = { fineRightJoystickVector = it },
-            onLeftPressChange = { rightJoystickPressed = it },
-            onRightPressChange = {},
+            onLeftPressChange = null,
+            onRightPressChange = { rightJoystickPressed = it },
             onLeftTap = dispatchRightJoystickClick,
             onRightTap = dispatchLeftJoystickClick,
             canUndo = uiState.canUndo,
@@ -3125,6 +3263,29 @@ fun BlueprintScreen(
                     .fillMaxSize()
                     .zIndex(20f)
                 )
+        }
+        if (
+            guidedTutorialStep != null &&
+                guidedTutorialProgress != null &&
+                onGuidedTutorialNext != null &&
+                onGuidedTutorialSkip != null
+        ) {
+            GuidedTutorialBlipOverlay(
+                title = guidedTutorialStep.title,
+                message = guidedTutorialStep.message,
+                supporting = guidedTutorialStep.supporting,
+                progress = guidedTutorialProgress,
+                targetBounds = guidedTutorialTargetBounds,
+                primaryActionLabel = guidedTutorialStep.primaryActionLabel,
+                minimumTopClearance = tutorialTooltipTopClearance,
+                safeStartInset = guidedTutorialSafeStartInset,
+                onBack = onGuidedTutorialBack,
+                onNext = onGuidedTutorialNext,
+                onSkip = onGuidedTutorialSkip,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(19f)
+            )
         }
     }
     }

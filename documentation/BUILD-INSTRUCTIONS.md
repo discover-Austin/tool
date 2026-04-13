@@ -43,6 +43,14 @@ Expected artifact:
 - Capture screenshots and preview video from the newest signed sideload build only.
 - When the version changes, replace all 8 screenshots and the 30-second showcase together.
 
+## Install Lanes
+
+- `assembleDebug` produces a debug-key APK for developer installs only.
+- The debug APK cannot update a phone that already has the signed `com.tradesketch.estimator` app installed.
+- Use `:app:assembleSideload` when you need a separate install that can coexist on the same phone.
+- Sideload package id: `com.tradesketch.estimator.local`
+- Play upload package id: `com.tradesketch.estimator`
+
 ## Signing Keys
 
 Required values:

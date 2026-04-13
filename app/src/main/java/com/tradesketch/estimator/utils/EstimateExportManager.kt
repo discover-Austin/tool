@@ -259,19 +259,32 @@ internal object EstimateExportManager {
                     blueprint.openings.isNotEmpty()
                 )
             if (hasBlueprintGeometry) {
-                ensureSpace(340f)
+                ensureSpace(404f)
                 canvas.drawText("Blueprint Snapshot", margin, y, headingPaint)
-                y += 20f
-                val bitmap = BlueprintExportManager.renderBlueprintBitmap(
-                    projectName = projectName,
+                y += 22f
+                val bitmap = BlueprintExportManager.renderBlueprintSnapshotBitmap(
                     document = blueprint,
-                    widthPx = 1200,
-                    heightPx = 900
+                    widthPx = 1600,
+                    heightPx = 560
                 )
                 try {
-                    val targetRect = RectF(margin, y, pageWidth - margin, y + 300f)
-                    canvas.drawBitmap(bitmap, null, targetRect, null)
-                    y = targetRect.bottom + 24f
+                    val targetBounds = RectF(margin, y, pageWidth - margin, y + 340f)
+                    val fittedTarget = aspectFitBounds(
+                        sourceWidth = bitmap.width,
+                        sourceHeight = bitmap.height,
+                        boundsLeft = targetBounds.left.toInt(),
+                        boundsTop = targetBounds.top.toInt(),
+                        boundsRight = targetBounds.right.toInt(),
+                        boundsBottom = targetBounds.bottom.toInt()
+                    )
+                    val fittedRect = RectF(
+                        fittedTarget.left.toFloat(),
+                        fittedTarget.top.toFloat(),
+                        fittedTarget.right.toFloat(),
+                        fittedTarget.bottom.toFloat()
+                    )
+                    canvas.drawBitmap(bitmap, null, fittedRect, null)
+                    y = targetBounds.bottom + 24f
                 } finally {
                     bitmap.recycle()
                 }

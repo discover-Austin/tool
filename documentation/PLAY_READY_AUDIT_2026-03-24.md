@@ -4,7 +4,7 @@ Last updated: March 24, 2026
 
 This audit captures the concrete completion gaps I could verify from the current codebase, release pipeline, and live-device smoke pass.
 
-Use `RELEASE_STATUS.md` for the current release snapshot. This March 24 audit is retained as historical context and is not the current build-of-record.
+Use `README.md` and `documentation/COMPLIANCE-CHECKLIST.md` for the current release snapshot. This March 24 audit is retained as historical context and is not the current build-of-record.
 
 ## What I Used
 

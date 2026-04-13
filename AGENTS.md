@@ -12,6 +12,7 @@
 
 ## Build, Test, and Development Commands
 - `./gradlew.bat assembleDebug` - build debug APK.
+- `./gradlew.bat :app:assembleSideload` - build signed separate-app APK (`com.tradesketch.estimator.local`) for on-device installs that must coexist with the Play/release app.
 - `./gradlew.bat testDebugUnitTest` - run JVM unit tests.
 - `./gradlew.bat lint` - run Android lint checks.
 - `./gradlew.bat bundleRelease` - build release AAB (`app/build/outputs/bundle/release/app-release.aab`).
@@ -47,3 +48,5 @@
 - Never commit keystores, credentials, or private signing values.
 - Release signing uses `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 - Keep `local.properties` machine-local and out of PRs.
+- Debug APKs use the Android debug key and cannot update the signed `com.tradesketch.estimator` app already installed on a phone.
+- For a separate install that can live alongside the production app, use the signed sideload lane: package `com.tradesketch.estimator.local`.

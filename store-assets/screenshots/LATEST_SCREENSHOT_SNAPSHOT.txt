@@ -1,17 +1,16 @@
-Snapshot Label: play-store-v1.0.22-build-24
-Captured At: 2026-04-08 04:34:01 -04:00
-Device Model: SM-S928U
-Expected Package: com.tradesketch.estimator.local
-Activity: com.tradesketch.estimator.local/com.tradesketch.estimator.MainActivity
-Rule: newest signed build only
-Source Mode: verified on-device captures promoted from same-build session
+Snapshot Label: play-store-v1.0.22-build-24-refresh-20260412
+Rendered At: 2026-04-12 04:36:08 -04:00
+Fresh Intro Source: .codex-screens/raw_20260412
+Workspace Source: verified existing v24 store capture set
+Output Directory: store-assets/screenshots
+Layout: padded headline band with non-overlapping descriptive text
 
 Files:
-01_blueprint_overview.png	2026-04-08 04:04:14 -04:00	5258380
-02_blueprint_controls.png	2026-04-08 04:02:40 -04:00	5343969
-03_materials_linked.png	2026-04-08 04:04:56 -04:00	306130
-04_materials_pricing.png	2026-04-08 04:06:10 -04:00	281781
-05_materials_totals.png	2026-04-08 04:06:37 -04:00	245436
-06_export_preview.png	2026-04-08 04:07:11 -04:00	294911
-07_export_files.png	2026-04-08 04:07:58 -04:00	302450
-08_help_settings.png	2026-04-08 04:08:35 -04:00	280647
+01_welcome.png	2026-04-12 04:36:08 -04:00	1686214
+02_saved_projects.png	2026-04-12 04:36:09 -04:00	2755219
+03_project_type.png	2026-04-12 04:36:09 -04:00	661699
+04_blueprint_overview.png	2026-04-12 04:36:09 -04:00	2599217
+05_blueprint_controls.png	2026-04-12 04:36:10 -04:00	2567885
+06_materials.png	2026-04-12 04:36:10 -04:00	903630
+07_export.png	2026-04-12 04:36:11 -04:00	915154
+08_settings.png	2026-04-12 04:36:11 -04:00	847975

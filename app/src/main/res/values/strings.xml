@@ -10,11 +10,14 @@
     <string name="tour_step_progress">Step %1$d of %2$d · %3$s</string>
     <string name="tour_tip">Tip: %1$s</string>
     <string name="rail_new_plus">New</string>
+    <string name="rail_home">Home</string>
     <string name="rail_saved">Open</string>
     <string name="new_project_toast">New Project</string>
+    <string name="home_toast">Home</string>
     <string name="saved_projects_toast">Open Projects</string>
     <string name="save_project">Save Project</string>
     <string name="project_saved">Project saved</string>
+    <string name="project_saved_as">Project saved as \"%1$s\"</string>
     <string name="project_name_required">Project name is required.</string>
     <string name="rail_plan_short">Blueprint</string>
     <string name="rail_materials_short">Materials</string>
@@ -40,6 +43,8 @@
     <string name="collapse_navigation_rail">Collapse navigation rail</string>
     <string name="saved_projects">Saved Projects</string>
     <string name="no_saved_projects">No projects saved yet.</string>
+    <string name="welcome_saved_projects_hint">Tap a project to jump back into it.</string>
+    <string name="welcome_saved_project_action">Open saved project</string>
     <string name="close">Close</string>
     <string name="delete_project_content_description">Delete project %1$s</string>
     <string name="delete_project_title">Delete project?</string>
@@ -57,4 +62,12 @@
     <string name="feedback_email_prompt">What happened?\n\nWhat were you trying to do?\n\nWhat would you like to see improved?</string>
     <string name="feedback_no_mail_app">No email app is available. Send feedback to %1$s.</string>
     <string name="feedback_open_failed">Could not open the email app. You can send feedback to %1$s.</string>
+    <string name="privacy_policy_url">https://tradesketch-privacy.vercel.app</string>
+    <string name="about_us_title">About TradeSketch</string>
+    <string name="about_us_message">TradeSketch Estimator is an offline-first takeoff and estimating tool for drywall, concrete, gravel, and paint workflows.\n\nUse it to sketch blueprint geometry, calculate quantities, price work, and export reports without cloud accounts or subscriptions.\n\nQuestions or support: %1$s</string>
+    <string name="privacy_policy_title">Privacy Policy</string>
+    <string name="privacy_policy_message">TradeSketch Estimator is built to keep your project data on-device. No analytics, ads, or account tracking are used.\n\nTap below to open the full hosted privacy policy.</string>
+    <string name="terms_of_service_title">Terms of Service</string>
+    <string name="terms_of_service_message">TradeSketch Estimator provides estimate-only planning values. You are responsible for verifying field measurements, site conditions, labor assumptions, taxes, supplier pricing, and code requirements before purchase or construction.\n\nExported files are created only when you choose to save or share them, and files saved outside the app remain under your control.\n\nUsing the app means you accept these terms and the estimate disclaimer shown throughout the product.</string>
+    <string name="open_policy">Open Policy</string>
 </resources>
