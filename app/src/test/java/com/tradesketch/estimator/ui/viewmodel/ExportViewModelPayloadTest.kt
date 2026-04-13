@@ -5,14 +5,32 @@ import com.tradesketch.estimator.domain.model.Millimeters
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.TakeoffLine
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import com.tradesketch.estimator.domain.model.TakeoffResult
 import com.tradesketch.estimator.domain.model.TakeoffScope
 import com.tradesketch.estimator.domain.model.WallSegment
+import com.tradesketch.estimator.domain.model.ManualTakeoffSessionParams
+import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
+import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.ui.displayLabel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ExportViewModelPayloadTest {
+
+    @Test
+    fun `resolve export selected type preserves an explicit export dropdown choice`() {
+        val project = mixedTradeProject()
+
+        assertEquals(
+            TakeoffType.PAINT,
+            resolveExportSelectedType(
+                currentSelectedType = TakeoffType.PAINT,
+                project = project,
+                settings = Settings.DEFAULT
+            )
+        )
+    }
 
     @Test
     fun `estimate export payload keeps the selected trade blueprint`() {
@@ -38,13 +56,36 @@ class ExportViewModelPayloadTest {
     }
 
     @Test
-    fun `blueprint export payload keeps the full project blueprint`() {
+    fun `blueprint export payload keeps the selected trade blueprint in single trade scope`() {
         val project = mixedTradeProject()
         val resolvedBlueprints = resolveExportBlueprints(project = project, selectedType = TakeoffType.CONCRETE)
 
         val payload = buildBlueprintExportPayload(
             ExportUiState(
                 project = project,
+                exportScopeMode = ExportScopeMode.SINGLE_TRADE,
+                selectedType = TakeoffType.CONCRETE,
+                result = takeoffResult(),
+                selectedTradeBlueprint = resolvedBlueprints.selectedTradeBlueprint,
+                projectBlueprint = resolvedBlueprints.projectBlueprint
+            )
+        )
+
+        requireNotNull(payload)
+        assertEquals(4, payload.blueprint.walls.size)
+        assertEquals(1, payload.blueprint.rooms.size)
+        assertEquals(resolvedBlueprints.selectedTradeBlueprint, payload.blueprint)
+    }
+
+    @Test
+    fun `blueprint export payload keeps the full blueprint in all included scope`() {
+        val project = mixedTradeProject()
+        val resolvedBlueprints = resolveExportBlueprints(project = project, selectedType = TakeoffType.CONCRETE)
+
+        val payload = buildBlueprintExportPayload(
+            ExportUiState(
+                project = project,
+                exportScopeMode = ExportScopeMode.ALL_TRADES,
                 selectedType = TakeoffType.CONCRETE,
                 result = takeoffResult(),
                 selectedTradeBlueprint = resolvedBlueprints.selectedTradeBlueprint,
@@ -56,6 +97,30 @@ class ExportViewModelPayloadTest {
         assertEquals(8, payload.blueprint.walls.size)
         assertEquals(0, payload.blueprint.rooms.size)
         assertEquals(resolvedBlueprints.projectBlueprint, payload.blueprint)
+    }
+
+    @Test
+    fun `present export trade types include populated manual trades`() {
+        val project = Project(
+            id = "project-manual-export",
+            name = "Manual Export Project",
+            takeoffSession = ProjectTakeoffSession(
+                inputMode = TakeoffInputMode.MANUAL,
+                manual = ManualTakeoffSessionParams(
+                    drywallWallAreaSqFt = 160.0,
+                    concreteAreaSqFt = 120.0,
+                    paintAreaSqFt = 210.0
+                )
+            )
+        )
+
+        assertEquals(
+            listOf(TakeoffType.DRYWALL, TakeoffType.CONCRETE, TakeoffType.PAINT),
+            presentExportTradeTypes(project)
+        )
+        val allIncludedBlueprint = projectBlueprintForAllTrades(project)
+        assertEquals(2, allIncludedBlueprint.walls.size)
+        assertEquals(1, allIncludedBlueprint.rooms.size)
     }
 
     private fun mixedTradeProject(): Project {

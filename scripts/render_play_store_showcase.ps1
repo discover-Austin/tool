@@ -1,16 +1,25 @@
 param(
-    [string]$MediaDir = "C:\Users\grand\tool\media\play_store_showcase",
+    [string]$MediaDir = "",
     [string]$OutputFile = "tradesketch_showcase_play_store_30s.mp4",
     [ValidateSet("RawVideo", "Screenshots")]
-    [string]$SourceMode = "RawVideo",
-    [string]$ScreenshotDir = "C:\Users\grand\tool\store-assets\screenshots"
+    [string]$SourceMode = "Screenshots",
+    [string]$ScreenshotDir = "",
+    [double]$TotalDurationSeconds = 29.8
 )
 
 $ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($MediaDir)) {
+    $MediaDir = Join-Path $projectRoot "media\play_store_showcase"
+}
+if ([string]::IsNullOrWhiteSpace($ScreenshotDir)) {
+    $ScreenshotDir = Join-Path $projectRoot "store-assets\screenshots"
+}
 
 Set-Location $MediaDir
 
 $outputPath = Join-Path $MediaDir $OutputFile
+$durationText = $TotalDurationSeconds.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
 $voiceoverCandidates = @(
     (Join-Path $MediaDir "showcase_voiceover.mp3"),
     (Join-Path $MediaDir "showcase_voiceover.wav")
@@ -25,21 +34,24 @@ if ($SourceMode -eq "RawVideo") {
     $commonArgs += @("-i", "tradesketch_showcase_raw.mp4")
 } else {
     $screenshotFiles = @(
-        "01_projects.png",
-        "02_spaces.png",
-        "03_editor.png",
-        "04_drywall.png",
-        "05_concrete.png",
-        "06_export.png"
+        "01_welcome.png",
+        "02_saved_projects.png",
+        "03_project_type.png",
+        "04_blueprint_overview.png",
+        "05_blueprint_controls.png",
+        "06_materials.png",
+        "07_export.png",
+        "08_settings.png"
     )
-    $sceneDuration = 5.0
+    $sceneDuration = $TotalDurationSeconds / $screenshotFiles.Count
+    $sceneDurationText = $sceneDuration.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
 
     foreach ($file in $screenshotFiles) {
         $fullPath = Join-Path $ScreenshotDir $file
         if (-not (Test-Path $fullPath)) {
             throw "Missing screenshot for showcase render: $fullPath"
         }
-        $commonArgs += @("-loop", "1", "-t", $sceneDuration.ToString([System.Globalization.CultureInfo]::InvariantCulture), "-i", $fullPath)
+        $commonArgs += @("-loop", "1", "-t", $sceneDurationText, "-i", $fullPath)
     }
 }
 
@@ -54,7 +66,7 @@ $subtitleStyle = "FontName=Arial,FontSize=12,PrimaryColour=&H00FFFFFF,OutlineCol
 if ($SourceMode -eq "RawVideo") {
     if ($voiceoverFile) {
         $audioInputIndex = 1
-        $filter = "[0:v]tpad=stop_mode=clone:stop_duration=8,fps=30,split=2[base1][base2];[base1]scale=1080:1920:force_original_aspect_ratio=increase,boxblur=12:4,crop=1080:1920[bg];[base2]scale=886:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,subtitles=showcase_captions.srt:force_style='$subtitleStyle'[v];[$($audioInputIndex):a]apad=pad_dur=30[a]"
+        $filter = "[0:v]tpad=stop_mode=clone:stop_duration=8,fps=30,split=2[base1][base2];[base1]scale=1080:1920:force_original_aspect_ratio=increase,boxblur=12:4,crop=1080:1920[bg];[base2]scale=886:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,subtitles=showcase_captions.srt:force_style='$subtitleStyle'[v];[$($audioInputIndex):a]apad=pad_dur=$durationText[a]"
         $audioMap = "[a]"
     } else {
         $filter = "[0:v]tpad=stop_mode=clone:stop_duration=8,fps=30,split=2[base1][base2];[base1]scale=1080:1920:force_original_aspect_ratio=increase,boxblur=12:4,crop=1080:1920[bg];[base2]scale=886:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,subtitles=showcase_captions.srt:force_style='$subtitleStyle'[v]"
@@ -78,7 +90,7 @@ if ($SourceMode -eq "RawVideo") {
     $filterParts.Add("[showcase]subtitles=showcase_captions.srt:force_style='$subtitleStyle'[v]")
     $audioInputIndex = $sceneCount
     if ($voiceoverFile) {
-        $filterParts.Add("[$($audioInputIndex):a]apad=pad_dur=30[a]")
+        $filterParts.Add("[$($audioInputIndex):a]apad=pad_dur=$durationText[a]")
         $audioMap = "[a]"
     } else {
         $audioMap = "$audioInputIndex:a"
@@ -102,7 +114,7 @@ $commonArgs += @(
     "-c:a", "aac",
     "-b:a", "160k",
     "-movflags", "+faststart",
-    "-t", "30.0",
+    "-t", $durationText,
     $OutputFile
 )
 

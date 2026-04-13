@@ -5,9 +5,9 @@ Offline-first estimator and blueprint maker for drywall, concrete, paint, and gr
 ## Current Release Snapshot
 
 - Package: `com.tradesketch.estimator`
-- Version: `1.0.19` (`versionCode = 21`)
+- Version: `1.0.22` (`versionCode = 24`)
 - SDK: `minSdk 26`, `targetSdk 35`, `compileSdk 35`
-- Authoritative release status: `RELEASE_STATUS.md`
+- Release checklist: `documentation/COMPLIANCE-CHECKLIST.md`
 
 ## Product Flow
 
@@ -50,6 +50,6 @@ Release script:
 - Submission guide: `documentation/SUBMISSION-GUIDE.md`
 - Compliance checklist: `documentation/COMPLIANCE-CHECKLIST.md`
 - Build instructions: `documentation/BUILD-INSTRUCTIONS.md`
-- Authoritative status: `RELEASE_STATUS.md`
+- Historical audit: `documentation/PLAY_READY_AUDIT_2026-03-24.md`
 
 

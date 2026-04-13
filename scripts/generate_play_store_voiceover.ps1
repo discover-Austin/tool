@@ -1,17 +1,24 @@
 param(
-    [string]$MediaDir = "C:\Users\grand\tool\media\play_store_showcase",
+    [string]$MediaDir = "",
     [string]$ScriptFile = "showcase_voiceover.txt",
-    [string]$Voice = "en-US-JennyNeural",
-    [string]$Rate = "-5%",
+    [string]$Voice = "en-US-AriaNeural",
+    [string]$Rate = "+2%",
     [string]$Volume = "+0%"
 )
 
 $ErrorActionPreference = "Stop"
+$projectRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($MediaDir)) {
+    $MediaDir = Join-Path $projectRoot "media\play_store_showcase"
+}
 
 $textPath = Join-Path $MediaDir $ScriptFile
 $wavPath = Join-Path $MediaDir "showcase_voiceover.wav"
 $mp3Path = Join-Path $MediaDir "showcase_voiceover.mp3"
 $metaPath = Join-Path $MediaDir "showcase_voiceover.meta.txt"
+$relativeTextPath = [System.IO.Path]::GetRelativePath($projectRoot, $textPath)
+$relativeWavPath = [System.IO.Path]::GetRelativePath($projectRoot, $wavPath)
+$relativeMp3Path = [System.IO.Path]::GetRelativePath($projectRoot, $mp3Path)
 
 if (-not (Test-Path $textPath)) {
     throw "Voiceover script not found: $textPath"
@@ -72,9 +79,9 @@ if ($edgeTts) {
     "Voice: $voiceName"
     "Rate: $Rate"
     "Volume: $Volume"
-    "Script: $textPath"
-    "Wav: $wavPath"
-    "Mp3: $mp3Path"
+    "Script: $relativeTextPath"
+    "Wav: $relativeWavPath"
+    "Mp3: $relativeMp3Path"
 ) | Set-Content -Path $metaPath
 
 Write-Output $mp3Path

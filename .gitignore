@@ -29,6 +29,13 @@ tradesketch-release.keystore
 
 # Temporary
 /tmp/
+/app/tmp/
+.codex-screens/
+.gradle-codex/
+marketing_assets/
+media/pics/
+media/play_store_final_*/
+store-assets/play_store_final_*/
 *.swp
 *.swo
 *~

@@ -269,47 +269,12 @@ internal object BlueprintExportManager {
         val contentBottom = safeHeight - 90f
         val contentRect = RectF(contentLeft, contentTop, contentRight, contentBottom)
 
-        val bounds = points.bounds()
-        val spanX = max(1.0, (bounds.maxX - bounds.minX).toDouble())
-        val spanY = max(1.0, (bounds.maxY - bounds.minY).toDouble())
-        val pad = max(1500.0, max(spanX, spanY) * 0.1)
-        val minX = bounds.minX - pad
-        val maxX = bounds.maxX + pad
-        val minY = bounds.minY - pad
-        val maxY = bounds.maxY + pad
-        val worldWidth = max(1.0, maxX - minX)
-        val worldHeight = max(1.0, maxY - minY)
-        val scale = min(contentRect.width() / worldWidth.toFloat(), contentRect.height() / worldHeight.toFloat())
-
-        val toScreen: (PointMm) -> ScreenPoint = { p ->
-            ScreenPoint(
-                x = contentRect.left + ((p.x - minX).toFloat() * scale),
-                y = contentRect.bottom - ((p.y - minY).toFloat() * scale)
-            )
-        }
-
-        if (includeGrid) {
-            drawGrid(
-                canvas = canvas,
-                contentRect = contentRect,
-                minX = minX,
-                maxX = maxX,
-                minY = minY,
-                maxY = maxY,
-                scale = scale
-            )
-        }
-        drawRooms(canvas, document.rooms, toScreen)
-        drawWalls(canvas, document.walls, toScreen, scale)
-        drawOpenings(canvas, document, toScreen, scale)
-        drawEnvelopeDimensions(
+        drawBlueprintScene(
             canvas = canvas,
-            contentRect = contentRect,
-            minX = minX,
-            maxX = maxX,
-            minY = minY,
-            maxY = maxY,
-            scale = scale
+            document = document,
+            points = points,
+            viewportRect = contentRect,
+            includeGrid = includeGrid
         )
 
         val summaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -325,6 +290,81 @@ internal object BlueprintExportManager {
         )
         return bitmap
     }
+
+    internal fun renderBlueprintSnapshotBitmap(
+        document: BlueprintDocument,
+        widthPx: Int = 1600,
+        heightPx: Int = 560,
+        includeGrid: Boolean = true
+    ): Bitmap {
+        val safeWidth = widthPx.coerceAtLeast(1200)
+        val safeHeight = heightPx.coerceAtLeast(420)
+        val bitmap = Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(10, 19, 35)
+            style = Paint.Style.FILL
+        }
+        canvas.drawRect(0f, 0f, safeWidth.toFloat(), safeHeight.toFloat(), backgroundPaint)
+
+        val points = document.worldPoints()
+        if (points.isEmpty()) {
+            val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(196, 208, 229)
+                textSize = 38f
+            }
+            canvas.drawText("No blueprint geometry to render", 44f, (safeHeight / 2f) + 14f, emptyPaint)
+            return bitmap
+        }
+
+        drawBlueprintScene(
+            canvas = canvas,
+            document = document,
+            points = points,
+            viewportRect = RectF(52f, 42f, safeWidth - 52f, safeHeight - 44f),
+            includeGrid = includeGrid
+        )
+        return bitmap
+    }
+}
+
+private fun drawBlueprintScene(
+    canvas: Canvas,
+    document: BlueprintDocument,
+    points: List<PointMm>,
+    viewportRect: RectF,
+    includeGrid: Boolean
+) {
+    if (points.isEmpty()) return
+    val layout = resolveBlueprintRenderFrame(
+        contentLeft = viewportRect.left,
+        contentTop = viewportRect.top,
+        contentRight = viewportRect.right,
+        contentBottom = viewportRect.bottom,
+        points = points
+    )
+
+    if (includeGrid) {
+        drawGrid(
+            canvas = canvas,
+            contentRect = layout.frameRect,
+            minX = layout.worldMinX,
+            maxX = layout.worldMaxX,
+            minY = layout.worldMinY,
+            maxY = layout.worldMaxY,
+            scale = layout.scale
+        )
+    }
+    drawRooms(canvas, document.rooms, layout::toScreen)
+    drawWalls(canvas, document.walls, layout::toScreen, layout.scale)
+    drawOpenings(canvas, document, layout::toScreen, layout.scale)
+    drawEnvelopeDimensions(
+        canvas = canvas,
+        geometryRect = layout.geometryRect,
+        safeRect = viewportRect,
+        widthMm = (layout.geometryBounds.maxX - layout.geometryBounds.minX).toDouble().coerceAtLeast(0.0),
+        heightMm = (layout.geometryBounds.maxY - layout.geometryBounds.minY).toDouble().coerceAtLeast(0.0)
+    )
 }
 
 private fun drawGrid(
@@ -637,12 +677,10 @@ private fun drawStairBreak(
 
 private fun drawEnvelopeDimensions(
     canvas: Canvas,
-    contentRect: RectF,
-    minX: Double,
-    maxX: Double,
-    minY: Double,
-    maxY: Double,
-    scale: Float
+    geometryRect: RectF,
+    safeRect: RectF,
+    widthMm: Double,
+    heightMm: Double
 ) {
     val dimLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(210, 146, 187, 240)
@@ -653,26 +691,105 @@ private fun drawEnvelopeDimensions(
         textSize = 21f
         isFakeBoldText = true
     }
-    val widthMm = (maxX - minX).coerceAtLeast(0.0)
-    val heightMm = (maxY - minY).coerceAtLeast(0.0)
-    val widthPx = (widthMm * scale).toFloat()
-    val heightPx = (heightMm * scale).toFloat()
-
-    val x1 = contentRect.left
-    val x2 = contentRect.left + widthPx
-    val y = contentRect.top - 16f
+    val widthLabel = "${"%.1f".format(Millimeters(widthMm.roundToLong()).toFeet())} ft"
+    val heightLabel = "${"%.1f".format(Millimeters(heightMm.roundToLong()).toFeet())} ft"
+    val x1 = geometryRect.left
+    val x2 = geometryRect.right
+    val y = max(safeRect.top + 18f, geometryRect.top - 26f)
     canvas.drawLine(x1, y, x2, y, dimLinePaint)
     canvas.drawLine(x1, y - 8f, x1, y + 8f, dimLinePaint)
     canvas.drawLine(x2, y - 8f, x2, y + 8f, dimLinePaint)
-    canvas.drawText("${"%.1f".format(Millimeters(widthMm.roundToLong()).toFeet())} ft", ((x1 + x2) / 2f) - 36f, y - 6f, dimTextPaint)
+    val widthTextWidth = dimTextPaint.measureText(widthLabel)
+    val widthTextX = (((x1 + x2) / 2f) - (widthTextWidth / 2f))
+        .coerceIn(safeRect.left + 12f, safeRect.right - widthTextWidth - 12f)
+    val widthTextY = max(safeRect.top + dimTextPaint.textSize + 4f, y - 8f)
+    canvas.drawText(widthLabel, widthTextX, widthTextY, dimTextPaint)
 
-    val vx = contentRect.right + 16f
-    val vy1 = contentRect.bottom - heightPx
-    val vy2 = contentRect.bottom
+    val vx = min(safeRect.right - 24f, geometryRect.right + 28f)
+    val vy1 = geometryRect.top
+    val vy2 = geometryRect.bottom
     canvas.drawLine(vx, vy1, vx, vy2, dimLinePaint)
     canvas.drawLine(vx - 8f, vy1, vx + 8f, vy1, dimLinePaint)
     canvas.drawLine(vx - 8f, vy2, vx + 8f, vy2, dimLinePaint)
-    canvas.drawText("${"%.1f".format(Millimeters(heightMm.roundToLong()).toFeet())} ft", vx + 10f, ((vy1 + vy2) / 2f), dimTextPaint)
+    val heightTextWidth = dimTextPaint.measureText(heightLabel)
+    val heightTextX = min(safeRect.right - heightTextWidth - 12f, vx + 12f)
+    val heightTextY = ((vy1 + vy2) / 2f)
+        .coerceIn(safeRect.top + dimTextPaint.textSize + 8f, safeRect.bottom - 12f)
+    canvas.drawText(heightLabel, heightTextX, heightTextY, dimTextPaint)
+}
+
+internal data class FloatRectBounds(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    fun toRectF(): RectF = RectF(left, top, right, bottom)
+}
+
+internal data class BlueprintPdfLayout(
+    val contentRect: FloatRectBounds,
+    val headerAccentRect: FloatRectBounds,
+    val titleBaseline: Float,
+    val subtitleBaseline: Float,
+    val headerDividerY: Float,
+    val drawingFrameRect: FloatRectBounds,
+    val drawingViewportRect: FloatRectBounds,
+    val footerRect: FloatRectBounds
+)
+
+internal fun resolveBlueprintPdfLayout(
+    pageWidth: Int,
+    pageHeight: Int
+): BlueprintPdfLayout {
+    val pageMargin = 64f
+    val contentRect = FloatRectBounds(
+        pageMargin,
+        pageMargin,
+        pageWidth - pageMargin,
+        pageHeight - pageMargin
+    )
+    val headerDividerY = contentRect.top + 118f
+    val footerRect = FloatRectBounds(
+        contentRect.left,
+        contentRect.bottom - 118f,
+        contentRect.right,
+        contentRect.bottom
+    )
+    val drawingFrameRect = FloatRectBounds(
+        contentRect.left,
+        headerDividerY + 36f,
+        contentRect.right,
+        footerRect.top - 36f
+    )
+    return BlueprintPdfLayout(
+        contentRect = contentRect,
+        headerAccentRect = FloatRectBounds(
+            contentRect.left,
+            contentRect.top + 10f,
+            contentRect.left + 12f,
+            contentRect.top + 78f
+        ),
+        titleBaseline = contentRect.top + 46f,
+        subtitleBaseline = contentRect.top + 84f,
+        headerDividerY = headerDividerY,
+        drawingFrameRect = drawingFrameRect,
+        drawingViewportRect = FloatRectBounds(
+            drawingFrameRect.left + 54f,
+            drawingFrameRect.top + 60f,
+            drawingFrameRect.right - 92f,
+            drawingFrameRect.bottom - 52f
+        ),
+        footerRect = footerRect
+    )
+}
+
+private fun insetRect(
+    rect: RectF,
+    dx: Float,
+    dy: Float = dx
+): RectF {
+    return RectF(rect.left + dx, rect.top + dy, rect.right - dx, rect.bottom - dy)
 }
 
 private fun renderBlueprintPdfBytes(
@@ -686,8 +803,24 @@ private fun renderBlueprintPdfBytes(
     val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
     val page = pdfDocument.startPage(pageInfo)
     val canvas = page.canvas
+    val layout = resolveBlueprintPdfLayout(pageWidth = pageWidth, pageHeight = pageHeight)
+    val points = document.worldPoints()
+    val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
+    val contentRect = layout.contentRect.toRectF()
+    val headerAccentRect = layout.headerAccentRect.toRectF()
+    val drawingFrameRect = layout.drawingFrameRect.toRectF()
+    val drawingViewportRect = layout.drawingViewportRect.toRectF()
+    val footerRect = layout.footerRect.toRectF()
 
-    canvas.drawColor(Color.rgb(10, 19, 35))
+    val pageBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(105, 134, 167, 205)
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(242, 196, 59)
+        style = Paint.Style.FILL
+    }
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = 34f
@@ -697,44 +830,98 @@ private fun renderBlueprintPdfBytes(
         color = Color.rgb(188, 207, 235)
         textSize = 20f
     }
-    val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
-    canvas.drawText("$projectName Blueprint", 56f, 74f, titlePaint)
-    canvas.drawText("Exported $stamp", 56f, 108f, subtitlePaint)
-
-    val bitmap = BlueprintExportManager.renderBlueprintBitmap(
-        projectName = projectName,
-        document = document,
-        widthPx = 1800,
-        heightPx = 1800,
-        includeGrid = includeGrid
-    )
-    try {
-        val margin = 56
-        val blueprintTop = 150
-        val blueprintBottom = pageHeight - 170
-        val blueprintRect = Rect(margin, blueprintTop, pageWidth - margin, blueprintBottom)
-        canvas.drawBitmap(bitmap, null, blueprintRect, null)
-
-    val summaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(130, 102, 129, 170)
+        strokeWidth = 2f
+    }
+    val frameFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(16, 40, 61)
+        style = Paint.Style.FILL
+    }
+    val frameStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(220, 124, 147, 166)
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+    }
+    val paperFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(246, 243, 233)
+        style = Paint.Style.FILL
+    }
+    val paperStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(210, 70, 89, 106)
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    val footerSummaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(205, 222, 245)
         textSize = 18f
     }
+    val footerCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(166, 190, 219)
+        textSize = 17f
+    }
+    val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(196, 208, 229)
+        textSize = 34f
+    }
+
+    canvas.drawColor(Color.rgb(10, 19, 35))
+    canvas.drawRect(contentRect, pageBorderPaint)
+    canvas.drawRect(headerAccentRect, accentPaint)
+    val titleLeft = layout.headerAccentRect.right + 20f
+    canvas.drawText("$projectName Blueprint", titleLeft, layout.titleBaseline, titlePaint)
+    canvas.drawText("Exported $stamp", titleLeft, layout.subtitleBaseline, subtitlePaint)
+    canvas.drawLine(
+        layout.contentRect.left,
+        layout.headerDividerY,
+        layout.contentRect.right,
+        layout.headerDividerY,
+        dividerPaint
+    )
+
+    canvas.drawRoundRect(drawingFrameRect, 22f, 22f, frameFillPaint)
+    canvas.drawRoundRect(drawingFrameRect, 22f, 22f, frameStrokePaint)
+    val drawingPaperRect = insetRect(drawingFrameRect, 10f)
+    canvas.drawRoundRect(drawingPaperRect, 16f, 16f, paperFillPaint)
+    canvas.drawRoundRect(drawingPaperRect, 16f, 16f, paperStrokePaint)
+
+    if (points.isEmpty()) {
+        canvas.drawText(
+            "No blueprint geometry to render",
+            drawingPaperRect.left + 42f,
+            drawingPaperRect.centerY(),
+            emptyPaint
+        )
+    } else {
+        drawBlueprintScene(
+            canvas = canvas,
+            document = document,
+            points = points,
+            viewportRect = drawingViewportRect,
+            includeGrid = includeGrid
+        )
+    }
+
+    canvas.drawLine(
+        layout.footerRect.left,
+        layout.footerRect.top,
+        layout.footerRect.right,
+        layout.footerRect.top,
+        dividerPaint
+    )
     val totalWallFeet = document.walls.sumOf { Millimeters(it.lengthMillimeters()).toFeet() }
     canvas.drawText(
         "Rooms ${document.rooms.size}  •  Walls ${document.walls.size}  •  Openings ${document.openings.size}  •  Wall length ${"%.1f".format(totalWallFeet)} ft",
-        56f,
-        (pageHeight - 96).toFloat(),
-        summaryPaint
+        footerRect.left,
+        footerRect.top + 40f,
+        footerSummaryPaint
     )
     canvas.drawText(
         "Generated by TradeSketch",
-        56f,
-        (pageHeight - 70).toFloat(),
-        summaryPaint
+        footerRect.left,
+        footerRect.top + 76f,
+        footerCaptionPaint
     )
-    } finally {
-        bitmap.recycle()
-    }
 
     pdfDocument.finishPage(page)
     return ByteArrayOutputStream().use { output ->
@@ -747,17 +934,167 @@ private fun renderBlueprintPdfBytes(
     }
 }
 
-private data class WorldBounds(
+internal data class FittedRectBounds(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int
+)
+
+internal fun aspectFitBounds(
+    sourceWidth: Int,
+    sourceHeight: Int,
+    boundsLeft: Int,
+    boundsTop: Int,
+    boundsRight: Int,
+    boundsBottom: Int
+): FittedRectBounds {
+    val boundsWidth = boundsRight - boundsLeft
+    val boundsHeight = boundsBottom - boundsTop
+    if (
+        sourceWidth <= 0 ||
+        sourceHeight <= 0 ||
+        boundsWidth <= 0 ||
+        boundsHeight <= 0
+    ) {
+        return FittedRectBounds(
+            left = boundsLeft,
+            top = boundsTop,
+            right = boundsRight,
+            bottom = boundsBottom
+        )
+    }
+    val widthScale = boundsWidth.toFloat() / sourceWidth.toFloat()
+    val heightScale = boundsHeight.toFloat() / sourceHeight.toFloat()
+    val scale = min(widthScale, heightScale)
+    val fittedWidth = (sourceWidth * scale).roundToLong().toInt().coerceAtMost(boundsWidth)
+    val fittedHeight = (sourceHeight * scale).roundToLong().toInt().coerceAtMost(boundsHeight)
+    val left = boundsLeft + ((boundsWidth - fittedWidth) / 2)
+    val top = boundsTop + ((boundsHeight - fittedHeight) / 2)
+    return FittedRectBounds(
+        left = left,
+        top = top,
+        right = left + fittedWidth,
+        bottom = top + fittedHeight
+    )
+}
+
+internal fun aspectFitRect(
+    sourceWidth: Int,
+    sourceHeight: Int,
+    bounds: Rect
+): Rect {
+    val fitted = aspectFitBounds(
+        sourceWidth = sourceWidth,
+        sourceHeight = sourceHeight,
+        boundsLeft = bounds.left,
+        boundsTop = bounds.top,
+        boundsRight = bounds.right,
+        boundsBottom = bounds.bottom
+    )
+    return Rect(fitted.left, fitted.top, fitted.right, fitted.bottom)
+}
+
+internal data class WorldBounds(
     val minX: Long,
     val maxX: Long,
     val minY: Long,
     val maxY: Long
 )
 
-private data class ScreenPoint(
+internal data class BlueprintRenderFrame(
+    val frameLeft: Float,
+    val frameTop: Float,
+    val frameRight: Float,
+    val frameBottom: Float,
+    val geometryLeft: Float,
+    val geometryTop: Float,
+    val geometryRight: Float,
+    val geometryBottom: Float,
+    val geometryBounds: WorldBounds,
+    val worldMinX: Double,
+    val worldMaxX: Double,
+    val worldMinY: Double,
+    val worldMaxY: Double,
+    val scale: Float
+) {
+    val frameRect: RectF
+        get() = RectF(frameLeft, frameTop, frameRight, frameBottom)
+
+    val geometryRect: RectF
+        get() = RectF(geometryLeft, geometryTop, geometryRight, geometryBottom)
+
+    fun toScreen(point: PointMm): ScreenPoint {
+        return ScreenPoint(
+            x = frameLeft + ((point.x - worldMinX).toFloat() * scale),
+            y = frameBottom - ((point.y - worldMinY).toFloat() * scale)
+        )
+    }
+}
+
+internal data class ScreenPoint(
     val x: Float,
     val y: Float
 )
+
+internal fun resolveBlueprintRenderFrame(
+    contentLeft: Float,
+    contentTop: Float,
+    contentRight: Float,
+    contentBottom: Float,
+    points: List<PointMm>
+): BlueprintRenderFrame {
+    val geometryBounds = points.bounds()
+    val spanX = max(1.0, (geometryBounds.maxX - geometryBounds.minX).toDouble())
+    val spanY = max(1.0, (geometryBounds.maxY - geometryBounds.minY).toDouble())
+    val pad = max(1500.0, max(spanX, spanY) * 0.1)
+
+    val worldMinX = geometryBounds.minX - pad
+    val worldMaxX = geometryBounds.maxX + pad
+    val worldMinY = geometryBounds.minY - pad
+    val worldMaxY = geometryBounds.maxY + pad
+    val worldWidth = max(1.0, worldMaxX - worldMinX)
+    val worldHeight = max(1.0, worldMaxY - worldMinY)
+    val contentWidth = contentRight - contentLeft
+    val contentHeight = contentBottom - contentTop
+    val scale = min(
+        contentWidth / worldWidth.toFloat(),
+        contentHeight / worldHeight.toFloat()
+    )
+
+    val fittedWidth = worldWidth.toFloat() * scale
+    val fittedHeight = worldHeight.toFloat() * scale
+    val frameLeft = contentLeft + ((contentWidth - fittedWidth) / 2f)
+    val frameTop = contentTop + ((contentHeight - fittedHeight) / 2f)
+    val frameRight = frameLeft + fittedWidth
+    val frameBottom = frameTop + fittedHeight
+
+    val frame = BlueprintRenderFrame(
+        frameLeft,
+        frameTop,
+        frameRight,
+        frameBottom,
+        geometryLeft = 0f,
+        geometryTop = 0f,
+        geometryRight = 0f,
+        geometryBottom = 0f,
+        geometryBounds = geometryBounds,
+        worldMinX = worldMinX,
+        worldMaxX = worldMaxX,
+        worldMinY = worldMinY,
+        worldMaxY = worldMaxY,
+        scale = scale
+    )
+    val topLeft = frame.toScreen(PointMm(geometryBounds.minX, geometryBounds.maxY))
+    val bottomRight = frame.toScreen(PointMm(geometryBounds.maxX, geometryBounds.minY))
+
+    return frame.copy(
+        geometryLeft = min(topLeft.x, bottomRight.x),
+        geometryTop = min(topLeft.y, bottomRight.y),
+        geometryRight = max(topLeft.x, bottomRight.x),
+        geometryBottom = max(topLeft.y, bottomRight.y)
+    )
+}
 
 private fun BlueprintDocument.hasGeometry(): Boolean {
     return walls.isNotEmpty() || rooms.any { it.polygon.size >= 3 }

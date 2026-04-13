@@ -129,7 +129,7 @@ Write-Host "" -ForegroundColor Cyan
 Write-Host "  Don't forget to also upload:" -ForegroundColor White
 Write-Host "    - App icon (512x512 PNG)" -ForegroundColor White
 Write-Host "    - Feature graphic (1024x500 PNG)" -ForegroundColor White
-Write-Host "    - 6 phone screenshots (from store-assets\screenshots\)" -ForegroundColor White
+Write-Host "    - 8 phone screenshots (from store-assets\screenshots\)" -ForegroundColor White
 Write-Host "" -ForegroundColor Cyan
 Write-Host "  Then proceed to:" -ForegroundColor White
 Write-Host "    - Content Rating questionnaire" -ForegroundColor White

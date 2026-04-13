@@ -140,10 +140,8 @@ Write-Host "    - store-assets\\listing\\whats-new.txt" -ForegroundColor DarkGra
 Write-Host "    - store-assets\\listing\\data-safety-answers.txt" -ForegroundColor DarkGray
 Write-Host "    - store-assets\\listing\\content-rating-answers.txt" -ForegroundColor DarkGray
 Write-Host "    - README.md" -ForegroundColor DarkGray
-Write-Host "    - RELEASE_STATUS.md" -ForegroundColor DarkGray
 Write-Host "    - PLAY-STORE-LAUNCH-GUIDE.md" -ForegroundColor DarkGray
-Write-Host "    - PROJECT-STATUS.md" -ForegroundColor DarkGray
-Write-Host "    - COMPLETION-CHECKLIST.md" -ForegroundColor DarkGray
+Write-Host "    - documentation\\BUILD-INSTRUCTIONS.md" -ForegroundColor DarkGray
 Write-Host "    - documentation\\COMPLIANCE-CHECKLIST.md" -ForegroundColor DarkGray
 Write-Host "    - documentation\\SUBMISSION-GUIDE.md" -ForegroundColor DarkGray
 Write-Host ""

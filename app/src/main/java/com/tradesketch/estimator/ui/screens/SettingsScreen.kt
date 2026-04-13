@@ -12,7 +12,6 @@ import com.tradesketch.estimator.ui.components.SecondaryActionButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,16 +19,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,9 +44,14 @@ import com.tradesketch.estimator.R
 import com.tradesketch.estimator.BuildConfig
 import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Settings
+import com.tradesketch.estimator.ui.components.AppFilterChip
 import com.tradesketch.estimator.ui.components.BufferedInputField
-import com.tradesketch.estimator.ui.components.TitledSectionCard
-import com.tradesketch.estimator.ui.components.WorkspaceHeaderBackButton
+import com.tradesketch.estimator.ui.components.ReferenceSectionFrame
+import com.tradesketch.estimator.ui.components.ReferenceWorkspaceBackdrop
+import com.tradesketch.estimator.ui.components.ReferenceWorksheetPanel
+import com.tradesketch.estimator.ui.components.ReferenceWorksheetTitleBar
+import com.tradesketch.estimator.ui.components.SettingSliderRow
+import com.tradesketch.estimator.ui.components.SettingSwitchRow
 import com.tradesketch.estimator.ui.components.appCardBorder
 import com.tradesketch.estimator.ui.components.appCardColors
 import com.tradesketch.estimator.ui.components.appCardElevation
@@ -82,56 +82,48 @@ fun SettingsScreen(
         return
     }
 
-    LazyColumn(
-        modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ReferenceWorkspaceBackdrop(
+        modifier = modifier
     ) {
-        item {
-            Card(
-                colors = appCardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                border = appCardBorder(accented = true),
-                elevation = appCardElevation()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    onBack?.let { backAction ->
-                        WorkspaceHeaderBackButton(onClick = backAction)
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "Settings",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = "Keep only what matters: project preferences, quantities, and pricing.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 12.dp, top = 48.dp, end = 12.dp, bottom = 12.dp)
+        ) {
+            ReferenceWorksheetPanel(modifier = Modifier.fillMaxSize()) {
+            ReferenceWorksheetTitleBar(
+                title = "Settings",
+                subtitle = "Project defaults, drawing controls, and estimating preferences.",
+                onBack = onBack
+            )
 
-        item {
-            TitledSectionCard(
-                title = "Core Preferences",
-                subtitle = "Used across projects and tabs."
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
+                ReferenceSectionFrame(
+                    title = "Project Defaults"
+                ) {
                 Text(
-                    text = "Primary Trade",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Starting values for new projects.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Default Trade",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Set the starting trade.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -139,103 +131,53 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PrimaryTrade.entries.forEach { trade ->
-                        FilterChip(
+                        AppFilterChip(
                             selected = uiState.settings.primaryTrade == trade,
                             onClick = {
                                 haptics.tap()
                                 viewModel.updatePrimaryTrade(trade)
                             },
-                            label = { Text(trade.displayLabel()) }
+                            label = trade.displayLabel()
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Use Metric Units", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "Controls blueprint dimensions, geometry previews, and review readouts. Quantity inputs stay in estimating units.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                Spacer(modifier = Modifier.height(12.dp))
+                SettingSwitchRow(
+                    title = "Metric Units",
+                    summary = "Use metric measurements.",
+                    checked = uiState.settings.useMetric,
+                    onCheckedChange = {
+                        haptics.tap()
+                        viewModel.updateUseMetric(it)
                     }
-                    Switch(
-                        checked = uiState.settings.useMetric,
-                        onCheckedChange = {
-                            haptics.tap()
-                            viewModel.updateUseMetric(it)
-                        }
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Reduced Motion", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "Disables extra animation for a faster interface.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = uiState.settings.reducedMotionEnabled,
-                        onCheckedChange = {
-                            haptics.tap()
-                            viewModel.updateReducedMotionEnabled(it)
-                        }
-                    )
-                }
+                )
+                SettingSwitchRow(
+                    title = "Reduced Motion",
+                    summary = "Minimize interface animation.",
+                    checked = uiState.settings.reducedMotionEnabled,
+                    onCheckedChange = {
+                        haptics.tap()
+                        viewModel.updateReducedMotionEnabled(it)
+                    },
+                        showDivider = false
+                )
             }
-        }
+                BlueprintControlsCard(
+                    settings = uiState.settings,
+                    useMetric = uiState.settings.useMetric,
+                    onUpdateBlueprintSnapDefaults = viewModel::updateBlueprintSnapDefaults,
+                    onUpdateBlueprintControlDefaults = viewModel::updateBlueprintControlDefaults,
+                    onHapticTap = haptics::tap
+                )
 
-        if (onReplayTutorial != null) {
-            item {
-                TitledSectionCard(
-                    title = "Help & Onboarding",
-                    subtitle = "Replay the blueprint control tour."
+                ReferenceSectionFrame(
+                    title = "Quantity Inputs"
                 ) {
-                    Text(
-                        text = "Need a refresher? Replay the control tour to spotlight each blueprint control with brief guidance.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    QuietActionButton(
-                        onClick = {
-                            haptics.tap()
-                            onReplayTutorial()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Replay Control Tour")
-                    }
-                }
-            }
-        }
-
-        item {
-            BlueprintControlsCard(
-                settings = uiState.settings,
-                useMetric = uiState.settings.useMetric,
-                onUpdateBlueprintSnapDefaults = viewModel::updateBlueprintSnapDefaults,
-                onUpdateBlueprintControlDefaults = viewModel::updateBlueprintControlDefaults,
-                onHapticTap = haptics::tap
-            )
-        }
-
-        item {
-            TitledSectionCard(
-                title = "Quantity Inputs",
-                subtitle = "Starting assumptions used when creating estimates. These stay in estimating units."
-            ) {
+                Text(
+                    text = "Default estimating values.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 BufferedDoubleField(
                     label = "Waste %",
                     initial = uiState.settings.defaultWastePercent.toString(),
@@ -278,13 +220,15 @@ fun SettingsScreen(
                     onValidValue = { viewModel.updatePaintDefaults(coats = it) }
                 )
             }
-        }
 
-        item {
-            TitledSectionCard(
-                title = "Pricing & Margins",
-                subtitle = "Material and business values used in totals."
-            ) {
+                ReferenceSectionFrame(
+                    title = "Pricing Defaults"
+                ) {
+                Text(
+                    text = "Default unit costs and percentages.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 BufferedDoubleField(
                     label = "Drywall Sheet ($/sheet)",
                     initial = uiState.settings.drywallSheetUnitCost.toString(),
@@ -355,13 +299,15 @@ fun SettingsScreen(
                     onValidValue = { viewModel.updateBusinessDefaults(taxPercent = it) }
                 )
             }
-        }
 
-        item {
-            TitledSectionCard(
-                title = "Business Identity",
-                subtitle = "Printed and shared estimate header details."
-            ) {
+                ReferenceSectionFrame(
+                    title = "Business Identity"
+                ) {
+                Text(
+                    text = "Contact details for exports.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 BufferedTextField(
                     label = "Business Name",
                     initial = uiState.settings.businessName,
@@ -397,67 +343,72 @@ fun SettingsScreen(
                     onValueChange = { viewModel.updateBusinessIdentity(businessLicense = it.trim()) }
                 )
             }
-        }
 
-        item {
-            QuietActionButton(
-                onClick = {
-                    haptics.tap()
-                    showResetConfirm = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Reset Settings")
-            }
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                ReferenceSectionFrame(
+                    title = "Help & Support"
+                ) {
+                Text(
+                    text = "Support and app info.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "About",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "TradeSketch Estimator v${BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "All project data stays on your device.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.feedback_section_message, stringResource(R.string.support_email)),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    SecondaryActionButton(
+                if (onReplayTutorial != null) {
+                    QuietActionButton(
                         onClick = {
                             haptics.tap()
-                            launchFeedbackEmail(context)
+                            onReplayTutorial()
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(stringResource(R.string.send_feedback))
+                        Text("Replay Guided Tour")
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
+                SecondaryActionButton(
+                    onClick = {
+                        haptics.tap()
+                        launchFeedbackEmail(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.send_feedback))
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.feedback_section_message, stringResource(R.string.support_email)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "TradeSketch Estimator v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "All project data stays on your device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        }
 
-        uiState.error?.let { error ->
-            item {
+                QuietActionButton(
+                    onClick = {
+                        haptics.tap()
+                        showResetConfirm = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reset Settings")
+                }
+
+                uiState.error?.let { error ->
                 Card(
-                    colors = CardDefaults.cardColors(
+                    colors = appCardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                    ),
+                    border = appCardBorder(),
+                    elevation = appCardElevation()
                 ) {
                     Text(
                         text = error,
@@ -466,8 +417,10 @@ fun SettingsScreen(
                         modifier = Modifier.padding(12.dp)
                     )
                 }
+                }
             }
         }
+    }
     }
 
     if (showResetConfirm) {
@@ -515,104 +468,75 @@ internal fun BlueprintControlsCard(
     ) -> Unit,
     onHapticTap: () -> Unit = {}
 ) {
-    TitledSectionCard(
-        title = "Blueprint Controls",
-        subtitle = "Snap and joystick defaults for the Blueprint tab."
+    ReferenceSectionFrame(
+        title = "Blueprint Defaults"
     ) {
         Text(
-            text = "Snap Toggles",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = settings.blueprintSnapGridEnabled,
-                onClick = {
-                    onHapticTap()
-                    onUpdateBlueprintSnapDefaults(
-                        !settings.blueprintSnapGridEnabled,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null
-                    )
-                },
-                label = { Text("Grid") }
-            )
-            FilterChip(
-                selected = settings.blueprintSnapAngleEnabled,
-                onClick = {
-                    onHapticTap()
-                    onUpdateBlueprintSnapDefaults(
-                        null,
-                        null,
-                        null,
-                        !settings.blueprintSnapAngleEnabled,
-                        null,
-                        null
-                    )
-                },
-                label = { Text("Angle") }
-            )
-            FilterChip(
-                selected = settings.blueprintSnapEndpointEnabled,
-                onClick = {
-                    onHapticTap()
-                    onUpdateBlueprintSnapDefaults(
-                        null,
-                        !settings.blueprintSnapEndpointEnabled,
-                        null,
-                        null,
-                        null,
-                        null
-                    )
-                },
-                label = { Text("Endpoints") }
-            )
-            FilterChip(
-                selected = settings.blueprintSnapMidpointEnabled,
-                onClick = {
-                    onHapticTap()
-                    onUpdateBlueprintSnapDefaults(
-                        null,
-                        null,
-                        !settings.blueprintSnapMidpointEnabled,
-                        null,
-                        null,
-                        null
-                    )
-                },
-                label = { Text("Midpoints") }
-            )
-            FilterChip(
-                selected = settings.blueprintSnapClosureEnabled,
-                onClick = {
-                    onHapticTap()
-                    onUpdateBlueprintSnapDefaults(
-                        null,
-                        null,
-                        null,
-                        null,
-                        !settings.blueprintSnapClosureEnabled,
-                        null
-                    )
-                },
-                label = { Text("Room closure") }
-            )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Snap sensitivity: ${Formatters.formatSnapDistance(settings.blueprintSnapThresholdFeet, useMetric)}",
+            text = "Drawing and snap behavior.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Slider(
+        Spacer(modifier = Modifier.height(8.dp))
+        SettingSwitchRow(
+            title = "Grid Snap",
+            summary = "Align to the grid.",
+            checked = settings.blueprintSnapGridEnabled,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintSnapDefaults(it, null, null, null, null, null)
+            }
+        )
+        SettingSwitchRow(
+            title = "Endpoint Snap",
+            summary = "Snap to wall and opening ends.",
+            checked = settings.blueprintSnapEndpointEnabled,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintSnapDefaults(null, it, null, null, null, null)
+            }
+        )
+        SettingSwitchRow(
+            title = "Midpoint Snap",
+            summary = "Snap to center points.",
+            checked = settings.blueprintSnapMidpointEnabled,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintSnapDefaults(null, null, it, null, null, null)
+            }
+        )
+        SettingSwitchRow(
+            title = "Angle Snap",
+            summary = "Hold common angles.",
+            checked = settings.blueprintSnapAngleEnabled,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintSnapDefaults(null, null, null, it, null, null)
+            }
+        )
+        SettingSwitchRow(
+            title = "Room Closure Snap",
+            summary = "Close room outlines cleanly.",
+            checked = settings.blueprintSnapClosureEnabled,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintSnapDefaults(null, null, null, null, it, null)
+            }
+        )
+        SettingSwitchRow(
+            title = "Cursor Marker",
+            summary = "Show the active draft marker.",
+            checked = settings.blueprintCursorVisible,
+            onCheckedChange = {
+                onHapticTap()
+                onUpdateBlueprintControlDefaults(null, null, it, null)
+            },
+            showDivider = false
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SettingSliderRow(
+            title = "Snap Sensitivity",
+            summary = "Snap distance.",
+            valueLabel = Formatters.formatSnapDistance(settings.blueprintSnapThresholdFeet, useMetric),
             value = settings.blueprintSnapThresholdFeet.coerceIn(0.2, 2.0).toFloat(),
             onValueChange = {
                 onUpdateBlueprintSnapDefaults(
@@ -626,50 +550,10 @@ internal fun BlueprintControlsCard(
             },
             valueRange = 0.2f..2.0f
         )
-        Text(
-            text = "Lower values require closer alignment. Higher values snap more aggressively.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Control layout",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Text(
-            text = "Blueprint now uses the dual-joystick layout full time so the lower control zones stay predictable on every job.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Cursor marker", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = "Shows the active draft marker and highlights precise geometry targets while you edit.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = settings.blueprintCursorVisible,
-                onCheckedChange = {
-                    onHapticTap()
-                    onUpdateBlueprintControlDefaults(null, null, it, null)
-                }
-            )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Marker size: ${(settings.blueprintCursorScale * 100f).toInt()}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Slider(
+        SettingSliderRow(
+            title = "Marker Size",
+            summary = "Draft marker scale.",
+            valueLabel = "${(settings.blueprintCursorScale * 100f).toInt()}%",
             value = settings.blueprintCursorScale.coerceIn(0.75f, 2.1f),
             onValueChange = {
                 onUpdateBlueprintControlDefaults(null, null, null, it.coerceIn(0.75f, 2.1f))
@@ -678,18 +562,10 @@ internal fun BlueprintControlsCard(
             steps = 12,
             enabled = settings.blueprintCursorVisible
         )
-        Text(
-            text = "Smaller keeps the blueprint cleaner. Larger makes the active marker easier to follow.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Text(
-            text = "Joystick sensitivity: ${"%.2f".format(settings.blueprintJoystickSensitivity)}x",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Slider(
+        SettingSliderRow(
+            title = "Joystick Sensitivity",
+            summary = "Joystick speed.",
+            valueLabel = "${"%.2f".format(settings.blueprintJoystickSensitivity)}x",
             value = settings.blueprintJoystickSensitivity.coerceIn(0.55f, 2.2f),
             onValueChange = {
                 onUpdateBlueprintControlDefaults(
@@ -702,12 +578,10 @@ internal fun BlueprintControlsCard(
             valueRange = 0.55f..2.2f,
             steps = 16
         )
-        Text(
-            text = "Joystick deadzone: ${(settings.blueprintJoystickDeadzone * 100f).toInt()}%",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Slider(
+        SettingSliderRow(
+            title = "Joystick Deadzone",
+            summary = "Ignored thumb travel.",
+            valueLabel = "${(settings.blueprintJoystickDeadzone * 100f).toInt()}%",
             value = settings.blueprintJoystickDeadzone.coerceIn(0.08f, 0.30f),
             onValueChange = {
                 onUpdateBlueprintControlDefaults(
@@ -718,7 +592,8 @@ internal fun BlueprintControlsCard(
                 )
             },
             valueRange = 0.08f..0.30f,
-            steps = 10
+            steps = 10,
+            showDivider = false
         )
     }
 }

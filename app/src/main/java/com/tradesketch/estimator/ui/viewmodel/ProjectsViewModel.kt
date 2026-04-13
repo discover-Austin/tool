@@ -13,6 +13,7 @@ import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.GetProjectsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
+import com.tradesketch.estimator.utils.resolveUniqueProjectName
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -197,19 +198,11 @@ class ProjectsViewModel @Inject constructor(
         requestedName: String,
         excludingProjectId: String? = null
     ): String {
-        val base = requestedName.trim().ifEmpty { "Project" }
-        val existingNames = _uiState.value.projects
-            .asSequence()
-            .filter { it.id != excludingProjectId }
-            .map { it.name.trim().lowercase() }
-            .toSet()
-        if (base.lowercase() !in existingNames) return base
-        var suffix = 2
-        while (true) {
-            val candidate = "$base ($suffix)"
-            if (candidate.lowercase() !in existingNames) return candidate
-            suffix++
-        }
+        return resolveUniqueProjectName(
+            requestedName = requestedName,
+            existingProjects = _uiState.value.projects,
+            excludingProjectId = excludingProjectId
+        )
     }
 }
 

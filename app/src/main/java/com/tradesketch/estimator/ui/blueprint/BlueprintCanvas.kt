@@ -1728,35 +1728,46 @@ internal fun DrawScope.drawCursorAnchorBlip(
     highlighted: Boolean
 ) {
     val clampedScale = sizeScale.coerceIn(0.75f, 2.1f)
-    val glowRadius = 13f * clampedScale
-    val ringRadius = 5.1f * clampedScale
-    val dotRadius = 2.35f * clampedScale
+    val glowRadius = 17.5f * clampedScale
+    val ringRadius = 6.4f * clampedScale
+    val dotRadius = 2.85f * clampedScale
     val glowColor = if (highlighted) {
-        Color(0x66FFE27A)
+        Color(0x86FFE27A)
     } else {
-        Color(0x3E7EB1D8)
+        Color(0x7272D7FF)
     }
     val ringColor = if (highlighted) {
         Color(0xFFFFE27A)
     } else {
-        Color(0xFFB9D8F0)
+        Color(0xFF69E7FF)
     }
     val fillColor = if (highlighted) {
         Color(0xFFFFF1CB)
     } else {
-        Color(0xFFF7FBFF)
+        Color(0xFFFFFFFF)
     }
 
+    drawCircle(
+        color = Color(0x8A03101B),
+        radius = glowRadius * 0.82f,
+        center = position + Offset(1.8f * clampedScale, 2.2f * clampedScale)
+    )
     drawCircle(
         color = glowColor,
         radius = glowRadius,
         center = position
     )
     drawCircle(
-        color = ringColor.copy(alpha = if (highlighted) 0.96f else 0.78f),
+        color = Color(0xE8071726),
+        radius = ringRadius + (2.4f * clampedScale),
+        center = position,
+        style = Stroke(width = (2.8f * clampedScale).coerceAtLeast(1.6f))
+    )
+    drawCircle(
+        color = ringColor.copy(alpha = if (highlighted) 0.98f else 0.94f),
         radius = ringRadius,
         center = position,
-        style = Stroke(width = (1.45f * clampedScale).coerceAtLeast(1.1f))
+        style = Stroke(width = (1.9f * clampedScale).coerceAtLeast(1.3f))
     )
     drawCircle(
         color = fillColor,
@@ -1779,12 +1790,27 @@ internal fun DrawScope.drawArrowCursor(position: Offset, sizeScale: Float) {
     }
     drawPath(
         path = pointer,
-        color = Color(0xAA000000),
-        style = Stroke(width = s(2.4f).coerceAtLeast(1.2f))
+        color = Color(0x82020C14),
+        style = Stroke(width = s(7.4f).coerceAtLeast(3.2f))
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xFF6EEBFF),
+        style = Stroke(width = s(5.2f).coerceAtLeast(2.4f))
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xF6020D17),
+        style = Stroke(width = s(3.2f).coerceAtLeast(1.6f))
     )
     drawPath(
         path = pointer,
         color = Color(0xFFF9FCFF)
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xFF173145),
+        style = Stroke(width = s(1.05f).coerceAtLeast(0.75f))
     )
 }
 
