@@ -1,4 +1,0 @@
-New Measured Arc workflow for reproducible field curves with live arc length, chord, rise, radius, and sweep.
-Sketch Curve remains available for freeform bends.
-Shared blueprints now keep trade colors distinct, fill completed concrete and gravel areas clearly, and combined exports include only trades present in the blueprint.
-

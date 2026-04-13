@@ -1,8 +1,0 @@
-Generated At: 2026-04-12 04:36:43 -04:00
-Engine: edge-tts
-Voice: en-US-GuyNeural
-Rate: +18%
-Volume: +0%
-Script: media/play_store_showcase/showcase_voiceover.txt
-Wav: media/play_store_showcase/showcase_voiceover.wav
-Mp3: media/play_store_showcase/showcase_voiceover.mp3

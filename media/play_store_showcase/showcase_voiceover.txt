@@ -1,8 +1,0 @@
-TradeSketch helps you measure, price, and export jobs from one app.
-Start fast, or jump right back into a saved project.
-Use blueprint takeoff to measure, or manual entry when you already know the numbers.
-See the layout, scale, and live totals together.
-Add doors, windows, and edits without losing your place.
-Materials and pricing stay tied to the takeoff.
-Export PDF, PNG, CSV, or JSON in a few taps.
-No account, no subscription, just faster estimating on your phone.
