@@ -61,8 +61,8 @@ enum class WorkspaceTab(val label: String) {
 class DesktopAppState(
     private val storage: DesktopStorage = DesktopStorage()
 ) {
-    private val blueprintUndo = ArrayDeque<BlueprintCommand>()
-    private val blueprintRedo = ArrayDeque<BlueprintCommand>()
+    private val blueprintUndo = mutableListOf<BlueprintCommand>()
+    private val blueprintRedo = mutableListOf<BlueprintCommand>()
 
     var projects by mutableStateOf<List<Project>>(emptyList())
         private set
@@ -174,7 +174,7 @@ class DesktopAppState(
         val normalizedUpdated = updated.copy(projectId = project.id)
         if (normalizedUpdated == current) return
         if (trackHistory) {
-            blueprintUndo.addLast(
+            blueprintUndo.add(
                 BlueprintDocumentCommand(
                     label = label,
                     before = current,
@@ -182,7 +182,7 @@ class DesktopAppState(
                 )
             )
             if (blueprintUndo.size > 120) {
-                blueprintUndo.removeFirst()
+                blueprintUndo.removeAt(0)
             }
             blueprintRedo.clear()
         }
@@ -198,9 +198,9 @@ class DesktopAppState(
     fun undoBlueprint() {
         val project = selectedProject ?: return
         if (blueprintUndo.isEmpty()) return
-        val command = blueprintUndo.removeLast()
+        val command = blueprintUndo.removeAt(blueprintUndo.lastIndex)
         val previous = command.undo(project.authoritativeBlueprint())
-        blueprintRedo.addLast(command)
+        blueprintRedo.add(command)
         updateBlueprintDocument(
             updated = previous,
             trackHistory = false,
@@ -211,9 +211,9 @@ class DesktopAppState(
     fun redoBlueprint() {
         val project = selectedProject ?: return
         if (blueprintRedo.isEmpty()) return
-        val command = blueprintRedo.removeLast()
+        val command = blueprintRedo.removeAt(blueprintRedo.lastIndex)
         val next = command.apply(project.authoritativeBlueprint())
-        blueprintUndo.addLast(command)
+        blueprintUndo.add(command)
         updateBlueprintDocument(
             updated = next,
             trackHistory = false,

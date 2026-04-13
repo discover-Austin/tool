@@ -46,8 +46,16 @@ internal data class OpeningDragPreview(
 internal data class WallLengthLabelSpec(
     val start: Offset,
     val end: Offset,
-    val lengthFeet: Double,
-    val color: Color
+    val lengthMm: Long,
+    val color: Color,
+    val prefix: String? = null,
+    val repeatCount: Int = 1,
+    val groupedMarkers: List<WallLengthGroupMarkerSpec> = emptyList()
+)
+
+internal data class WallLengthGroupMarkerSpec(
+    val start: Offset,
+    val end: Offset
 )
 
 internal data class RightAngleHint(
@@ -62,12 +70,42 @@ internal data class CornerAngleHint(
     val legA: PointMm,
     val legB: PointMm,
     val angleDegrees: Double,
-    val highlighted: Boolean
+    val highlighted: Boolean,
+    val displayLegA: PointMm = legA,
+    val displayLegB: PointMm = legB
 )
 
 internal data class LiveScopeQuantity(
     val tradeLabel: String,
     val value: String
+)
+
+internal data class CircleSelectionInfo(
+    val radiusMm: Long,
+    val diameterMm: Long,
+    val segmentCount: Int
+)
+
+internal enum class CurveSelectionKind {
+    MEASURED_ARC,
+    SKETCH_CURVE
+}
+
+internal data class ArcSelectionInfo(
+    val kind: CurveSelectionKind,
+    val spanMm: Long,
+    val arcLengthMm: Long,
+    val turnDegrees: Double,
+    val segmentCount: Int,
+    val shiftMm: Long? = null,
+    val bendMm: Long? = null,
+    val riseMm: Long? = null,
+    val radiusMm: Long? = null,
+    val guideChordStart: PointMm? = null,
+    val guideChordEnd: PointMm? = null,
+    val guideChordMidpoint: PointMm? = null,
+    val guideArcMidpoint: PointMm? = null,
+    val guideCenter: PointMm? = null
 )
 
 internal fun openingPreset(
@@ -118,22 +156,48 @@ internal val windowPresets = listOf(
     openingPreset("6'0\" x 4'0\"", OpeningType.WINDOW, 6.0, 4.0, 3.0)
 )
 
-internal val stairUpPresets = listOf(
-    openingPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_UP, 3.0, 9.0, 0.0),
-    openingPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_UP, 3.5, 10.0, 0.0),
-    openingPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_UP, 4.0, 11.0, 0.0)
+private data class StairPresetDefinition(
+    val name: String,
+    val widthFeet: Double,
+    val runFeet: Double,
+    val riseFeet: Double
 )
 
-internal val stairDownPresets = listOf(
-    openingPreset("3'0\" x 9'0\" straight", OpeningType.STAIR_DOWN, 3.0, 9.0, 0.0),
-    openingPreset("3'6\" x 10'0\" straight", OpeningType.STAIR_DOWN, 3.5, 10.0, 0.0),
-    openingPreset("4'0\" x 11'0\" L-stair", OpeningType.STAIR_DOWN, 4.0, 11.0, 0.0)
+private val commonStairPresetDefinitions = listOf(
+    StairPresetDefinition("3'0\" x 10'0\" straight", widthFeet = 3.0, runFeet = 10.0, riseFeet = 8.5),
+    StairPresetDefinition("3'6\" x 10'0\" straight", widthFeet = 3.5, runFeet = 10.0, riseFeet = 8.5),
+    StairPresetDefinition("4'0\" x 10'6\" straight", widthFeet = 4.0, runFeet = 10.5, riseFeet = 8.5),
+    StairPresetDefinition("3'0\" x 9'6\" compact", widthFeet = 3.0, runFeet = 9.5, riseFeet = 8.0),
+    StairPresetDefinition("2'8\" x 9'0\" compact", widthFeet = 2.67, runFeet = 9.0, riseFeet = 8.0),
+    StairPresetDefinition("3'6\" x 11'0\" quarter-turn", widthFeet = 3.5, runFeet = 11.0, riseFeet = 8.5),
+    StairPresetDefinition("4'0\" x 12'0\" quarter-turn", widthFeet = 4.0, runFeet = 12.0, riseFeet = 9.0),
+    StairPresetDefinition("4'0\" x 13'0\" U-shaped", widthFeet = 4.0, runFeet = 13.0, riseFeet = 9.0)
 )
+
+internal val stairUpPresets = commonStairPresetDefinitions.map { preset ->
+    openingPreset(
+        name = preset.name,
+        type = OpeningType.STAIR_UP,
+        widthFeet = preset.widthFeet,
+        heightFeet = preset.runFeet,
+        sillFeet = preset.riseFeet
+    )
+}
+
+internal val stairDownPresets = commonStairPresetDefinitions.map { preset ->
+    openingPreset(
+        name = preset.name,
+        type = OpeningType.STAIR_DOWN,
+        widthFeet = preset.widthFeet,
+        heightFeet = preset.runFeet,
+        sillFeet = preset.riseFeet
+    )
+}
 
 internal val doorPreset = doorPresets.first { it.name.startsWith("3'0\" x 7'0\"") }
 internal val windowPreset = windowPresets.first { it.name.startsWith("4'0\" x 4'0\"") }
-internal val stairUpPreset = stairUpPresets.first()
-internal val stairDownPreset = stairDownPresets.first()
+internal val stairUpPreset = stairUpPresets.first { it.name.startsWith("3'0\" x 10'0\"") }
+internal val stairDownPreset = stairDownPresets.first { it.name.startsWith("3'0\" x 10'0\"") }
 
 internal const val BASE_PX_PER_MM = 0.065f
 internal const val MIN_BLUEPRINT_SCALE = 0.2f
@@ -160,6 +224,8 @@ internal const val WALL_LENGTH_LABEL_TEXT_SP = 11.2f
 internal const val WALL_LENGTH_LABEL_OFFSET_PX = 13f
 internal const val PARALLEL_MATCH_ANGLE_TOLERANCE_DEG = 2.0
 internal const val PARALLEL_MATCH_LENGTH_TOLERANCE_MM = 35L
+internal const val GROUPED_LENGTH_TOLERANCE_MM = 35L
+internal const val GROUPED_LENGTH_MIN_SEPARATION_MM = 180L
 internal const val RIGHT_ANGLE_MARKER_SIZE_PX = 11f
 internal const val RIGHT_ANGLE_MARKER_TOLERANCE_DEG = 1.0
 internal const val RIGHT_ANGLE_LABEL_TEXT_SP = 6.8f
@@ -170,6 +236,8 @@ internal const val JOYSTICK_FRAME_RATE_BASE = 60f
 internal const val JOYSTICK_CURSOR_SPEED_PX_PER_SEC = 5.2f * JOYSTICK_FRAME_RATE_BASE
 internal const val JOYSTICK_PAN_SPEED_PX_PER_SEC = 7f * JOYSTICK_FRAME_RATE_BASE
 internal const val JOYSTICK_PAN_BOOST_PX_PER_SEC = 10f * JOYSTICK_FRAME_RATE_BASE
+internal const val JOYSTICK_FINE_CURSOR_SPEED_MULTIPLIER = 0.28f
+internal const val JOYSTICK_FINE_PAN_SPEED_MULTIPLIER = 0.24f
 internal const val JOYSTICK_MIN_FRAME_DELTA_SEC = 1f / 120f
 internal const val JOYSTICK_MAX_FRAME_DELTA_SEC = 1f / 30f
 internal const val JOYSTICK_CURSOR_RESPONSE_EXPONENT = 1.35f

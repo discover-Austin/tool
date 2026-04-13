@@ -3,6 +3,8 @@ package com.tradesketch.estimator.utils
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.model.TakeoffResult
+import com.tradesketch.estimator.domain.model.hasMeasuredQuantities
+import com.tradesketch.estimator.domain.model.nonZeroItems
 
 /**
  * Formats data for export (CSV, PDF, Share, Copy).
@@ -24,6 +26,7 @@ object ExportFormatter {
     ): String {
         val header = buildBusinessHeader(settings)
         val timestamp = Formatters.formatDate(generatedAtMillis)
+        val measuredItems = result.nonZeroItems()
         return buildString {
             appendLine(header.name)
             header.contactLines.forEach { appendLine(it) }
@@ -36,31 +39,37 @@ object ExportFormatter {
             appendLine()
             appendLine("QUANTITIES")
             appendLine("-" .repeat(50))
-            result.items.forEach { item ->
-                appendLine("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
-                item.unitCost?.let { cost ->
-                    appendLine("  @ ${Formatters.formatMoney(cost)} each")
-                }
-                item.extendedCost?.let { ext ->
-                    appendLine("  Total: ${Formatters.formatMoney(ext)}")
+            if (measuredItems.isEmpty()) {
+                appendLine("No measured quantities yet.")
+            } else {
+                measuredItems.forEach { item ->
+                    appendLine("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
+                    item.unitCost?.let { cost ->
+                        appendLine("  @ ${Formatters.formatMoney(cost)} each")
+                    }
+                    item.extendedCost?.let { ext ->
+                        appendLine("  Total: ${Formatters.formatMoney(ext)}")
+                    }
                 }
             }
             appendLine()
-            result.materialSubtotal?.let { subtotal ->
-                appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
-            }
-            result.laborCost?.let { labor ->
-                appendLine("Labor: ${Formatters.formatMoney(labor)}")
-            }
-            result.markupCost?.let { markup ->
-                appendLine("Markup: ${Formatters.formatMoney(markup)}")
-            }
-            result.taxCost?.let { tax ->
-                appendLine("Tax: ${Formatters.formatMoney(tax)}")
-            }
-            result.totalCost?.let { total ->
-                appendLine("TOTAL COST: ${Formatters.formatMoney(total)}")
-                appendLine()
+            if (result.hasMeasuredQuantities()) {
+                result.materialSubtotal?.let { subtotal ->
+                    appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
+                }
+                result.laborCost?.let { labor ->
+                    appendLine("Labor: ${Formatters.formatMoney(labor)}")
+                }
+                result.markupCost?.let { markup ->
+                    appendLine("Markup: ${Formatters.formatMoney(markup)}")
+                }
+                result.taxCost?.let { tax ->
+                    appendLine("Tax: ${Formatters.formatMoney(tax)}")
+                }
+                result.totalCost?.let { total ->
+                    appendLine("TOTAL COST: ${Formatters.formatMoney(total)}")
+                    appendLine()
+                }
             }
             appendLine("-" .repeat(50))
             appendLine(DISCLAIMER)
@@ -80,6 +89,7 @@ object ExportFormatter {
     ): String {
         val header = buildBusinessHeader(settings)
         val timestamp = Formatters.formatDate(generatedAtMillis)
+        val measuredItems = result.nonZeroItems()
         return buildString {
             appendLine("Company,Phone,Email,Address,License")
             appendLine(
@@ -103,7 +113,7 @@ object ExportFormatter {
             )
             appendLine()
             appendLine("Item,Quantity,Unit,Unit Cost,Extended Cost")
-            result.items.forEach { item ->
+            measuredItems.forEach { item ->
                 val unitCost = item.unitCost?.let { Formatters.formatMoney(it) } ?: ""
                 val extCost = item.extendedCost?.let { Formatters.formatMoney(it) } ?: ""
                 appendLine(
@@ -116,21 +126,23 @@ object ExportFormatter {
                     ).joinToString(separator = ",")
                 )
             }
-            result.materialSubtotal?.let { subtotal ->
-                appendLine("${csvCell("Materials")},,,,${csvCell(Formatters.formatMoney(subtotal))}")
-            }
-            result.laborCost?.let { labor ->
-                appendLine("${csvCell("Labor")},,,,${csvCell(Formatters.formatMoney(labor))}")
-            }
-            result.markupCost?.let { markup ->
-                appendLine("${csvCell("Markup")},,,,${csvCell(Formatters.formatMoney(markup))}")
-            }
-            result.taxCost?.let { tax ->
-                appendLine("${csvCell("Tax")},,,,${csvCell(Formatters.formatMoney(tax))}")
-            }
-            result.totalCost?.let { total ->
-                appendLine()
-                appendLine("${csvCell("TOTAL")},,,,${csvCell(Formatters.formatMoney(total))}")
+            if (result.hasMeasuredQuantities()) {
+                result.materialSubtotal?.let { subtotal ->
+                    appendLine("${csvCell("Materials")},,,,${csvCell(Formatters.formatMoney(subtotal))}")
+                }
+                result.laborCost?.let { labor ->
+                    appendLine("${csvCell("Labor")},,,,${csvCell(Formatters.formatMoney(labor))}")
+                }
+                result.markupCost?.let { markup ->
+                    appendLine("${csvCell("Markup")},,,,${csvCell(Formatters.formatMoney(markup))}")
+                }
+                result.taxCost?.let { tax ->
+                    appendLine("${csvCell("Tax")},,,,${csvCell(Formatters.formatMoney(tax))}")
+                }
+                result.totalCost?.let { total ->
+                    appendLine()
+                    appendLine("${csvCell("TOTAL")},,,,${csvCell(Formatters.formatMoney(total))}")
+                }
             }
             appendLine()
             appendLine("Trace Metric,Value,Unit,Room ID,Wall ID,Opening ID")
@@ -161,7 +173,9 @@ object ExportFormatter {
     ): String {
         val company = buildBusinessHeader(settings)
         val timestamp = Formatters.formatDate(generatedAtMillis)
-        val itemsJson = result.items.joinToString(separator = ",\n") { item ->
+        val measuredItems = result.nonZeroItems()
+        val hasMeasuredQuantities = result.hasMeasuredQuantities()
+        val itemsJson = measuredItems.joinToString(separator = ",\n") { item ->
             """
             {
               "name": "${escapeJson(item.name)}",
@@ -204,11 +218,11 @@ object ExportFormatter {
             $itemsJson
           ],
           "totals": {
-            "materials": ${result.materialSubtotal ?: "null"},
-            "labor": ${result.laborCost ?: "null"},
-            "markup": ${result.markupCost ?: "null"},
-            "tax": ${result.taxCost ?: "null"},
-            "total": ${result.totalCost ?: "null"}
+            "materials": ${if (hasMeasuredQuantities) result.materialSubtotal ?: "null" else "null"},
+            "labor": ${if (hasMeasuredQuantities) result.laborCost ?: "null" else "null"},
+            "markup": ${if (hasMeasuredQuantities) result.markupCost ?: "null" else "null"},
+            "tax": ${if (hasMeasuredQuantities) result.taxCost ?: "null" else "null"},
+            "total": ${if (hasMeasuredQuantities) result.totalCost ?: "null" else "null"}
           },
           "traceability": [
             $tracesJson
@@ -230,31 +244,38 @@ object ExportFormatter {
         estimateId: String = EstimateIdentity.buildEstimateId(project, generatedAtMillis)
     ): String {
         val header = buildBusinessHeader(settings)
+        val measuredItems = result.nonZeroItems()
         return buildString {
             appendLine(header.name)
             appendLine("${project.name} - $takeoffType")
             appendLine("Estimate ID: $estimateId")
-            result.items.forEach { item ->
-                append("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
-                item.extendedCost?.let { ext ->
-                    append(" (${Formatters.formatMoney(ext)})")
+            if (measuredItems.isEmpty()) {
+                appendLine("No measured quantities yet.")
+            } else {
+                measuredItems.forEach { item ->
+                    append("${item.name}: ${Formatters.formatQuantity(item.quantity)} ${item.unit}")
+                    item.extendedCost?.let { ext ->
+                        append(" (${Formatters.formatMoney(ext)})")
+                    }
+                    appendLine()
                 }
-                appendLine()
             }
-            result.materialSubtotal?.let { subtotal ->
-                appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
-            }
-            result.laborCost?.let { labor ->
-                appendLine("Labor: ${Formatters.formatMoney(labor)}")
-            }
-            result.markupCost?.let { markup ->
-                appendLine("Markup: ${Formatters.formatMoney(markup)}")
-            }
-            result.taxCost?.let { tax ->
-                appendLine("Tax: ${Formatters.formatMoney(tax)}")
-            }
-            result.totalCost?.let { total ->
-                appendLine("Total: ${Formatters.formatMoney(total)}")
+            if (result.hasMeasuredQuantities()) {
+                result.materialSubtotal?.let { subtotal ->
+                    appendLine("Materials: ${Formatters.formatMoney(subtotal)}")
+                }
+                result.laborCost?.let { labor ->
+                    appendLine("Labor: ${Formatters.formatMoney(labor)}")
+                }
+                result.markupCost?.let { markup ->
+                    appendLine("Markup: ${Formatters.formatMoney(markup)}")
+                }
+                result.taxCost?.let { tax ->
+                    appendLine("Tax: ${Formatters.formatMoney(tax)}")
+                }
+                result.totalCost?.let { total ->
+                    appendLine("Total: ${Formatters.formatMoney(total)}")
+                }
             }
         }
     }

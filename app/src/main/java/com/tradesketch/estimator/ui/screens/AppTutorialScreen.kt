@@ -51,6 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
 
 @Composable
 fun AppTutorialScreen(
@@ -79,205 +82,207 @@ fun AppTutorialScreen(
                     .fillMaxWidth()
                     .widthIn(max = 700.dp)
                     .heightIn(max = cardMaxHeight),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                colors = appCardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                border = appCardBorder(accented = true),
+                elevation = appCardElevation(raised = true)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .imePadding()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .heightIn(min = 320.dp, max = cardMaxHeight)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TutorialTag(label = "GET STARTED")
-                            Text(
-                                text = "Interactive Tour",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Step ${stepIndex + 1} of ${steps.size}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Learn the basics once, then start your first project with confidence.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        TextButton(onClick = onSkip) {
-                            Text("Skip")
-                        }
-                    }
-
-                    LinearProgressIndicator(
-                        progress = { progress },
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-
-                    AnimatedContent(
-                        targetState = stepIndex,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideInHorizontally(
-                                    initialOffsetX = { it / 4 },
-                                    animationSpec = tween(240)
-                                ) + fadeIn(animationSpec = tween(180)) togetherWith
-                                    slideOutHorizontally(
-                                        targetOffsetX = { -it / 4 },
-                                        animationSpec = tween(200)
-                                    ) + fadeOut(animationSpec = tween(160))
-                            } else {
-                                slideInHorizontally(
-                                    initialOffsetX = { -it / 4 },
-                                    animationSpec = tween(240)
-                                ) + fadeIn(animationSpec = tween(180)) togetherWith
-                                    slideOutHorizontally(
-                                        targetOffsetX = { it / 4 },
-                                        animationSpec = tween(200)
-                                    ) + fadeOut(animationSpec = tween(160))
-                            }
-                        },
-                        label = "app_tutorial_steps"
-                    ) { index ->
-                        val page = steps[index]
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                                    )
-                                ) {
-                                    Icon(
-                                        imageVector = page.icon,
-                                        contentDescription = page.title,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(14.dp)
-                                    )
-                                }
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = page.title,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = page.summary,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                page.controls.forEachIndexed { controlIndex, control ->
-                                    TutorialControlCard(
-                                        step = controlIndex + 1,
-                                        text = control
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = MaterialTheme.shapes.medium,
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f),
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = "Field Tip",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = page.tip,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    if (compactFooter) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "You can replay this any time in Settings.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (stepIndex > 0) {
-                                    OutlinedButton(onClick = { stepIndex -= 1 }) {
-                                        Text("Back")
-                                    }
-                                }
-                                Button(
-                                    onClick = {
-                                        if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
-                                    }
-                                ) {
-                                    Text(if (stepIndex == steps.lastIndex) "Start Estimating" else "Next")
-                                }
-                            }
-                        }
-                    } else {
+                            .weight(1f, fill = true)
+                            .verticalScroll(rememberScrollState())
+                            .imePadding()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Text(
-                                text = "You can replay this any time in Settings.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TutorialTag(label = "GET STARTED")
+                                Text(
+                                    text = "Interactive Tour",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Step ${stepIndex + 1} of ${steps.size}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Short version: this shows where things are and what to tap first.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(onClick = onSkip) {
+                                Text("Skip")
+                            }
+                        }
+
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+
+                        AnimatedContent(
+                            targetState = stepIndex,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    slideInHorizontally(
+                                        initialOffsetX = { it / 4 },
+                                        animationSpec = tween(240)
+                                    ) + fadeIn(animationSpec = tween(180)) togetherWith
+                                        slideOutHorizontally(
+                                            targetOffsetX = { -it / 4 },
+                                            animationSpec = tween(200)
+                                        ) + fadeOut(animationSpec = tween(160))
+                                } else {
+                                    slideInHorizontally(
+                                        initialOffsetX = { -it / 4 },
+                                        animationSpec = tween(240)
+                                    ) + fadeIn(animationSpec = tween(180)) togetherWith
+                                        slideOutHorizontally(
+                                            targetOffsetX = { it / 4 },
+                                            animationSpec = tween(200)
+                                        ) + fadeOut(animationSpec = tween(160))
+                                }
+                            },
+                            label = "app_tutorial_steps"
+                        ) { index ->
+                            val page = steps[index]
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = page.icon,
+                                            contentDescription = page.title,
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(14.dp)
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = page.title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = page.summary,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    page.controls.forEachIndexed { controlIndex, control ->
+                                        TutorialControlCard(
+                                            step = controlIndex + 1,
+                                            text = control
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = MaterialTheme.shapes.medium,
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Field Tip",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            text = page.tip,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "You can replay this any time in Settings.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (compactFooter) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (stepIndex > 0) {
+                                        OutlinedButton(onClick = { stepIndex -= 1 }) {
+                                            Text("Back")
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Button(
+                                        onClick = {
+                                            if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
+                                        }
+                                    ) {
+                                        Text(if (stepIndex == steps.lastIndex) "Start Estimating" else "Next")
+                                    }
+                                }
+                            }
+                        } else {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (stepIndex > 0) {
                                     OutlinedButton(onClick = { stepIndex -= 1 }) {
                                         Text("Back")
                                     }
+                                } else {
+                                    Spacer(modifier = Modifier.widthIn(min = 88.dp))
                                 }
+                                Spacer(modifier = Modifier.weight(1f))
                                 Button(
                                     onClick = {
                                         if (stepIndex == steps.lastIndex) onFinish() else stepIndex += 1
@@ -319,7 +324,7 @@ private fun TutorialControlCard(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.84f),
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.32f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.72f)
         )
     ) {
         Row(
@@ -359,84 +364,83 @@ private data class TutorialStep(
 private fun tutorialSteps(): List<TutorialStep> = listOf(
     TutorialStep(
         title = "Navigation",
-        summary = "The left rail keeps project controls and workspace tabs in one place.",
+        summary = "Use the left side of the app to move between the main screens.",
         controls = listOf(
-            "Use New Project to start a fresh estimate.",
-            "Use Projects to switch jobs or remove old ones.",
-            "Tap Blueprint, Materials, Export, or Settings to change workspace.",
-            "Use the arrow at the top of the rail to collapse or expand it."
+            "Tap New Project to start a new job.",
+            "Tap Projects to open an old job or delete one.",
+            "Tap Blueprint, Materials, Export, or Settings to switch screens.",
+            "Tap the arrow to hide or show the left menu."
         ),
-        tip = "Start in Blueprint, then continue to Materials and Export when the drawing is ready.",
+        tip = "Most jobs start in Blueprint.",
         icon = Icons.Filled.Description
     ),
     TutorialStep(
         title = "Blueprint Basics",
-        summary = "All takeoff quantities come from what you draw here.",
+        summary = "Draw the job here first. The rest of the app uses this drawing.",
         controls = listOf(
-            "Select mode lets you tap walls/openings to inspect or edit.",
-            "Draw mode lets you tap start and end points to create walls.",
-            "Pinch to zoom and use two-finger drag to pan the drawing.",
-            "Use the top project-name field to rename the active job."
+            "Select lets you tap a wall or opening to inspect it.",
+            "Draw lets you place new walls.",
+            "Pinch to zoom. Use two fingers to move the drawing.",
+            "Rename the job at the top when you want."
         ),
-        tip = "Zoom in before placing openings to avoid accidental misalignment.",
+        tip = "Zoom in before you place doors or windows.",
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
         title = "Blueprint Controls",
-        summary = "The bottom rail and side dials give you fast editing control.",
+        summary = "The bottom bar holds the main drawing tools.",
         controls = listOf(
-            "Trash removes the selected wall or opening.",
-            "Box mode draws a room rectangle: tap once, size it, tap again to finish.",
-            "Door/Window/Stair tools open opening presets for wall placement.",
-            "Angle and length side dials rotate and resize active lines, boxes, or picked-up walls."
+            "Trash deletes the thing you selected.",
+            "Box draws a rectangle fast.",
+            "Door, Window, and Stair open placement tools.",
+            "The side dials fine-tune angle and size after you start a shape."
         ),
-        tip = "If an action gets stuck, use Cancel in touch tools to reset the current mode.",
+        tip = "If the app feels stuck, use Cancel to clear the current action.",
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
         title = "Joystick Controls",
-        summary = "Use the right stick for the cursor and the left stick to pan the drawing.",
+        summary = "Right stick aims. Left stick moves the drawing.",
         controls = listOf(
-            "Right stick moves the cursor. Small movement gives precision; full movement crosses the canvas quickly.",
-            "Left stick pans the blueprint without changing zoom.",
-            "Right-stick tap is your primary tap at cursor (start walls, place endpoints/openings, confirm).",
-            "Left-stick tap and stick-press are alternate actions (cancel active draw/pick-up, quick-select, or clear nearby wall).",
-            "Practice: right-stick to a corner, right-tap start, move, right-tap place, left-tap reset."
+            "Move the right stick a little for tiny moves and a lot for big moves.",
+            "Use right-stick tap to do the main action at the cursor.",
+            "Use the left stick to pan without changing zoom.",
+            "Use left tap for quick extra actions like cancel or reset."
         ),
-        tip = "Fine-tune in Settings: lower joystick sensitivity and raise dead zone for tighter control.",
+        tip = "If it feels too fast, lower joystick sensitivity in Settings.",
         icon = Icons.Filled.Architecture
     ),
     TutorialStep(
         title = "Materials",
-        summary = "Validate quantities and tune estimating assumptions.",
+        summary = "Check the numbers here and adjust how the estimate is calculated.",
         controls = listOf(
-            "Review generated quantity rows from the blueprint geometry.",
-            "Adjust waste factors, coverage rates, and trade-specific values.",
-            "Use manual overrides for field conditions not shown in plan."
+            "Review the quantities made from your drawing.",
+            "Adjust waste, coverage, and other estimate settings.",
+            "Add manual overrides only when the drawing does not show something important."
         ),
-        tip = "Keep overrides minimal so totals stay traceable to the drawing.",
+        tip = "Use as few manual overrides as you can.",
         icon = Icons.Filled.Assessment
     ),
     TutorialStep(
         title = "Export",
-        summary = "Create outputs for clients, purchase lists, and field reference.",
+        summary = "Save or share the estimate in the format you need.",
         controls = listOf(
-            "Choose PDF, CSV, JSON, text, or blueprint PNG output.",
-            "For blueprint PNG, choose Grid On or Grid Off before saving.",
-            "Use clear file names so teams can match exports to revision stages."
+            "You can export PDF, CSV, JSON, text, or a blueprint image.",
+            "For blueprint images, choose whether the grid is on or off.",
+            "Use clear file names so you can tell versions apart later."
         ),
-        tip = "Export after major geometry edits to keep documents synchronized.",
+        tip = "Export again after big drawing changes.",
         icon = Icons.Filled.Flag
     ),
     TutorialStep(
         title = "Settings",
-        summary = "Set app defaults so each new estimate starts with your standards.",
+        summary = "Set your default behavior here so new jobs start the way you like.",
         controls = listOf(
-            "Configure snap behavior, joystick settings, and touch preferences.",
-            "Set unit, pricing, and business profile defaults.",
-            "Use Replay Tutorial any time from Settings."
+            "Change snap, joystick, and touch behavior.",
+            "Set your units, pricing defaults, and business info.",
+            "Use Replay Tutorial any time if you forget something."
         ),
-        tip = "Shared defaults improve consistency across teammates and devices.",
+        tip = "Good defaults save time on every new job.",
         icon = Icons.Filled.Settings
     )
 )

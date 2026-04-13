@@ -7,13 +7,13 @@ import com.tradesketch.estimator.domain.model.PrimaryTrade
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTemplate
 import com.tradesketch.estimator.domain.model.Settings
-import com.tradesketch.estimator.domain.model.defaultQuickStartTemplate
 import com.tradesketch.estimator.domain.usecase.CreateProjectFromTemplateUseCase
 import com.tradesketch.estimator.domain.usecase.DeleteProjectUseCase
 import com.tradesketch.estimator.domain.usecase.GetSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.GetProjectsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveSettingsUseCase
 import com.tradesketch.estimator.domain.usecase.SaveProjectUseCase
+import com.tradesketch.estimator.utils.resolveUniqueProjectName
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -147,10 +147,9 @@ class ProjectsViewModel @Inject constructor(
             try {
                 uxMetricsRepository.recordTap("projects_easy_start")
                 val trade = _uiState.value.settings.primaryTrade
-                val template = trade.defaultQuickStartTemplate()
-                val project = createFromTemplateUseCase(
-                    template = template,
-                    customName = ensureUniqueProjectName("My ${template.displayName()}")
+                val project = createStarterProjectForTrade(
+                    trade = trade,
+                    name = ensureUniqueProjectName(starterProjectNameForTrade(trade))
                 )
                 saveProjectUseCase(project)
                 _events.emit(ProjectsEvent.NavigateToProject(project.id))
@@ -199,19 +198,11 @@ class ProjectsViewModel @Inject constructor(
         requestedName: String,
         excludingProjectId: String? = null
     ): String {
-        val base = requestedName.trim().ifEmpty { "Project" }
-        val existingNames = _uiState.value.projects
-            .asSequence()
-            .filter { it.id != excludingProjectId }
-            .map { it.name.trim().lowercase() }
-            .toSet()
-        if (base.lowercase() !in existingNames) return base
-        var suffix = 2
-        while (true) {
-            val candidate = "$base ($suffix)"
-            if (candidate.lowercase() !in existingNames) return candidate
-            suffix++
-        }
+        return resolveUniqueProjectName(
+            requestedName = requestedName,
+            existingProjects = _uiState.value.projects,
+            excludingProjectId = excludingProjectId
+        )
     }
 }
 

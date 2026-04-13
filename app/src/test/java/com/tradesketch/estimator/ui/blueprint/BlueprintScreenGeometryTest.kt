@@ -1,8 +1,11 @@
 package com.tradesketch.estimator.ui.blueprint
 
+import androidx.compose.ui.geometry.Offset
+import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.PointMm
 import com.tradesketch.estimator.domain.model.WallSegment
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -73,5 +76,27 @@ class BlueprintScreenGeometryTest {
                 thresholdMm = 80L
             )
         )
+    }
+
+    @Test
+    fun `committed wall labels group matching parallel lengths`() {
+        val document = BlueprintDocument(
+            projectId = "project-1",
+            walls = listOf(
+                WallSegment(id = "w1", start = PointMm(0, 0), end = PointMm(4_000, 0)),
+                WallSegment(id = "w2", start = PointMm(4_000, 0), end = PointMm(4_000, 2_000)),
+                WallSegment(id = "w3", start = PointMm(4_000, 2_000), end = PointMm(0, 2_000)),
+                WallSegment(id = "w4", start = PointMm(0, 2_000), end = PointMm(0, 0))
+            )
+        )
+
+        val labels = collectCommittedWallLengthLabels(
+            document = document,
+            selectedWallId = null,
+            worldToScreen = { point -> Offset(point.x.toFloat(), point.y.toFloat()) }
+        )
+
+        assertEquals(2, labels.size)
+        assertEquals(setOf(2), labels.map(WallLengthLabelSpec::repeatCount).toSet())
     }
 }

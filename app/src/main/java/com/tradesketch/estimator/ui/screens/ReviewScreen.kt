@@ -1,5 +1,6 @@
 package com.tradesketch.estimator.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,12 +24,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tradesketch.estimator.domain.model.Millimeters
-import com.tradesketch.estimator.domain.model.Settings
 import com.tradesketch.estimator.domain.usecase.CalculateTakeoffUseCase
+import com.tradesketch.estimator.ui.components.WorkspacePageHeaderCard
+import com.tradesketch.estimator.ui.components.WorkspaceSectionHeading
+import com.tradesketch.estimator.ui.components.appCardBorder
+import com.tradesketch.estimator.ui.components.appCardColors
+import com.tradesketch.estimator.ui.components.appCardElevation
+import com.tradesketch.estimator.ui.displayLabel
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.TakeoffType
 import com.tradesketch.estimator.ui.viewmodel.buildTakeoffInputs
 import com.tradesketch.estimator.ui.viewmodel.calculateForType
+import com.tradesketch.estimator.ui.viewmodel.projectBlueprintForType
+import com.tradesketch.estimator.ui.viewmodel.toTakeoffType
+import com.tradesketch.estimator.utils.Formatters
 
 @Composable
 fun ReviewScreen(
@@ -42,9 +51,8 @@ fun ReviewScreen(
         viewModel.setProjectId(projectId)
     }
 
-    val document = uiState.document
     val project = uiState.project
-    if (uiState.isLoading || document == null || project == null) {
+    if (uiState.isLoading || project == null) {
         Column(
             modifier = modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -55,15 +63,26 @@ fun ReviewScreen(
         return
     }
 
+    val settings = uiState.settings
+    val useMetric = settings.useMetric
     val calculator = remember { CalculateTakeoffUseCase() }
-    val inputs = remember(project, uiState.project?.takeoffSession) {
-        buildTakeoffInputs(project = project, settings = Settings.DEFAULT)
+    val reviewType = remember(project.takeoffSession.selectedScope) {
+        project.takeoffSession.selectedScope.toTakeoffType()
+    }
+    val document = remember(project, reviewType) {
+        projectBlueprintForType(project = project, type = reviewType)
+    }
+    val inputs = remember(project, settings, uiState.project?.takeoffSession) {
+        buildTakeoffInputs(project = project, settings = settings)
     }
     val drywall = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.DRYWALL, inputs = inputs)
     }
     val concrete = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.CONCRETE, inputs = inputs)
+    }
+    val gravel = remember(project, inputs) {
+        calculator.calculateForType(project = project, type = TakeoffType.GRAVEL_MULCH, inputs = inputs)
     }
     val paint = remember(project, inputs) {
         calculator.calculateForType(project = project, type = TakeoffType.PAINT, inputs = inputs)
@@ -72,28 +91,33 @@ fun ReviewScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Review", style = MaterialTheme.typography.titleLarge)
-                    Text("Blueprint-derived quantities by room, wall, and opening IDs.")
-                    Text("Project: ${uiState.project?.name.orEmpty()}", fontWeight = FontWeight.SemiBold)
-                }
-            }
+            WorkspacePageHeaderCard(
+                title = "Review",
+                subtitle = "Current scope geometry with trade-specific quantity traces for ${uiState.project?.name.orEmpty()}.",
+                eyebrow = reviewType.displayLabel
+            )
         }
 
         item {
-            Text("Rooms", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Rooms",
+                detail = "Area, perimeter, and room-level tags for the active trade scope."
+            )
         }
         items(document.rooms, key = { it.id }) { room ->
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${room.name} (${room.id})", fontWeight = FontWeight.SemiBold)
-                    Text("Area: ${"%.1f".format(room.areaSqFt())} sq ft")
-                    Text("Perimeter: ${"%.1f".format(room.perimeterFeet())} ft")
+                    Text("Area: ${Formatters.formatArea(room.areaSqFt(), useMetric)}")
+                    Text("Perimeter: ${Formatters.formatLength(room.perimeterFeet(), useMetric)}")
                     if (room.tags.isNotEmpty()) {
                         Text("Tags: ${room.tags.joinToString()}")
                     }
@@ -102,44 +126,67 @@ fun ReviewScreen(
         }
 
         item {
-            Text("Walls", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Walls",
+                detail = "Net wall geometry after openings are deducted from the measured surface."
+            )
         }
         items(document.walls, key = { it.id }) { wall ->
             val openingArea = document.openings
                 .filter { it.wallId == wall.id }
                 .sumOf { Millimeters(it.widthMm).toFeet() * Millimeters(it.heightMm).toFeet() }
             val wallArea = Millimeters(wall.lengthMillimeters()).toFeet() * Millimeters(wall.heightMm).toFeet()
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Wall ${wall.id}", fontWeight = FontWeight.SemiBold)
-                    Text("Length: ${"%.2f".format(Millimeters(wall.lengthMillimeters()).toFeet())} ft")
-                    Text("Height: ${"%.2f".format(Millimeters(wall.heightMm).toFeet())} ft")
-                    Text("Area: ${"%.1f".format((wallArea - openingArea).coerceAtLeast(0.0))} sq ft (net)")
+                    Text("Length: ${Formatters.formatLength(Millimeters(wall.lengthMillimeters()), useMetric)}")
+                    Text("Height: ${Formatters.formatLength(Millimeters(wall.heightMm), useMetric)}")
+                    Text("Area: ${Formatters.formatArea((wallArea - openingArea).coerceAtLeast(0.0), useMetric)} (net)")
                 }
             }
         }
 
         item {
-            Text("Openings", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Openings",
+                detail = "Door, window, and stair placements linked to each measured wall."
+            )
         }
         items(document.openings, key = { it.id }) { opening ->
-            Card {
+            Card(
+                colors = appCardColors(),
+                border = appCardBorder(),
+                elevation = appCardElevation()
+            ) {
                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${opening.type.name} ${opening.id}", fontWeight = FontWeight.SemiBold)
                     Text("Wall ID: ${opening.wallId} @ t=${"%.2f".format(opening.t)}")
-                    Text("Size: ${"%.2f".format(Millimeters(opening.widthMm).toFeet())}ft × ${"%.2f".format(Millimeters(opening.heightMm).toFeet())}ft")
+                    Text(
+                        "Size: ${Formatters.formatLength(Millimeters(opening.widthMm), useMetric)} × " +
+                            Formatters.formatLength(Millimeters(opening.heightMm), useMetric)
+                    )
                 }
             }
         }
 
         item {
-            Text("Trade Breakdown", style = MaterialTheme.typography.titleMedium)
+            WorkspaceSectionHeading(
+                title = "Trade Breakdown",
+                detail = "Calculated quantities and trace references for every supported trade."
+            )
         }
         item {
             ReviewTradeCard("Drywall", drywall)
         }
         item {
             ReviewTradeCard("Concrete", concrete)
+        }
+        item {
+            ReviewTradeCard("Gravel / Mulch", gravel)
         }
         item {
             ReviewTradeCard("Paint", paint)
@@ -152,7 +199,14 @@ private fun ReviewTradeCard(
     label: String,
     result: com.tradesketch.estimator.domain.model.TakeoffResult
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(
+        colors = appCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+        ),
+        elevation = appCardElevation()
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             result.items.forEach { item ->

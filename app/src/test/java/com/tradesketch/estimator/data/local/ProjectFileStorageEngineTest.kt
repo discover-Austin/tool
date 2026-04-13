@@ -1,7 +1,11 @@
 package com.tradesketch.estimator.data.local
 
+import com.google.gson.Gson
 import com.tradesketch.estimator.domain.model.BlueprintDocument
+import com.tradesketch.estimator.domain.model.ManualTakeoffSessionParams
 import com.tradesketch.estimator.domain.model.Project
+import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.runBlocking
@@ -124,6 +128,72 @@ class ProjectFileStorageEngineTest {
                 ?.firstOrNull { it.name.startsWith("empty.bad.") && it.name.endsWith(".json") }
             assertNotNull(quarantined)
             assertTrue(quarantined.exists())
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun loadAllProjects_resetsBlueprintSession_whenBlueprintPayloadIsMissing() = runBlocking {
+        val tempRoot = createTempDirectory(prefix = "project-file-store-reset-session-test-").toFile()
+        try {
+            val projectsDir = File(tempRoot, "projects").apply { mkdirs() }
+            val storage = ProjectFileStorageEngine(rootDir = projectsDir)
+            val gson = Gson()
+            val staleSession = ProjectTakeoffSession(
+                inputMode = TakeoffInputMode.BLUEPRINT,
+                manual = ManualTakeoffSessionParams(drywallWallAreaSqFt = 125.0)
+            )
+            File(projectsDir, "legacy-blueprint.json").writeText(
+                """
+                {
+                  "id": "legacy-blueprint",
+                  "name": "Legacy Blueprint",
+                  "createdAt": 1,
+                  "updatedAt": 2,
+                  "takeoffSession": ${gson.toJson(staleSession)}
+                }
+                """.trimIndent()
+            )
+
+            val loaded = storage.loadAllProjects()
+
+            assertEquals(1, loaded.size)
+            assertEquals(ProjectTakeoffSession(), loaded.single().takeoffSession)
+            assertEquals(BlueprintDocument.empty("legacy-blueprint"), loaded.single().blueprintDocument)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun loadAllProjects_preservesManualSession_whenBlueprintPayloadIsMissing() = runBlocking {
+        val tempRoot = createTempDirectory(prefix = "project-file-store-preserve-manual-test-").toFile()
+        try {
+            val projectsDir = File(tempRoot, "projects").apply { mkdirs() }
+            val storage = ProjectFileStorageEngine(rootDir = projectsDir)
+            val gson = Gson()
+            val manualSession = ProjectTakeoffSession(
+                inputMode = TakeoffInputMode.MANUAL,
+                manual = ManualTakeoffSessionParams(drywallWallAreaSqFt = 125.0)
+            )
+            File(projectsDir, "legacy-manual.json").writeText(
+                """
+                {
+                  "id": "legacy-manual",
+                  "name": "Legacy Manual",
+                  "createdAt": 1,
+                  "updatedAt": 2,
+                  "takeoffSession": ${gson.toJson(manualSession)}
+                }
+                """.trimIndent()
+            )
+
+            val loaded = storage.loadAllProjects()
+
+            assertEquals(1, loaded.size)
+            assertEquals(manualSession, loaded.single().takeoffSession)
+            assertEquals(BlueprintDocument.empty("legacy-manual"), loaded.single().blueprintDocument)
         } finally {
             tempRoot.deleteRecursively()
         }

@@ -128,6 +128,8 @@ import com.tradesketch.estimator.domain.model.WallSegment
 import com.tradesketch.estimator.ui.viewmodel.BlueprintDraftTool
 import com.tradesketch.estimator.ui.viewmodel.BlueprintEditorViewModel
 import com.tradesketch.estimator.ui.viewmodel.SettingsViewModel
+import com.tradesketch.estimator.ui.viewmodel.isCurveDraftTool
+import com.tradesketch.estimator.ui.viewmodel.isMeasuredArcTool
 import com.tradesketch.estimator.utils.DimensionParser
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -143,10 +145,38 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
+private val CORNER_ANGLE_HIGHLIGHT_LENGTH_MM = Millimeters.fromFeet(3.0).value
+private const val CORNER_ANGLE_HIGHLIGHT_GLOW_WIDTH_PX = 12f
+private const val CORNER_ANGLE_HIGHLIGHT_CORE_WIDTH_PX = 4.6f
+private val CIRCLE_GUIDE_RING_COLOR = Color(0xFF6CE8FF)
+private val CIRCLE_GUIDE_CORE_COLOR = Color(0xFFB5FBFF)
+private val CIRCLE_SEGMENT_ACCENT_COLOR = Color(0xFF7EE6F4)
+private val ARC_GUIDE_CHORD_COLOR = Color(0xFF6EE0FF)
+private val ARC_GUIDE_HANDLE_COLOR = Color(0xFFFFC86D)
+private val ARC_GUIDE_CORE_COLOR = Color(0xFFFFF3CC)
+private const val ARC_GUIDE_CHIP_TEXT_SP = 9.2f
+private const val ARC_GUIDE_CHIP_OFFSET_PX = 18f
+private const val CIRCLE_GUIDE_CHIP_TEXT_SP = 9.4f
+private const val CIRCLE_GUIDE_CHIP_OFFSET_PX = 18f
+private val CORNER_ANGLE_BUCKET_COLORS = mapOf(
+    15 to Color(0xFF87F07F),
+    30 to Color(0xFF4FE6C8),
+    45 to Color(0xFF73D9FF),
+    60 to Color(0xFF7FAEFF),
+    75 to Color(0xFFC58FFF),
+    90 to Color(0xFFFFD05E),
+    105 to Color(0xFFFFB06E),
+    120 to Color(0xFFFF9468),
+    135 to Color(0xFFFF84C3),
+    150 to Color(0xFFE88FFF),
+    165 to Color(0xFFFF98C5)
+)
+
 @Composable
 internal fun BlueprintCanvas(
     modifier: Modifier = Modifier,
     document: BlueprintDocument,
+    interactionDocument: BlueprintDocument = document,
     scope: TakeoffScope,
     tool: BlueprintDraftTool,
     snapSettings: BlueprintSnapSettings,
@@ -157,8 +187,14 @@ internal fun BlueprintCanvas(
     boxStart: PointMm?,
     boxPreview: PointMm?,
     boxRotationRadians: Double,
+    curveStart: PointMm?,
+    curveEnd: PointMm?,
+    curvePreviewPoint: PointMm?,
+    circleCenter: PointMm?,
+    circlePreviewEdge: PointMm?,
     selectedWallId: String?,
     selectedOpeningId: String?,
+    selectedMeasuredArc: ArcSelectionInfo?,
     movingWallActive: Boolean,
     cursorVisible: Boolean,
     cursorSizeScale: Float,
@@ -166,6 +202,7 @@ internal fun BlueprintCanvas(
     useMetric: Boolean,
     lineSnappingEnabled: Boolean,
     dragPreview: OpeningDragPreview?,
+    tutorialGuideWalls: List<WallSegment> = emptyList(),
     touchEnabled: Boolean,
     onTouchBlocked: () -> Unit,
     virtualPointerScreenPoint: Offset?,
@@ -181,7 +218,9 @@ internal fun BlueprintCanvas(
     val selectionHighlightActive = selectedWallId != null || selectedOpeningId != null || movingWallActive
     val draftHighlightActive = draftIntersectionActive ||
         (tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null && drawingPreview != null) ||
-        (tool == BlueprintDraftTool.DRAW_BOX && boxStart != null && boxPreview != null)
+        (tool == BlueprintDraftTool.DRAW_BOX && boxStart != null && boxPreview != null) ||
+        (tool.isCurveDraftTool() && curveStart != null && curvePreviewPoint != null) ||
+        (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null)
     val selectionPulse by animateFloatAsState(
         targetValue = if (selectionHighlightActive) 1f else 0f,
         animationSpec = tween(durationMillis = 180),
@@ -284,7 +323,7 @@ internal fun BlueprintCanvas(
                 drawingStart,
                 boxStart,
                 snapSettings,
-                document.walls,
+                interactionDocument.walls,
                 touchEnabled,
                 lineSnappingEnabled
             ) {
@@ -331,7 +370,11 @@ internal fun BlueprintCanvas(
                             draggedDistancePx += hypot(delta.x.toDouble(), delta.y.toDouble()).toFloat()
                         }
                         val aimed = aimedPosition(change.position)
-                        val drawingDraft = tool == BlueprintDraftTool.DRAW_WALL || tool == BlueprintDraftTool.DRAW_BOX
+                        val drawingDraft =
+                            tool == BlueprintDraftTool.DRAW_WALL ||
+                                tool == BlueprintDraftTool.DRAW_BOX ||
+                                tool.isCurveDraftTool() ||
+                                tool == BlueprintDraftTool.DRAW_CIRCLE
                         drawWallPointerScreenPoint = if (drawingDraft && change.pressed) {
                             drawWallPointerHideAtMs = null
                             aimed
@@ -348,7 +391,7 @@ internal fun BlueprintCanvas(
                                 closureEnabled = false
                             )
                         }
-                        val effectiveSnapWalls = if (lineSnappingEnabled) document.walls else emptyList()
+                        val effectiveSnapWalls = if (lineSnappingEnabled) interactionDocument.walls else emptyList()
                         val snappedWorld = BlueprintSnapMath.applySnapping(
                             rawPoint = rawWorld,
                             drawingStart = drawingStart,
@@ -492,9 +535,34 @@ internal fun BlueprintCanvas(
         } else {
             emptyList()
         }
-        val wallsWithPreview = document.walls + listOfNotNull(previewWall) + previewBoxWalls
+        val previewArcWalls = if (tool.isCurveDraftTool() && curveStart != null && curvePreviewPoint != null) {
+            if (tool.isMeasuredArcTool()) {
+                buildMeasuredArcPreviewWalls(
+                    start = curveStart,
+                    end = curveEnd,
+                    previewPoint = curvePreviewPoint
+                )
+            } else {
+                buildDraftArcPreviewWalls(
+                    start = curveStart,
+                    end = curveEnd,
+                    previewPoint = curvePreviewPoint
+                )
+            }
+        } else {
+            emptyList()
+        }
+        val previewCircleWalls = if (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null) {
+            buildDraftCirclePreviewWalls(
+                center = circleCenter,
+                edge = circlePreviewEdge
+            )
+        } else {
+            emptyList()
+        }
+        val wallsForAngleHints = interactionDocument.walls + listOfNotNull(previewWall) + previewBoxWalls
         val cornerAngleHints = collectCornerAngleHints(
-            walls = wallsWithPreview,
+            walls = wallsForAngleHints,
             highlightedWallId = previewWall?.id ?: previewBoxWalls.firstOrNull()?.id
         )
         val rightAngleCandidates = mutableListOf<RightAngleHint>()
@@ -512,14 +580,68 @@ internal fun BlueprintCanvas(
             }
         }
         val rightAngleHints = collapseRightAngleHints(rightAngleCandidates)
-        val scopeWallColor = scope.wallColor()
-        val wallLengthLabels = mutableListOf<WallLengthLabelSpec>()
-        document.walls.forEach { wall ->
+        val roomWallsById = document.walls.associateBy { it.id }
+        document.rooms
+            .sortedBy { room ->
+                val roomScope = resolveVisibleRoomTradeScope(
+                    room = room,
+                    wallsById = roomWallsById,
+                    activeScope = scope
+                )
+                if (roomScope == scope) 1 else 0
+            }
+            .forEach { room ->
+            val roomScope = resolveVisibleRoomTradeScope(
+                room = room,
+                wallsById = roomWallsById,
+                activeScope = scope
+            ) ?: return@forEach
+            val roomStyle = roomScope.roomFillStyle(active = roomScope == scope) ?: return@forEach
+            drawTradeRoomSurface(
+                polygon = room.polygon.map(::worldToScreen),
+                style = roomStyle
+            )
+        }
+        tutorialGuideWalls.forEach { wall ->
+            drawStyledWallSegment(
+                start = worldToScreen(wall.start),
+                end = worldToScreen(wall.end),
+                color = OPENING_PREVIEW_WINDOW_COLOR.copy(alpha = 0.68f),
+                strokeWidth = 3.6f,
+                roundedCaps = false,
+                selected = false,
+                pulse = 0f
+            )
+        }
+        val wallLengthLabels = collectCommittedWallLengthLabels(
+            document = interactionDocument,
+            selectedWallId = selectedWallId,
+            worldToScreen = ::worldToScreen
+        ).toMutableList()
+        document.walls
+            .sortedBy { wall -> if (wall.visualTradeScope() == scope || wall.visualTradeScope() == null) 1 else 0 }
+            .forEach { wall ->
             val isSelected = wall.id == selectedWallId
-            val wallColor = wall.scopeFromTag()?.wallColor() ?: scopeWallColor
-            val color = if (isSelected) GEOMETRY_SELECTION_COLOR else wallColor
+            val wallStyle = if (isSelected) {
+                null
+            } else {
+                resolveWallDisplayStyle(
+                    wall = wall,
+                    activeScope = scope
+                )
+            }
+            val color = if (isSelected) {
+                GEOMETRY_SELECTION_COLOR
+            } else {
+                wallStyle?.baseColor ?: resolveWallDisplayColor(
+                    wall = wall,
+                    activeScope = scope
+                )
+            }
             val parallelMatch = wallHasParallelLengthMatch(wall, document.walls)
-            val strokeWidth = if (isSelected) 6.4f else if (parallelMatch) 5.2f else 4.4f
+            val isCircleSegment = wall.tags.contains(CURVE_SHAPE_CIRCLE_TAG)
+            val isCurveSegment = wall.curveGroupTag() != null
+            val strokeWidth = if (isSelected) 8.2f else if (parallelMatch) 6.8f else 5.8f
             val wallStartScreen = worldToScreen(wall.start)
             val wallEndScreen = worldToScreen(wall.end)
             drawStyledWallSegment(
@@ -527,15 +649,19 @@ internal fun BlueprintCanvas(
                 end = wallEndScreen,
                 color = color,
                 strokeWidth = strokeWidth,
+                roundedCaps = isCurveSegment,
                 selected = isSelected,
-                pulse = selectionPulse
+                pulse = selectionPulse,
+                accentPattern = wallStyle?.pattern,
+                accentColor = wallStyle?.accentColor ?: Color.Transparent
             )
-            wallLengthLabels += WallLengthLabelSpec(
-                start = wallStartScreen,
-                end = wallEndScreen,
-                lengthFeet = Millimeters(wall.lengthMillimeters()).toFeet(),
-                color = if (isSelected) WALL_LABEL_ACTIVE_COLOR else WALL_LABEL_NEUTRAL_COLOR
-            )
+            if (isCircleSegment) {
+                drawCircleWallAccent(
+                    start = wallStartScreen,
+                    end = wallEndScreen,
+                    selected = isSelected
+                )
+            }
         }
         if (BuildConfig.DEBUG) {
             val elapsedMs = (SystemClock.elapsedRealtimeNanos() - precomputeStartNs) / 1_000_000.0
@@ -546,7 +672,12 @@ internal fun BlueprintCanvas(
                 )
             }
         }
-        document.openings.forEach { opening ->
+        document.openings
+            .sortedBy { opening ->
+                val openingScope = document.walls.firstOrNull { wall -> wall.id == opening.wallId }?.visualTradeScope()
+                if (openingScope == scope || openingScope == null) 1 else 0
+            }
+            .forEach { opening ->
             val wall = document.walls.firstOrNull { it.id == opening.wallId } ?: return@forEach
             val isSelected = opening.id == selectedOpeningId
             val color = if (isSelected) {
@@ -609,15 +740,16 @@ internal fun BlueprintCanvas(
             drawStyledWallSegment(
                 start = draftStart,
                 end = draftEnd,
-                color = DRAFT_WALL_COLOR,
-                strokeWidth = if (previewParallelMatch) 5.6f else 4.8f,
+                color = scope.wallColor(),
+                strokeWidth = if (previewParallelMatch) 6.8f else 5.8f,
+                roundedCaps = false,
                 selected = true,
                 pulse = snapPulse
             )
             wallLengthLabels += WallLengthLabelSpec(
                 start = draftStart,
                 end = draftEnd,
-                lengthFeet = Millimeters(BlueprintSnapMath.distanceMillimeters(drawingStart, drawingPreview)).toFeet(),
+                lengthMm = BlueprintSnapMath.distanceMillimeters(drawingStart, drawingPreview),
                 color = WALL_LABEL_ACTIVE_COLOR
             )
         }
@@ -628,8 +760,9 @@ internal fun BlueprintCanvas(
                 drawStyledWallSegment(
                     start = draftStart,
                     end = draftEnd,
-                    color = DRAFT_WALL_COLOR,
-                    strokeWidth = 4.8f,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.8f,
+                    roundedCaps = false,
                     selected = true,
                     pulse = snapPulse
                 )
@@ -637,11 +770,61 @@ internal fun BlueprintCanvas(
                     wallLengthLabels += WallLengthLabelSpec(
                         start = draftStart,
                         end = draftEnd,
-                        lengthFeet = Millimeters(wall.lengthMillimeters()).toFeet(),
+                        lengthMm = wall.lengthMillimeters(),
                         color = WALL_LABEL_ACTIVE_COLOR
                     )
                 }
             }
+        }
+        if (tool.isCurveDraftTool() && previewArcWalls.isNotEmpty()) {
+            previewArcWalls.forEach { wall ->
+                val draftStart = worldToScreen(wall.start)
+                val draftEnd = worldToScreen(wall.end)
+                drawStyledWallSegment(
+                    start = draftStart,
+                    end = draftEnd,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.8f,
+                    roundedCaps = true,
+                    selected = true,
+                    pulse = snapPulse
+                )
+            }
+            if (curveStart != null && curveEnd == null && curvePreviewPoint != null) {
+                wallLengthLabels += WallLengthLabelSpec(
+                    start = worldToScreen(curveStart),
+                    end = worldToScreen(curvePreviewPoint),
+                    lengthMm = BlueprintSnapMath.distanceMillimeters(curveStart, curvePreviewPoint),
+                    color = WALL_LABEL_ACTIVE_COLOR
+                )
+            }
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && previewCircleWalls.isNotEmpty()) {
+            previewCircleWalls.forEach { wall ->
+                val draftStart = worldToScreen(wall.start)
+                val draftEnd = worldToScreen(wall.end)
+                drawStyledWallSegment(
+                    start = draftStart,
+                    end = draftEnd,
+                    color = scope.wallColor(),
+                    strokeWidth = 5.6f,
+                    roundedCaps = true,
+                    selected = true,
+                    pulse = snapPulse
+                )
+                drawCircleWallAccent(
+                    start = draftStart,
+                    end = draftEnd,
+                    selected = true,
+                    accentAlpha = 0.42f + (0.18f * snapPulse)
+                )
+            }
+        }
+        cornerAngleHints.forEach { hint ->
+            drawCornerAngleLegHighlight(
+                hint = hint,
+                worldToScreen = ::worldToScreen
+            )
         }
         rightAngleHints.forEach { hint ->
             drawRightAngleHint(
@@ -657,18 +840,64 @@ internal fun BlueprintCanvas(
                 scale = scale
             )
         }
+        if (tool.isCurveDraftTool() && curveStart != null && curveEnd != null && curvePreviewPoint != null) {
+            if (tool.isMeasuredArcTool()) {
+                drawMeasuredArcDraftGuide(
+                    start = curveStart,
+                    end = curveEnd,
+                    control = curvePreviewPoint,
+                    worldToScreen = ::worldToScreen,
+                    useMetric = useMetric,
+                    pulse = snapPulse
+                )
+            } else {
+                drawArcDraftGuide(
+                    start = curveStart,
+                    end = curveEnd,
+                    control = curvePreviewPoint,
+                    worldToScreen = ::worldToScreen,
+                    useMetric = useMetric,
+                    pulse = snapPulse
+                )
+            }
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null && circlePreviewEdge != null) {
+            drawCircleDraftGuide(
+                center = circleCenter,
+                edge = circlePreviewEdge,
+                worldToScreen = ::worldToScreen,
+                useMetric = useMetric,
+                pulse = snapPulse
+            )
+        }
+        selectedMeasuredArc?.let { selection ->
+            drawMeasuredArcSelectionGuide(
+                selection = selection,
+                worldToScreen = ::worldToScreen,
+                useMetric = useMetric,
+                pulse = selectionPulse
+            )
+        }
         wallLengthLabels.forEach { label ->
             drawWallLengthLabel(
                 start = label.start,
                 end = label.end,
-                lengthFeet = label.lengthFeet,
+                lengthMm = label.lengthMm,
                 useMetric = useMetric,
-                color = label.color
+                color = label.color,
+                prefix = label.prefix,
+                repeatCount = label.repeatCount,
+                groupedMarkers = label.groupedMarkers
             )
         }
         val pointer = if (virtualPointerScreenPoint != null) {
             virtualPointerScreenPoint
-        } else if (tool == BlueprintDraftTool.DRAW_WALL || tool == BlueprintDraftTool.DRAW_BOX) {
+        } else if (
+            tool == BlueprintDraftTool.DRAW_WALL ||
+            tool == BlueprintDraftTool.DRAW_BOX ||
+            tool.isCurveDraftTool() ||
+            tool == BlueprintDraftTool.DRAW_CIRCLE
+        ) {
             drawWallPointerScreenPoint
         } else {
             null
@@ -711,6 +940,24 @@ internal fun BlueprintCanvas(
                 maxRadius = 28f
             )
         }
+        if (tool.isCurveDraftTool() && curvePreviewPoint != null) {
+            drawPrecisionPulse(
+                center = worldToScreen(curvePreviewPoint),
+                progress = snapPulse,
+                color = GEOMETRY_SNAP_PULSE,
+                baseRadius = 11f,
+                maxRadius = 28f
+            )
+        }
+        if (tool == BlueprintDraftTool.DRAW_CIRCLE && circlePreviewEdge != null) {
+            drawPrecisionPulse(
+                center = worldToScreen(circlePreviewEdge),
+                progress = snapPulse,
+                color = GEOMETRY_SNAP_PULSE,
+                baseRadius = 11f,
+                maxRadius = 28f
+            )
+        }
         if (selectedWallId != null || movingWallActive) {
             pointer?.let { currentPointer ->
                 drawPrecisionPulse(
@@ -726,6 +973,8 @@ internal fun BlueprintCanvas(
             movingWallActive -> CursorGlyph.GRAB
             tool == BlueprintDraftTool.DRAW_WALL && drawingStart != null -> CursorGlyph.PENCIL
             tool == BlueprintDraftTool.DRAW_BOX && boxStart != null -> CursorGlyph.PENCIL
+            tool.isCurveDraftTool() && curveStart != null -> CursorGlyph.PENCIL
+            tool == BlueprintDraftTool.DRAW_CIRCLE && circleCenter != null -> CursorGlyph.PENCIL
             selectedWallId != null -> CursorGlyph.HAND_POINTER
             else -> CursorGlyph.ARROW
         }
@@ -844,13 +1093,115 @@ internal fun DrawScope.drawBlueprintTexturePattern() {
     }
 }
 
+internal fun DrawScope.drawTradeRoomSurface(
+    polygon: List<Offset>,
+    style: BlueprintRoomFillStyle
+) {
+    if (polygon.size < 3) return
+    val path = Path().apply {
+        moveTo(polygon.first().x, polygon.first().y)
+        polygon.drop(1).forEach { point ->
+            lineTo(point.x, point.y)
+        }
+        close()
+    }
+    val minX = polygon.minOf { it.x }
+    val minY = polygon.minOf { it.y }
+    val maxX = polygon.maxOf { it.x }
+    val maxY = polygon.maxOf { it.y }
+
+    drawPath(
+        path = path,
+        color = style.fillColor
+    )
+    when (style.pattern) {
+        BlueprintRoomFillPattern.CONCRETE_HATCH -> drawConcreteRoomPattern(
+            path = path,
+            minX = minX,
+            minY = minY,
+            maxX = maxX,
+            maxY = maxY,
+            color = style.patternColor
+        )
+        BlueprintRoomFillPattern.GRAVEL_PEBBLES -> drawGravelRoomPattern(
+            path = path,
+            minX = minX,
+            minY = minY,
+            maxX = maxX,
+            maxY = maxY,
+            color = style.patternColor
+        )
+    }
+    drawPath(
+        path = path,
+        color = style.outlineColor,
+        style = Stroke(width = 1.8f)
+    )
+}
+
+internal fun DrawScope.drawConcreteRoomPattern(
+    path: Path,
+    minX: Float,
+    minY: Float,
+    maxX: Float,
+    maxY: Float,
+    color: Color
+) {
+    val roomHeight = (maxY - minY).coerceAtLeast(1f)
+    clipPath(path) {
+        var x = minX - roomHeight
+        while (x <= maxX + roomHeight) {
+            drawLine(
+                color = color,
+                start = Offset(x, minY - 6f),
+                end = Offset(x + roomHeight + 12f, maxY + 6f),
+                strokeWidth = 1.1f
+            )
+            x += 24f
+        }
+    }
+}
+
+internal fun DrawScope.drawGravelRoomPattern(
+    path: Path,
+    minX: Float,
+    minY: Float,
+    maxX: Float,
+    maxY: Float,
+    color: Color
+) {
+    clipPath(path) {
+        var row = 0
+        var y = minY - 8f
+        while (y <= maxY + 8f) {
+            var column = 0
+            var x = minX - 10f + if (row % 2 == 0) 0f else 11f
+            while (x <= maxX + 10f) {
+                val largePebble = (row + column) % 3 == 0
+                drawCircle(
+                    color = if (largePebble) color else color.copy(alpha = color.alpha * 0.8f),
+                    radius = if (largePebble) 2.2f else 1.45f,
+                    center = Offset(x, y)
+                )
+                x += 20f
+                column += 1
+            }
+            y += 18f
+            row += 1
+        }
+    }
+}
+
 internal fun DrawScope.drawStyledWallSegment(
     start: Offset,
     end: Offset,
     color: Color,
     strokeWidth: Float,
+    roundedCaps: Boolean,
     selected: Boolean,
-    pulse: Float
+    pulse: Float,
+    accentPattern: BlueprintWallAccentPattern? = null,
+    accentColor: Color = Color.Transparent
 ) {
     val dx = end.x - start.x
     val dy = end.y - start.y
@@ -860,41 +1211,42 @@ internal fun DrawScope.drawStyledWallSegment(
     val shadowOffset = Offset(nx * 1.5f, ny * 1.5f)
     val highlightOffset = Offset(-nx * 0.8f, -ny * 0.8f)
     val pulseBoost = if (selected) (1.4f * pulse) else 0f
+    val strokeCap = if (roundedCaps) StrokeCap.Round else StrokeCap.Square
 
     drawLine(
         color = GEOMETRY_DEPTH_SHADOW,
         start = start + shadowOffset,
         end = end + shadowOffset,
         strokeWidth = strokeWidth + 4.6f + pulseBoost,
-        cap = StrokeCap.Square
+        cap = strokeCap
     )
     drawLine(
         color = GEOMETRY_HALO_COLOR,
         start = start,
         end = end,
         strokeWidth = strokeWidth + 3.2f + (pulseBoost * 0.45f),
-        cap = StrokeCap.Square
+        cap = strokeCap
     )
     drawLine(
         color = color,
         start = start,
         end = end,
         strokeWidth = strokeWidth + (pulseBoost * 0.2f),
-        cap = StrokeCap.Square
+        cap = strokeCap
     )
     drawLine(
         color = GEOMETRY_DEPTH_HIGHLIGHT.copy(alpha = if (selected) 0.82f else 0.42f),
         start = start + highlightOffset,
         end = end + highlightOffset,
         strokeWidth = (strokeWidth * 0.34f).coerceAtLeast(1.15f),
-        cap = StrokeCap.Square
+        cap = strokeCap
     )
     drawLine(
         color = GEOMETRY_CORE_HIGHLIGHT.copy(alpha = if (selected) 0.84f else 0.56f),
         start = start,
         end = end,
         strokeWidth = (strokeWidth * 0.22f).coerceAtLeast(1.25f),
-        cap = StrokeCap.Square
+        cap = strokeCap
     )
     if (selected) {
         drawLine(
@@ -902,8 +1254,110 @@ internal fun DrawScope.drawStyledWallSegment(
             start = start,
             end = end,
             strokeWidth = strokeWidth + 5.2f + (pulseBoost * 0.6f),
-            cap = StrokeCap.Square
+            cap = strokeCap
         )
+    }
+    if (!selected && accentPattern != null && accentColor.alpha > 0f) {
+        drawTradeWallAccent(
+            start = start,
+            end = end,
+            nx = nx,
+            ny = ny,
+            magnitude = magnitude,
+            color = accentColor,
+            pattern = accentPattern,
+            strokeCap = strokeCap
+        )
+    }
+}
+
+private fun DrawScope.drawTradeWallAccent(
+    start: Offset,
+    end: Offset,
+    nx: Float,
+    ny: Float,
+    magnitude: Float,
+    color: Color,
+    pattern: BlueprintWallAccentPattern,
+    strokeCap: StrokeCap
+) {
+    val ux = (end.x - start.x) / magnitude
+    val uy = (end.y - start.y) / magnitude
+    when (pattern) {
+        BlueprintWallAccentPattern.DRYWALL_PARALLEL -> {
+            val offset = Offset(-nx * 2.9f, -ny * 2.9f)
+            drawLine(
+                color = color,
+                start = start + offset,
+                end = end + offset,
+                strokeWidth = 1.6f,
+                cap = strokeCap
+            )
+        }
+
+        BlueprintWallAccentPattern.CONCRETE_TICKS -> {
+            val spacing = 26f
+            val tickHalf = 3.2f
+            val usableLength = (magnitude - (spacing * 0.8f)).coerceAtLeast(0f)
+            val tickCount = (usableLength / spacing).toInt().coerceAtLeast(1)
+            repeat(tickCount) { index ->
+                val t = (index + 1f) / (tickCount + 1f)
+                val anchor = Offset(
+                    x = start.x + (ux * magnitude * t),
+                    y = start.y + (uy * magnitude * t)
+                )
+                val tickOffset = Offset(nx * tickHalf, ny * tickHalf)
+                drawLine(
+                    color = color,
+                    start = anchor - tickOffset,
+                    end = anchor + tickOffset,
+                    strokeWidth = 1.7f,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+
+        BlueprintWallAccentPattern.GRAVEL_PEBBLES -> {
+            val spacing = 20f
+            val pebbleCount = ((magnitude - 10f) / spacing).toInt().coerceAtLeast(1)
+            repeat(pebbleCount) { index ->
+                val t = (index + 1f) / (pebbleCount + 1f)
+                val lateral = if (index % 2 == 0) 2.5f else -2.5f
+                val center = Offset(
+                    x = start.x + (ux * magnitude * t) + (nx * lateral),
+                    y = start.y + (uy * magnitude * t) + (ny * lateral)
+                )
+                drawCircle(
+                    color = color,
+                    radius = if (index % 3 == 0) 1.85f else 1.5f,
+                    center = center
+                )
+            }
+        }
+
+        BlueprintWallAccentPattern.PAINT_DASH -> {
+            val dashLength = 8f
+            val gapLength = 7f
+            var distance = 8f
+            while (distance < magnitude - 6f) {
+                val dashStart = Offset(
+                    x = start.x + (ux * distance) + (nx * 1.8f),
+                    y = start.y + (uy * distance) + (ny * 1.8f)
+                )
+                val dashEnd = Offset(
+                    x = start.x + (ux * (distance + dashLength).coerceAtMost(magnitude - 4f)) + (nx * 1.8f),
+                    y = start.y + (uy * (distance + dashLength).coerceAtMost(magnitude - 4f)) + (ny * 1.8f)
+                )
+                drawLine(
+                    color = color,
+                    start = dashStart,
+                    end = dashEnd,
+                    strokeWidth = 1.55f,
+                    cap = StrokeCap.Round
+                )
+                distance += dashLength + gapLength
+            }
+        }
     }
 }
 
@@ -1274,35 +1728,46 @@ internal fun DrawScope.drawCursorAnchorBlip(
     highlighted: Boolean
 ) {
     val clampedScale = sizeScale.coerceIn(0.75f, 2.1f)
-    val glowRadius = 13f * clampedScale
-    val ringRadius = 5.1f * clampedScale
-    val dotRadius = 2.35f * clampedScale
+    val glowRadius = 17.5f * clampedScale
+    val ringRadius = 6.4f * clampedScale
+    val dotRadius = 2.85f * clampedScale
     val glowColor = if (highlighted) {
-        Color(0x66FFE27A)
+        Color(0x86FFE27A)
     } else {
-        Color(0x3E7EB1D8)
+        Color(0x7272D7FF)
     }
     val ringColor = if (highlighted) {
         Color(0xFFFFE27A)
     } else {
-        Color(0xFFB9D8F0)
+        Color(0xFF69E7FF)
     }
     val fillColor = if (highlighted) {
         Color(0xFFFFF1CB)
     } else {
-        Color(0xFFF7FBFF)
+        Color(0xFFFFFFFF)
     }
 
+    drawCircle(
+        color = Color(0x8A03101B),
+        radius = glowRadius * 0.82f,
+        center = position + Offset(1.8f * clampedScale, 2.2f * clampedScale)
+    )
     drawCircle(
         color = glowColor,
         radius = glowRadius,
         center = position
     )
     drawCircle(
-        color = ringColor.copy(alpha = if (highlighted) 0.96f else 0.78f),
+        color = Color(0xE8071726),
+        radius = ringRadius + (2.4f * clampedScale),
+        center = position,
+        style = Stroke(width = (2.8f * clampedScale).coerceAtLeast(1.6f))
+    )
+    drawCircle(
+        color = ringColor.copy(alpha = if (highlighted) 0.98f else 0.94f),
         radius = ringRadius,
         center = position,
-        style = Stroke(width = (1.45f * clampedScale).coerceAtLeast(1.1f))
+        style = Stroke(width = (1.9f * clampedScale).coerceAtLeast(1.3f))
     )
     drawCircle(
         color = fillColor,
@@ -1325,12 +1790,27 @@ internal fun DrawScope.drawArrowCursor(position: Offset, sizeScale: Float) {
     }
     drawPath(
         path = pointer,
-        color = Color(0xAA000000),
-        style = Stroke(width = s(2.4f).coerceAtLeast(1.2f))
+        color = Color(0x82020C14),
+        style = Stroke(width = s(7.4f).coerceAtLeast(3.2f))
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xFF6EEBFF),
+        style = Stroke(width = s(5.2f).coerceAtLeast(2.4f))
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xF6020D17),
+        style = Stroke(width = s(3.2f).coerceAtLeast(1.6f))
     )
     drawPath(
         path = pointer,
         color = Color(0xFFF9FCFF)
+    )
+    drawPath(
+        path = pointer,
+        color = Color(0xFF173145),
+        style = Stroke(width = s(1.05f).coerceAtLeast(0.75f))
     )
 }
 
@@ -1617,7 +2097,10 @@ internal fun DrawScope.drawRightAngleHint(
     val legAScreen = worldToScreen(legA)
     val legBScreen = worldToScreen(legB)
     val boxScreen = worldToScreen(boxCorner)
-    val color = if (hint.highlighted) Color(0xFFFFCD86) else Color(0xFF8FD0FF)
+    val color = cornerAngleAccentColor(
+        angleDegrees = 90.0,
+        highlighted = hint.highlighted
+    )
     val stroke = if (hint.highlighted) 2.2f else 1.7f
     drawLine(
         color = color,
@@ -1666,13 +2149,16 @@ internal fun DrawScope.drawCornerAngleLabel(
 ) {
     val labelWorld = labelPointInsideAngle(
         corner = hint.corner,
-        legA = hint.legA,
-        legB = hint.legB,
+        legA = hint.displayLegA,
+        legB = hint.displayLegB,
         scale = scale
     ) ?: return
     val labelScreen = worldToScreen(labelWorld)
     val labelText = formatAngleLabel(hint.angleDegrees)
-    val textColor = if (hint.highlighted) Color(0xFFFFD08A) else Color(0xFFAFC6DF)
+    val textColor = cornerAngleAccentColor(
+        angleDegrees = hint.angleDegrees,
+        highlighted = hint.highlighted
+    )
     val textSizePx = RIGHT_ANGLE_LABEL_TEXT_SP * density
     drawCircle(
         color = Color(0x43081527),
@@ -1692,6 +2178,586 @@ internal fun DrawScope.drawCornerAngleLabel(
             textSize = textSizePx
         }
         drawText(labelText, labelScreen.x, labelScreen.y + (textSizePx * 0.34f), textPaint)
+    }
+}
+
+internal fun DrawScope.drawCornerAngleLegHighlight(
+    hint: CornerAngleHint,
+    worldToScreen: (PointMm) -> Offset
+) {
+    val legA = unitStepFrom(hint.corner, hint.legA, CORNER_ANGLE_HIGHLIGHT_LENGTH_MM) ?: return
+    val legB = unitStepFrom(hint.corner, hint.legB, CORNER_ANGLE_HIGHLIGHT_LENGTH_MM) ?: return
+    val color = cornerAngleAccentColor(
+        angleDegrees = hint.angleDegrees,
+        highlighted = hint.highlighted
+    )
+    val glowAlpha = if (hint.highlighted) 0.34f else 0.22f
+    val coreAlpha = if (hint.highlighted) 0.96f else 0.74f
+    val cornerScreen = worldToScreen(hint.corner)
+    val legAScreen = worldToScreen(legA)
+    val legBScreen = worldToScreen(legB)
+    listOf(legAScreen, legBScreen).forEach { endpoint ->
+        drawLine(
+            color = color.copy(alpha = glowAlpha),
+            start = cornerScreen,
+            end = endpoint,
+            strokeWidth = CORNER_ANGLE_HIGHLIGHT_GLOW_WIDTH_PX,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = color.copy(alpha = coreAlpha),
+            start = cornerScreen,
+            end = endpoint,
+            strokeWidth = CORNER_ANGLE_HIGHLIGHT_CORE_WIDTH_PX,
+            cap = StrokeCap.Round
+        )
+    }
+    drawCircle(
+        color = color.copy(alpha = if (hint.highlighted) 0.9f else 0.72f),
+        radius = if (hint.highlighted) 4.2f else 3.6f,
+        center = cornerScreen
+    )
+}
+
+internal fun DrawScope.drawCircleWallAccent(
+    start: Offset,
+    end: Offset,
+    selected: Boolean,
+    accentAlpha: Float = if (selected) 0.30f else 0.18f
+) {
+    drawLine(
+        color = CIRCLE_SEGMENT_ACCENT_COLOR.copy(alpha = accentAlpha),
+        start = start,
+        end = end,
+        strokeWidth = if (selected) 8.4f else 6.4f,
+        cap = StrokeCap.Square
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = if (selected) 0.76f else 0.52f),
+        start = start,
+        end = end,
+        strokeWidth = if (selected) 1.8f else 1.4f,
+        cap = StrokeCap.Square
+    )
+}
+
+internal fun DrawScope.drawCircleDraftGuide(
+    center: PointMm,
+    edge: PointMm,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    val radiusMm = BlueprintSnapMath.distanceMillimeters(center, edge)
+    if (radiusMm < 35L) return
+    val centerScreen = worldToScreen(center)
+    val edgeScreen = worldToScreen(edge)
+    val radiusPx = hypot(
+        (edgeScreen.x - centerScreen.x).toDouble(),
+        (edgeScreen.y - centerScreen.y).toDouble()
+    ).toFloat()
+    val dx = edgeScreen.x - centerScreen.x
+    val dy = edgeScreen.y - centerScreen.y
+    val lineMagnitude = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val nx = -dy / lineMagnitude
+    val ny = dx / lineMagnitude
+    val midpoint = Offset(
+        x = (centerScreen.x + edgeScreen.x) / 2f,
+        y = (centerScreen.y + edgeScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = midpoint.x + (nx * CIRCLE_GUIDE_CHIP_OFFSET_PX),
+        y = midpoint.y + (ny * CIRCLE_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = buildString {
+        append("R ")
+        append(formatLengthDisplay(mm = radiusMm, useMetric = useMetric))
+        append(" | D ")
+        append(formatLengthDisplay(mm = radiusMm * 2L, useMetric = useMetric))
+    }
+
+    drawCircle(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.16f + (0.10f * pulse)),
+        radius = radiusPx + (3.6f * pulse),
+        center = centerScreen,
+        style = Stroke(width = 2.2f)
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.30f + (0.18f * pulse)),
+        start = centerScreen,
+        end = edgeScreen,
+        strokeWidth = 8.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.86f),
+        start = centerScreen,
+        end = edgeScreen,
+        strokeWidth = 2.4f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.92f),
+        radius = 4.8f,
+        center = centerScreen
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.84f),
+        radius = 6.4f + pulse,
+        center = centerScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = CIRCLE_GUIDE_CORE_COLOR.copy(alpha = 0.78f),
+        radius = 4.2f,
+        center = edgeScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = CIRCLE_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = CIRCLE_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.56f
+        val padYTop = textSizePx * 0.96f
+        val padYBottom = textSizePx * 0.34f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.56f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xDE071522).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = CIRCLE_GUIDE_RING_COLOR.copy(alpha = 0.86f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0x8C07131F).toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+        }
+        drawText(labelText, labelPoint.x + 0.6f, baselineY + 0.6f, shadowPaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+internal fun DrawScope.drawArcDraftGuide(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    val projection = projectArcDraftControl(
+        start = start,
+        end = end,
+        control = control
+    ) ?: return
+    val measurements = measureArcDraft(
+        start = start,
+        end = end,
+        control = control
+    )
+    if (measurements.spanMm < MIN_DRAW_WALL_LENGTH_MM) return
+    val startScreen = worldToScreen(start)
+    val endScreen = worldToScreen(end)
+    val controlScreen = worldToScreen(control)
+    val axisScreen = worldToScreen(projection.axisPoint)
+    val handleDx = controlScreen.x - axisScreen.x
+    val handleDy = controlScreen.y - axisScreen.y
+    val handleMagnitude = hypot(handleDx.toDouble(), handleDy.toDouble()).toFloat()
+    val chordDx = endScreen.x - startScreen.x
+    val chordDy = endScreen.y - startScreen.y
+    val chordMagnitude = hypot(chordDx.toDouble(), chordDy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val labelNormalX = if (handleMagnitude > 0.001f) {
+        -handleDy / handleMagnitude
+    } else {
+        -chordDy / chordMagnitude
+    }
+    val labelNormalY = if (handleMagnitude > 0.001f) {
+        handleDx / handleMagnitude
+    } else {
+        chordDx / chordMagnitude
+    }
+    val labelAnchor = Offset(
+        x = (axisScreen.x + controlScreen.x) / 2f,
+        y = (axisScreen.y + controlScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = labelAnchor.x + (labelNormalX * ARC_GUIDE_CHIP_OFFSET_PX),
+        y = labelAnchor.y + (labelNormalY * ARC_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = buildString {
+        append("Curve ")
+        append(formatLengthDisplay(mm = measurements.arcLengthMm, useMetric = useMetric))
+        append(" | Span ")
+        append(formatLengthDisplay(mm = measurements.spanMm, useMetric = useMetric))
+        append(" | Bend ")
+        append(formatLengthDisplay(mm = measurements.bendMm, useMetric = useMetric))
+        append(" | Turn ")
+        append(formatAngleLabel(measurements.turnDegrees))
+    }
+
+    drawLine(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.22f + (0.10f * pulse)),
+        start = startScreen,
+        end = endScreen,
+        strokeWidth = 2.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.28f + (0.14f * pulse)),
+        start = axisScreen,
+        end = controlScreen,
+        strokeWidth = 8.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        start = axisScreen,
+        end = controlScreen,
+        strokeWidth = 2.4f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.88f),
+        radius = 3.8f,
+        center = axisScreen
+    )
+    drawCircle(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.9f),
+        radius = 5.8f + pulse,
+        center = controlScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        radius = 4.2f,
+        center = controlScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = ARC_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.56f
+        val padYTop = textSizePx * 0.96f
+        val padYBottom = textSizePx * 0.34f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.56f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xDE201106).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.84f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0x8C120A05).toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+        }
+        drawText(labelText, labelPoint.x + 0.6f, baselineY + 0.6f, shadowPaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+internal fun DrawScope.drawMeasuredArcDraftGuide(
+    start: PointMm,
+    end: PointMm,
+    control: PointMm,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    val riseMm = measuredArcRiseFromControl(
+        start = start,
+        end = end,
+        control = control
+    )
+    val geometry = measureMeasuredArcGeometry(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    ) ?: return
+    val measurements = measureMeasuredArcDraft(
+        start = start,
+        end = end,
+        riseMm = riseMm
+    )
+    if (measurements.chordMm < MIN_DRAW_WALL_LENGTH_MM) return
+    val startScreen = worldToScreen(start)
+    val endScreen = worldToScreen(end)
+    val midpointScreen = worldToScreen(geometry.midpoint)
+    val arcMidpointScreen = worldToScreen(geometry.arcMidpoint)
+    val handleDx = arcMidpointScreen.x - midpointScreen.x
+    val handleDy = arcMidpointScreen.y - midpointScreen.y
+    val handleMagnitude = hypot(handleDx.toDouble(), handleDy.toDouble()).toFloat()
+    val chordDx = endScreen.x - startScreen.x
+    val chordDy = endScreen.y - startScreen.y
+    val chordMagnitude = hypot(chordDx.toDouble(), chordDy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val labelNormalX = if (handleMagnitude > 0.001f) {
+        -handleDy / handleMagnitude
+    } else {
+        -chordDy / chordMagnitude
+    }
+    val labelNormalY = if (handleMagnitude > 0.001f) {
+        handleDx / handleMagnitude
+    } else {
+        chordDx / chordMagnitude
+    }
+    val labelAnchor = Offset(
+        x = (midpointScreen.x + arcMidpointScreen.x) / 2f,
+        y = (midpointScreen.y + arcMidpointScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = labelAnchor.x + (labelNormalX * ARC_GUIDE_CHIP_OFFSET_PX),
+        y = labelAnchor.y + (labelNormalY * ARC_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = buildString {
+        append("Arc ")
+        append(formatLengthDisplay(mm = measurements.arcLengthMm, useMetric = useMetric))
+        append(" | Chord ")
+        append(formatLengthDisplay(mm = measurements.chordMm, useMetric = useMetric))
+        append(" | Rise ")
+        append(formatSignedLengthDisplay(mm = measurements.riseMm, useMetric = useMetric))
+        append(" | Radius ")
+        append(formatLengthDisplay(mm = measurements.radiusMm, useMetric = useMetric))
+        append(" | Sweep ")
+        append(formatAngleLabel(measurements.sweepDegrees))
+    }
+
+    drawLine(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.22f + (0.10f * pulse)),
+        start = startScreen,
+        end = endScreen,
+        strokeWidth = 2.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.28f + (0.14f * pulse)),
+        start = midpointScreen,
+        end = arcMidpointScreen,
+        strokeWidth = 8.2f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        start = midpointScreen,
+        end = arcMidpointScreen,
+        strokeWidth = 2.4f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.88f),
+        radius = 3.8f,
+        center = midpointScreen
+    )
+    drawCircle(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.9f),
+        radius = 5.8f + pulse,
+        center = arcMidpointScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        radius = 4.2f,
+        center = arcMidpointScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = ARC_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.56f
+        val padYTop = textSizePx * 0.96f
+        val padYBottom = textSizePx * 0.34f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.56f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xDE201106).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.84f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.8f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0x8C120A05).toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+        }
+        drawText(labelText, labelPoint.x + 0.6f, baselineY + 0.6f, shadowPaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+internal fun DrawScope.drawMeasuredArcSelectionGuide(
+    selection: ArcSelectionInfo,
+    worldToScreen: (PointMm) -> Offset,
+    useMetric: Boolean,
+    pulse: Float
+) {
+    if (selection.kind != CurveSelectionKind.MEASURED_ARC) return
+    val chordStart = selection.guideChordStart ?: return
+    val chordEnd = selection.guideChordEnd ?: return
+    val chordMidpoint = selection.guideChordMidpoint ?: return
+    val arcMidpoint = selection.guideArcMidpoint ?: return
+    val center = selection.guideCenter ?: return
+    val radiusMm = selection.radiusMm ?: return
+    if (radiusMm <= 0L) return
+
+    val startScreen = worldToScreen(chordStart)
+    val endScreen = worldToScreen(chordEnd)
+    val midpointScreen = worldToScreen(chordMidpoint)
+    val arcMidpointScreen = worldToScreen(arcMidpoint)
+    val centerScreen = worldToScreen(center)
+    val radiusDx = arcMidpointScreen.x - centerScreen.x
+    val radiusDy = arcMidpointScreen.y - centerScreen.y
+    val radiusLengthPx = hypot(radiusDx.toDouble(), radiusDy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val radiusMidpoint = Offset(
+        x = (centerScreen.x + arcMidpointScreen.x) / 2f,
+        y = (centerScreen.y + arcMidpointScreen.y) / 2f
+    )
+    val labelPoint = Offset(
+        x = radiusMidpoint.x + ((-radiusDy / radiusLengthPx) * ARC_GUIDE_CHIP_OFFSET_PX),
+        y = radiusMidpoint.y + ((radiusDx / radiusLengthPx) * ARC_GUIDE_CHIP_OFFSET_PX)
+    )
+    val labelText = "R ${formatLengthDisplay(mm = radiusMm, useMetric = useMetric)}"
+
+    drawLine(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.18f + (0.08f * pulse)),
+        start = startScreen,
+        end = endScreen,
+        strokeWidth = 2.0f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.24f + (0.10f * pulse)),
+        start = centerScreen,
+        end = arcMidpointScreen,
+        strokeWidth = 7.6f,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        start = centerScreen,
+        end = arcMidpointScreen,
+        strokeWidth = 2.2f,
+        cap = StrokeCap.Round
+    )
+    drawCircle(
+        color = ARC_GUIDE_CHORD_COLOR.copy(alpha = 0.84f),
+        radius = 3.6f,
+        center = midpointScreen
+    )
+    drawCircle(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.82f),
+        radius = 5.2f + (pulse * 0.8f),
+        center = centerScreen,
+        style = Stroke(width = 1.8f)
+    )
+    drawCircle(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.9f),
+        radius = 3.4f,
+        center = centerScreen
+    )
+    drawCircle(
+        color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.86f),
+        radius = 5.0f + (pulse * 0.7f),
+        center = arcMidpointScreen,
+        style = Stroke(width = 1.6f)
+    )
+    drawCircle(
+        color = ARC_GUIDE_CORE_COLOR.copy(alpha = 0.92f),
+        radius = 3.6f,
+        center = arcMidpointScreen
+    )
+    drawContext.canvas.nativeCanvas.apply {
+        val textSizePx = ARC_GUIDE_CHIP_TEXT_SP * density
+        val baselineY = labelPoint.y + (textSizePx * 0.34f)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_CORE_COLOR.toArgb()
+            textAlign = Paint.Align.CENTER
+            textSize = textSizePx
+            style = Paint.Style.FILL
+        }
+        val textWidth = fillPaint.measureText(labelText)
+        val padX = textSizePx * 0.48f
+        val padYTop = textSizePx * 0.94f
+        val padYBottom = textSizePx * 0.30f
+        val chipRect = RectF(
+            labelPoint.x - (textWidth / 2f) - padX,
+            baselineY - padYTop,
+            labelPoint.x + (textWidth / 2f) + padX,
+            baselineY + padYBottom
+        )
+        val chipRadius = textSizePx * 0.54f
+        val chipFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xD7180C05).toArgb()
+            style = Paint.Style.FILL
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipFillPaint)
+        val chipStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ARC_GUIDE_HANDLE_COLOR.copy(alpha = 0.82f).toArgb()
+            style = Paint.Style.STROKE
+            strokeWidth = 1.6f
+        }
+        drawRoundRect(chipRect, chipRadius, chipRadius, chipStrokePaint)
+        drawText(labelText, labelPoint.x, baselineY, fillPaint)
+    }
+}
+
+private fun cornerAngleAccentColor(
+    angleDegrees: Double,
+    highlighted: Boolean
+): Color {
+    val snappedBucket = ((angleDegrees / 15.0).roundToInt() * 15).coerceIn(15, 165)
+    val base = CORNER_ANGLE_BUCKET_COLORS[snappedBucket] ?: Color(0xFFAFC6DF)
+    return if (highlighted) {
+        base.copy(alpha = 0.98f)
+    } else {
+        base.copy(alpha = 0.84f)
     }
 }
 
@@ -1717,12 +2783,20 @@ internal fun collectCornerAngleHints(
         val wallA = walls[index]
         for (otherIndex in index + 1 until walls.size) {
             val wallB = walls[otherIndex]
+            if (wallA.sameCurveGroupAs(wallB)) continue
             val shared = sharedCorner(wallA, wallB) ?: continue
-            val angle = cornerAngleDegrees(
+            val rawAngle = cornerAngleDegrees(
                 corner = shared.corner,
                 legA = shared.legA,
                 legB = shared.legB
             )
+            val displaySpec = displayAngleSpec(
+                corner = shared.corner,
+                legA = shared.legA,
+                legB = shared.legB,
+                rawAngleDegrees = rawAngle
+            )
+            val angle = displaySpec.angleDegrees
             if (angle <= 5.0 || angle >= 175.0) continue
             val cornerBucket = "${shared.corner.x / 5L}:${shared.corner.y / 5L}"
             val pairKey = if (wallA.id < wallB.id) {
@@ -1736,7 +2810,9 @@ internal fun collectCornerAngleHints(
                 legA = shared.legA,
                 legB = shared.legB,
                 angleDegrees = angle,
-                highlighted = wallA.id == highlightedWallId || wallB.id == highlightedWallId
+                highlighted = wallA.id == highlightedWallId || wallB.id == highlightedWallId,
+                displayLegA = displaySpec.displayLegA,
+                displayLegB = displaySpec.displayLegB
             )
         }
     }
@@ -1786,6 +2862,12 @@ internal data class SharedCorner(
     val legB: PointMm
 )
 
+internal data class DisplayAngleSpec(
+    val angleDegrees: Double,
+    val displayLegA: PointMm,
+    val displayLegB: PointMm
+)
+
 internal fun sharedCorner(a: WallSegment, b: WallSegment): SharedCorner? {
     fun mid(p: PointMm, q: PointMm): PointMm {
         return PointMm(
@@ -1793,11 +2875,49 @@ internal fun sharedCorner(a: WallSegment, b: WallSegment): SharedCorner? {
             y = ((p.y + q.y) / 2.0).roundToLong()
         )
     }
+    fun legFromCorner(
+        displayCorner: PointMm,
+        sharedPoint: PointMm,
+        wallEndPoint: PointMm
+    ): PointMm {
+        return PointMm(
+            x = displayCorner.x + (wallEndPoint.x - sharedPoint.x),
+            y = displayCorner.y + (wallEndPoint.y - sharedPoint.y)
+        )
+    }
     return when {
-        pointsNear(a.start, b.start) -> SharedCorner(mid(a.start, b.start), a.end, b.end)
-        pointsNear(a.start, b.end) -> SharedCorner(mid(a.start, b.end), a.end, b.start)
-        pointsNear(a.end, b.start) -> SharedCorner(mid(a.end, b.start), a.start, b.end)
-        pointsNear(a.end, b.end) -> SharedCorner(mid(a.end, b.end), a.start, b.start)
+        pointsNear(a.start, b.start) -> {
+            val corner = mid(a.start, b.start)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.start, a.end),
+                legB = legFromCorner(corner, b.start, b.end)
+            )
+        }
+        pointsNear(a.start, b.end) -> {
+            val corner = mid(a.start, b.end)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.start, a.end),
+                legB = legFromCorner(corner, b.end, b.start)
+            )
+        }
+        pointsNear(a.end, b.start) -> {
+            val corner = mid(a.end, b.start)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.end, a.start),
+                legB = legFromCorner(corner, b.start, b.end)
+            )
+        }
+        pointsNear(a.end, b.end) -> {
+            val corner = mid(a.end, b.end)
+            SharedCorner(
+                corner = corner,
+                legA = legFromCorner(corner, a.end, a.start),
+                legB = legFromCorner(corner, b.end, b.start)
+            )
+        }
         else -> null
     }
 }
@@ -1822,9 +2942,40 @@ internal fun cornerAngleDegrees(
     val magA = hypot(ax, ay)
     val magB = hypot(bx, by)
     if (magA <= 0.0001 || magB <= 0.0001) return 180.0
-    val dot = (ax * bx) / (magA * magB)
+    val dot = ((ax * bx) + (ay * by)) / (magA * magB)
+    val clampedDot = dot.coerceIn(-1.0, 1.0)
     val cross = ((ax * by) - (ay * bx)) / (magA * magB)
-    return Math.toDegrees(abs(atan2(cross, dot)))
+    return Math.toDegrees(abs(atan2(cross, clampedDot)))
+}
+
+internal fun displayAngleSpec(
+    corner: PointMm,
+    legA: PointMm,
+    legB: PointMm,
+    rawAngleDegrees: Double
+): DisplayAngleSpec {
+    if (rawAngleDegrees <= 90.0) {
+        return DisplayAngleSpec(
+            angleDegrees = rawAngleDegrees,
+            displayLegA = legA,
+            displayLegB = legB
+        )
+    }
+    return DisplayAngleSpec(
+        angleDegrees = 180.0 - rawAngleDegrees,
+        displayLegA = mirroredLegAcrossCorner(corner, legA),
+        displayLegB = legB
+    )
+}
+
+internal fun mirroredLegAcrossCorner(
+    corner: PointMm,
+    leg: PointMm
+): PointMm {
+    return PointMm(
+        x = corner.x - (leg.x - corner.x),
+        y = corner.y - (leg.y - corner.y)
+    )
 }
 
 internal fun labelPointInsideAngle(
@@ -1903,9 +3054,12 @@ internal fun unitStepFrom(
 internal fun DrawScope.drawWallLengthLabel(
     start: Offset,
     end: Offset,
-    lengthFeet: Double,
+    lengthMm: Long,
     useMetric: Boolean,
-    color: Color
+    color: Color,
+    prefix: String? = null,
+    repeatCount: Int = 1,
+    groupedMarkers: List<WallLengthGroupMarkerSpec> = emptyList()
 ) {
     val dx = end.x - start.x
     val dy = end.y - start.y
@@ -1923,7 +3077,25 @@ internal fun DrawScope.drawWallLengthLabel(
         y = midpoint.y + (ny * WALL_LENGTH_LABEL_OFFSET_PX)
     )
 
-    val text = formatLengthDisplay(feet = lengthFeet, useMetric = useMetric)
+    val text = buildString {
+        if (repeatCount > 1) {
+            append(repeatCount)
+            append('x')
+            append(' ')
+        }
+        prefix?.takeIf { it.isNotBlank() }?.let {
+            append(it)
+            append(' ')
+        }
+        append(formatLengthDisplay(mm = lengthMm, useMetric = useMetric))
+    }
+    groupedMarkers.forEach { marker ->
+        drawEqualLengthMarker(
+            start = marker.start,
+            end = marker.end,
+            color = color
+        )
+    }
     val textSizePx = WALL_LENGTH_LABEL_TEXT_SP * density
     drawContext.canvas.nativeCanvas.apply {
         val baselineY = labelPoint.y + (textSizePx * 0.34f)
@@ -1975,6 +3147,234 @@ internal fun DrawScope.drawWallLengthLabel(
         drawText(text, labelPoint.x, baselineY, outlinePaint)
         drawText(text, labelPoint.x, baselineY, fillPaint)
     }
+}
+
+private fun DrawScope.drawEqualLengthMarker(
+    start: Offset,
+    end: Offset,
+    color: Color
+) {
+    val dx = end.x - start.x
+    val dy = end.y - start.y
+    val magnitude = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(0.001f)
+    val ux = dx / magnitude
+    val uy = dy / magnitude
+    val nx = -dy / magnitude
+    val ny = dx / magnitude
+    val midpoint = Offset(
+        x = (start.x + end.x) / 2f,
+        y = (start.y + end.y) / 2f
+    )
+    val firstCenter = Offset(
+        x = midpoint.x - (ux * 5f),
+        y = midpoint.y - (uy * 5f)
+    )
+    val secondCenter = Offset(
+        x = midpoint.x + (ux * 5f),
+        y = midpoint.y + (uy * 5f)
+    )
+    listOf(firstCenter, secondCenter).forEach { center ->
+        val tickOffset = Offset(nx * 5.2f, ny * 5.2f)
+        drawLine(
+            color = color.copy(alpha = 0.92f),
+            start = center - tickOffset,
+            end = center + tickOffset,
+            strokeWidth = 1.45f,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+internal fun collectCommittedWallLengthLabels(
+    document: BlueprintDocument,
+    selectedWallId: String?,
+    worldToScreen: (PointMm) -> Offset
+): List<WallLengthLabelSpec> {
+    if (document.walls.isEmpty()) return emptyList()
+    val curveGroupsByTag = document.walls
+        .mapNotNull { wall -> wall.curveGroupTag()?.let { groupTag -> groupTag to wall } }
+        .groupBy(keySelector = { it.first }, valueTransform = { it.second })
+    val emittedCurveGroups = mutableSetOf<String>()
+    val emittedStraightWalls = mutableSetOf<String>()
+    return buildList {
+        document.walls.forEach { wall ->
+            val curveGroupTag = wall.curveGroupTag()
+            if (curveGroupTag == null) {
+                if (!emittedStraightWalls.add(wall.id)) return@forEach
+                val groupedParallelWalls = document.walls.filter { candidate ->
+                    candidate.curveGroupTag() == null &&
+                        candidate.id != wall.id &&
+                        candidate.id !in emittedStraightWalls &&
+                        wallsShareGroupedLengthLabel(anchor = wall, candidate = candidate)
+                }
+                if (groupedParallelWalls.isNotEmpty()) {
+                    val groupedWalls = listOf(wall) + groupedParallelWalls
+                    emittedStraightWalls += groupedParallelWalls.map(WallSegment::id)
+                    add(
+                        buildGroupedStraightWallLengthLabelSpec(
+                            walls = groupedWalls,
+                            selectedWallId = selectedWallId,
+                            worldToScreen = worldToScreen
+                        )
+                    )
+                    return@forEach
+                }
+                add(
+                    WallLengthLabelSpec(
+                        start = worldToScreen(wall.start),
+                        end = worldToScreen(wall.end),
+                        lengthMm = wall.lengthMillimeters(),
+                        color = if (wall.id == selectedWallId) WALL_LABEL_ACTIVE_COLOR else WALL_LABEL_NEUTRAL_COLOR
+                    )
+                )
+                return@forEach
+            }
+            if (!emittedCurveGroups.add(curveGroupTag)) return@forEach
+            val groupWalls = curveGroupsByTag[curveGroupTag].orEmpty()
+            if (groupWalls.isEmpty()) return@forEach
+            when {
+                groupWalls.any { CURVE_SHAPE_CIRCLE_TAG in it.tags } -> {
+                    // Closed curves read better from the selection card than a ring of tiny segment labels.
+                }
+                groupWalls.any { CURVE_SHAPE_ARC_TAG in it.tags } -> {
+                    buildArcGroupLengthLabelSpec(
+                        groupWalls = groupWalls,
+                        selectedWallId = selectedWallId,
+                        worldToScreen = worldToScreen
+                    )?.let(::add)
+                }
+                else -> {
+                    val firstWall = groupWalls.first()
+                    val lastWall = groupWalls.last()
+                    add(
+                        WallLengthLabelSpec(
+                            start = worldToScreen(firstWall.start),
+                            end = worldToScreen(lastWall.end),
+                            lengthMm = groupWalls.sumOf { it.lengthMillimeters() },
+                            color = if (groupWalls.any { it.id == selectedWallId }) {
+                                WALL_LABEL_ACTIVE_COLOR
+                            } else {
+                                WALL_LABEL_NEUTRAL_COLOR
+                            }
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun buildGroupedStraightWallLengthLabelSpec(
+    walls: List<WallSegment>,
+    selectedWallId: String?,
+    worldToScreen: (PointMm) -> Offset
+): WallLengthLabelSpec {
+    val representative = walls.firstOrNull { it.id == selectedWallId }
+        ?: walls.first()
+    return WallLengthLabelSpec(
+        start = worldToScreen(representative.start),
+        end = worldToScreen(representative.end),
+        lengthMm = representative.lengthMillimeters(),
+        color = if (walls.any { it.id == selectedWallId }) {
+            WALL_LABEL_ACTIVE_COLOR
+        } else {
+            WALL_LABEL_NEUTRAL_COLOR
+        },
+        repeatCount = walls.size,
+        groupedMarkers = walls.map { wall ->
+            WallLengthGroupMarkerSpec(
+                start = worldToScreen(wall.start),
+                end = worldToScreen(wall.end)
+            )
+        }
+    )
+}
+
+internal fun buildArcGroupLengthLabelSpec(
+    groupWalls: List<WallSegment>,
+    selectedWallId: String?,
+    worldToScreen: (PointMm) -> Offset
+): WallLengthLabelSpec? {
+    val firstWall = groupWalls.firstOrNull() ?: return null
+    val lastWall = groupWalls.lastOrNull() ?: return null
+    val storedMeasuredArcLengthMm = groupWalls.firstNotNullOfOrNull { wall ->
+        wall.tags.measuredArcDraftMeasurements()?.arcLengthMm
+    }
+    val storedSketchArcLengthMm = groupWalls.firstNotNullOfOrNull { wall ->
+        wall.tags.curveArcDraftMeasurements()?.arcLengthMm
+    }
+    val bendReferencePoint = groupWalls[groupWalls.lastIndex / 2].midpoint()
+    val (labelStart, labelEnd) = orientCurveChordTowardBend(
+        start = firstWall.start,
+        end = lastWall.end,
+        bendReference = bendReferencePoint
+    )
+    val labelPrefix = if (storedMeasuredArcLengthMm != null) "Arc" else "Curve"
+    return WallLengthLabelSpec(
+        start = worldToScreen(labelStart),
+        end = worldToScreen(labelEnd),
+        lengthMm = storedMeasuredArcLengthMm ?: storedSketchArcLengthMm ?: groupWalls.sumOf { it.lengthMillimeters() },
+        color = if (groupWalls.any { it.id == selectedWallId }) {
+            WALL_LABEL_ACTIVE_COLOR
+        } else {
+            WALL_LABEL_NEUTRAL_COLOR
+        },
+        prefix = labelPrefix
+    )
+}
+
+internal fun orientCurveChordTowardBend(
+    start: PointMm,
+    end: PointMm,
+    bendReference: PointMm
+): Pair<PointMm, PointMm> {
+    val cross = ((end.x - start.x) * (bendReference.y - start.y)) -
+        ((end.y - start.y) * (bendReference.x - start.x))
+    return if (cross < 0L) {
+        end to start
+    } else {
+        start to end
+    }
+}
+
+private fun wallsShareGroupedLengthLabel(
+    anchor: WallSegment,
+    candidate: WallSegment
+): Boolean {
+    if (anchor.id == candidate.id) return false
+    if (wallsShareEndpoint(anchor, candidate)) return false
+    if (abs(anchor.lengthMillimeters() - candidate.lengthMillimeters()) > GROUPED_LENGTH_TOLERANCE_MM) {
+        return false
+    }
+    if (
+        parallelAngleDeltaDegrees(
+            anchor.angleDegrees(),
+            candidate.angleDegrees()
+        ) > PARALLEL_MATCH_ANGLE_TOLERANCE_DEG
+    ) {
+        return false
+    }
+    return wallSeparationMillimeters(anchor, candidate) >= GROUPED_LENGTH_MIN_SEPARATION_MM
+}
+
+private fun wallsShareEndpoint(
+    first: WallSegment,
+    second: WallSegment
+): Boolean {
+    return first.start == second.start ||
+        first.start == second.end ||
+        first.end == second.start ||
+        first.end == second.end
+}
+
+private fun wallSeparationMillimeters(
+    anchor: WallSegment,
+    candidate: WallSegment
+): Long {
+    val candidateMidpoint = candidate.midpoint()
+    val projectionT = BlueprintSnapMath.projectToWallT(candidateMidpoint, anchor)
+    val projected = BlueprintSnapMath.pointOnWall(anchor, projectionT)
+    return BlueprintSnapMath.distanceMillimeters(candidateMidpoint, projected)
 }
 
 internal fun BlueprintOpening.doorSwingTag(): String? = when {

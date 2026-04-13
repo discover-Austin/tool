@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 import com.tradesketch.estimator.domain.model.BlueprintDocument
 import com.tradesketch.estimator.domain.model.Project
 import com.tradesketch.estimator.domain.model.ProjectTakeoffSession
+import com.tradesketch.estimator.domain.model.TakeoffInputMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
@@ -151,12 +152,17 @@ internal class ProjectFileStorageEngine(
             .getOrDefault(System.currentTimeMillis())
         val updatedAt = runCatching { project.updatedAt }
             .getOrDefault(createdAt)
-        val takeoffSession = runCatching { project.takeoffSession }
+        val rawTakeoffSession = runCatching { project.takeoffSession }
             .getOrDefault(ProjectTakeoffSession())
-        val blueprintDocument = runCatching { project.blueprintDocument }
+        val rawBlueprintDocument = runCatching { project.blueprintDocument }
             .getOrNull()
-            ?.copy(projectId = projectId)
+        val blueprintDocument = rawBlueprintDocument?.copy(projectId = projectId)
             ?: BlueprintDocument.empty(projectId = projectId)
+        val takeoffSession = sanitizeTakeoffSession(
+            session = rawTakeoffSession,
+            blueprintDocument = blueprintDocument,
+            hadBlueprintPayload = rawBlueprintDocument != null
+        )
 
         return Project(
             id = projectId,
@@ -191,23 +197,46 @@ internal class ProjectFileStorageEngine(
                 }.getOrNull()
             }
             ?: ProjectTakeoffSession()
-        val blueprintDocument = payload.readObject("blueprintDocument")
+        val rawBlueprintDocument = payload.readObject("blueprintDocument")
             ?.let { blueprintJson ->
                 runCatching {
                     gson.fromJson(blueprintJson, BlueprintDocument::class.java)
                 }.getOrNull()
             }
-            ?.copy(projectId = projectId)
+        val blueprintDocument = rawBlueprintDocument?.copy(projectId = projectId)
             ?: BlueprintDocument.empty(projectId = projectId)
+        val sanitizedTakeoffSession = sanitizeTakeoffSession(
+            session = takeoffSession,
+            blueprintDocument = blueprintDocument,
+            hadBlueprintPayload = rawBlueprintDocument != null
+        )
 
         return Project(
             id = projectId,
             name = projectName,
             createdAt = createdAt,
             updatedAt = updatedAt,
-            takeoffSession = takeoffSession,
+            takeoffSession = sanitizedTakeoffSession,
             blueprintDocument = blueprintDocument
         )
+    }
+
+    private fun sanitizeTakeoffSession(
+        session: ProjectTakeoffSession,
+        blueprintDocument: BlueprintDocument,
+        hadBlueprintPayload: Boolean
+    ): ProjectTakeoffSession {
+        val hasGeometry = blueprintDocument.walls.isNotEmpty() ||
+            blueprintDocument.rooms.isNotEmpty() ||
+            blueprintDocument.openings.isNotEmpty()
+        return if (!hadBlueprintPayload &&
+            !hasGeometry &&
+            session.inputMode == TakeoffInputMode.BLUEPRINT
+        ) {
+            ProjectTakeoffSession()
+        } else {
+            session
+        }
     }
 
     private fun quarantineCorruptFile(

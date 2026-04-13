@@ -40,7 +40,7 @@ class OnboardingComposeTest {
     }
 
     @Test
-    fun estimateTypeStep_enablesOpenProjectAfterSelection() {
+    fun estimateTypeStep_enablesCreateProjectAfterSelection() {
         var selectedTrade by mutableStateOf<PrimaryTrade?>(null)
         rule.setContent {
             ProjectRitualScreen2_EstimateType(
@@ -50,9 +50,8 @@ class OnboardingComposeTest {
             )
         }
 
-        rule.onNodeWithText("Open Project").assertIsNotEnabled()
+        rule.onNodeWithText("Create Project").assertIsNotEnabled()
         rule.onNodeWithText("Drywall").performClick()
-        rule.onNodeWithText("Open Project").assertIsEnabled()
+        rule.onNodeWithText("Create Project").assertIsEnabled()
     }
 }
-

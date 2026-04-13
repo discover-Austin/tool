@@ -153,31 +153,34 @@ import kotlin.math.sin
 private fun ControlClusterShell(
     compact: Boolean,
     modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier,
     horizontalPadding: Dp = if (compact) 10.dp else 12.dp,
     verticalPadding: Dp = if (compact) 10.dp else 12.dp,
     content: @Composable () -> Unit
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(if (compact) 24.dp else 28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (compact) 10.dp else 14.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+    Box(modifier = modifier) {
+        Card(
+            modifier = boundsModifier,
+            shape = RoundedCornerShape(if (compact) 24.dp else 28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.78f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (compact) 10.dp else 14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                                MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+                            )
                         )
                     )
-                )
-                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            content()
+                    .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                content()
+            }
         }
     }
 }
@@ -186,8 +189,12 @@ private fun ControlClusterShell(
 internal fun DualJoystickOverlay(
     leftVector: Offset,
     rightVector: Offset,
+    fineLeftVector: Offset,
+    fineRightVector: Offset,
     onLeftVectorChange: (Offset) -> Unit,
     onRightVectorChange: (Offset) -> Unit,
+    onFineLeftVectorChange: (Offset) -> Unit,
+    onFineRightVectorChange: (Offset) -> Unit,
     onLeftPressChange: ((Boolean) -> Unit)? = null,
     onRightPressChange: (Boolean) -> Unit,
     onLeftTap: () -> Unit,
@@ -203,13 +210,16 @@ internal fun DualJoystickOverlay(
     controlStateLabel: String?,
     belowHistoryContent: (@Composable () -> Unit)? = null,
     leftPadModifier: Modifier = Modifier,
+    fineLeftPadModifier: Modifier = Modifier,
     centerControlsModifier: Modifier = Modifier,
+    fineRightPadModifier: Modifier = Modifier,
     rightPadModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
         val compact = maxWidth < 420.dp
         val ultraCompact = maxWidth < 360.dp
+        val density = LocalDensity.current
         val sidePadding = if (compact) 4.dp else 8.dp
         val joystickSize = when {
             ultraCompact -> 94.dp
@@ -222,16 +232,36 @@ internal fun DualJoystickOverlay(
             else -> 50.dp
         }
         val labelFontSize = if (compact) 7.sp else 8.sp
-        val centerColumnBottom = if (compact) 14.dp else 24.dp
+        val miniPadSize = when {
+            ultraCompact -> 42.dp
+            compact -> 48.dp
+            else -> 56.dp
+        }
+        val miniKnobSize = when {
+            ultraCompact -> 18.dp
+            compact -> 20.dp
+            else -> 24.dp
+        }
+        val joystickBottomLift = if (compact) 10.dp else 14.dp
+        val centerColumnBottom = if (compact) 20.dp else 30.dp
         val controlRowSpacing = if (compact) 5.dp else 6.dp
         val zoomButtonSize = if (compact) 32.dp else 36.dp
         val zoomIconSize = if (compact) 14.dp else 16.dp
         val historyButtonSize = if (compact) 30.dp else 34.dp
         val historyIconSize = if (compact) 13.dp else 15.dp
+        val miniPadPocketGapPx = with(density) { (if (compact) 11.dp else 13.dp).toPx() }
+        val miniPadSizePx = with(density) { miniPadSize.toPx() }
+        var overlayTopLeft by remember { mutableStateOf(Offset.Zero) }
+        var overlayWidthPx by remember { mutableFloatStateOf(0f) }
+        var zoomRowBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = sidePadding)
+                .onGloballyPositioned { coordinates ->
+                    overlayTopLeft = coordinates.positionInRoot()
+                    overlayWidthPx = coordinates.size.width.toFloat()
+                }
         ) {
             JoystickPad(
                 insideLabel = "Pan / Alt",
@@ -247,33 +277,75 @@ internal fun DualJoystickOverlay(
                 labelFontSize = labelFontSize,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .then(leftPadModifier)
+                    .padding(bottom = joystickBottomLift),
+                boundsModifier = leftPadModifier
             )
-            ControlClusterShell(
+            CenteredOverlayControls(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                canZoomIn = canZoomIn,
+                canZoomOut = canZoomOut,
+                onUndo = onUndo,
+                onRedo = onRedo,
+                onZoomIn = onZoomIn,
+                onZoomOut = onZoomOut,
+                controlStateLabel = controlStateLabel,
+                compact = compact,
+                controlRowSpacing = controlRowSpacing,
+                zoomButtonSize = zoomButtonSize,
+                zoomIconSize = zoomIconSize,
+                historyButtonSize = historyButtonSize,
+                historyIconSize = historyIconSize,
+                belowHistoryContent = belowHistoryContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 10.dp else 14.dp
-            ) {
-                CenteredOverlayControls(
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    canZoomIn = canZoomIn,
-                    canZoomOut = canZoomOut,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onZoomIn = onZoomIn,
-                    onZoomOut = onZoomOut,
-                    controlStateLabel = controlStateLabel,
-                    compact = compact,
-                    controlRowSpacing = controlRowSpacing,
-                    zoomButtonSize = zoomButtonSize,
-                    zoomIconSize = zoomIconSize,
-                    historyButtonSize = historyButtonSize,
-                    historyIconSize = historyIconSize,
-                    belowHistoryContent = belowHistoryContent
+                    .padding(bottom = centerColumnBottom),
+                boundsModifier = centerControlsModifier,
+                onZoomRowBoundsChanged = { bounds ->
+                    zoomRowBoundsInRoot = bounds
+                }
+            )
+            zoomRowBoundsInRoot?.let { zoomRowBounds ->
+                val pocketTop = zoomRowBounds.top - overlayTopLeft.y +
+                    ((zoomRowBounds.height - miniPadSizePx) / 2f)
+                val leftPocketX = (zoomRowBounds.left - overlayTopLeft.x - miniPadPocketGapPx - miniPadSizePx)
+                    .coerceAtLeast(0f)
+                val rightPocketX = (zoomRowBounds.right - overlayTopLeft.x + miniPadPocketGapPx)
+                    .coerceAtMost((overlayWidthPx - miniPadSizePx).coerceAtLeast(0f))
+                val pocketYOffset = pocketTop.roundToInt()
+                JoystickPad(
+                    insideLabel = null,
+                    vector = fineLeftVector,
+                    onVectorChange = onFineLeftVectorChange,
+                    onTap = null,
+                    padSize = miniPadSize,
+                    knobSize = miniKnobSize,
+                    showCenterLabel = false,
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = leftPocketX.roundToInt(),
+                                y = pocketYOffset
+                            )
+                        }
+                        .then(fineLeftPadModifier)
+                )
+                JoystickPad(
+                    insideLabel = null,
+                    vector = fineRightVector,
+                    onVectorChange = onFineRightVectorChange,
+                    onTap = null,
+                    padSize = miniPadSize,
+                    knobSize = miniKnobSize,
+                    showCenterLabel = false,
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = rightPocketX.roundToInt(),
+                                y = pocketYOffset
+                            )
+                        }
+                        .then(fineRightPadModifier)
                 )
             }
             JoystickPad(
@@ -290,7 +362,8 @@ internal fun DualJoystickOverlay(
                 labelFontSize = labelFontSize,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .then(rightPadModifier)
+                    .padding(bottom = joystickBottomLift),
+                boundsModifier = rightPadModifier
             )
         }
     }
@@ -314,66 +387,78 @@ private fun CenteredOverlayControls(
     historyButtonSize: Dp,
     historyIconSize: Dp,
     belowHistoryContent: (@Composable () -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onZoomRowBoundsChanged: ((Rect) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
-    ) {
-        if (controlStateLabel != null) {
-            ControlStateHud(
-                stateLabel = controlStateLabel
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier) {
+        Column(
+            modifier = boundsModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
         ) {
-            SlimIconAction(
-                icon = Icons.Filled.Add,
-                contentDescription = "Zoom in",
-                enabled = canZoomIn,
-                onClick = onZoomIn,
-                buttonSize = zoomButtonSize,
-                iconSize = zoomIconSize
-            )
-            SlimIconAction(
-                icon = Icons.Filled.Remove,
-                contentDescription = "Zoom out",
-                enabled = canZoomOut,
-                onClick = onZoomOut,
-                buttonSize = zoomButtonSize,
-                iconSize = zoomIconSize
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SlimIconAction(
-                icon = Icons.AutoMirrored.Filled.Undo,
-                contentDescription = "Undo",
-                enabled = canUndo,
-                onClick = onUndo,
-                buttonSize = historyButtonSize,
-                iconSize = historyIconSize
-            )
-            SlimIconAction(
-                icon = Icons.AutoMirrored.Filled.Redo,
-                contentDescription = "Redo",
-                enabled = canRedo,
-                onClick = onRedo,
-                buttonSize = historyButtonSize,
-                iconSize = historyIconSize
-            )
-        }
-        belowHistoryContent?.let { content ->
-            Box(
-                modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
-                contentAlignment = Alignment.Center
+            if (controlStateLabel != null) {
+                ControlStateHud(
+                    stateLabel = controlStateLabel
+                )
+            }
+            Row(
+                modifier = Modifier.onGloballyPositioned { coordinates ->
+                    onZoomRowBoundsChanged?.invoke(
+                        Rect(
+                            offset = coordinates.positionInRoot(),
+                            size = coordinates.size.toSize()
+                        )
+                    )
+                },
+                horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                content()
+                SlimIconAction(
+                    icon = Icons.Filled.Add,
+                    contentDescription = "Zoom in",
+                    enabled = canZoomIn,
+                    onClick = onZoomIn,
+                    buttonSize = zoomButtonSize,
+                    iconSize = zoomIconSize
+                )
+                SlimIconAction(
+                    icon = Icons.Filled.Remove,
+                    contentDescription = "Zoom out",
+                    enabled = canZoomOut,
+                    onClick = onZoomOut,
+                    buttonSize = zoomButtonSize,
+                    iconSize = zoomIconSize
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(controlRowSpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SlimIconAction(
+                    icon = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    enabled = canUndo,
+                    onClick = onUndo,
+                    buttonSize = historyButtonSize,
+                    iconSize = historyIconSize
+                )
+                SlimIconAction(
+                    icon = Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = "Redo",
+                    enabled = canRedo,
+                    onClick = onRedo,
+                    buttonSize = historyButtonSize,
+                    iconSize = historyIconSize
+                )
+            }
+            belowHistoryContent?.let { content ->
+                Box(
+                    modifier = Modifier.padding(top = if (compact) 2.dp else 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    content()
+                }
             }
         }
     }
@@ -384,68 +469,102 @@ internal fun DrawLineEdgeDialsOverlay(
     onAngleTicks: (Int) -> Unit,
     onLengthTicks: (Int) -> Unit,
     onInteractionChanged: (Boolean) -> Unit = {},
+    controlsBottomPadding: Dp,
     leftInset: Dp = 0.dp,
-    bottomInset: Dp = 0.dp,
+    angleCaption: String = "Angle",
+    angleLabel: String = "±1°",
+    lengthCaption: String = "Length",
+    lengthLabel: String = "±1in",
+    angleDialModifier: Modifier = Modifier,
+    lengthDialModifier: Modifier = Modifier,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier) {
-        val compact = maxWidth < 400.dp || maxHeight < 700.dp
-        val stripWidth = if (compact) 20.dp else 24.dp
-        val stripHeight = if (compact) 232.dp else 300.dp
-        val sideInset = if (compact) 3.dp else 5.dp
-        val bodyLabelFontSize = if (compact) 7.sp else 8.sp
-        val captionFontSize = if (compact) 8.sp else 9.sp
-        val pxPerTick = if (compact) 11f else 12f
-        Row(
+        val compact = maxWidth < 420.dp || maxHeight < 700.dp
+        val ultraCompact = maxWidth < 360.dp
+        val sidePadding = if (compact) 4.dp else 8.dp
+        val joystickSize = when {
+            ultraCompact -> 94.dp
+            compact -> 104.dp
+            else -> 126.dp
+        }
+        val dialWidth = when {
+            ultraCompact -> 94.dp
+            compact -> 104.dp
+            else -> 122.dp
+        }
+        val dialVisualHeight = when {
+            ultraCompact -> 30.dp
+            compact -> 31.dp
+            else -> 32.dp
+        }
+        val dialTouchHeight = when {
+            ultraCompact -> 46.dp
+            compact -> 48.dp
+            else -> 50.dp
+        }
+        val dialTrackHeight = when {
+            ultraCompact -> 9.dp
+            compact -> 10.dp
+            else -> 11.dp
+        }
+        val labelFontSize = if (compact) 7.5.sp else 8.5.sp
+        val captionFontSize = if (compact) 7.5.sp else 8.5.sp
+        val pxPerTick = if (compact) 8.5f else 9.5f
+        val centerPull = when {
+            ultraCompact -> 6.dp
+            compact -> 8.dp
+            else -> 10.dp
+        }
+        val joystickBottomLift = if (compact) 10.dp else 14.dp
+        val dialJoystickClearance = when {
+            ultraCompact -> 20.dp
+            compact -> 22.dp
+            else -> 24.dp
+        }
+        val dialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + leftInset + centerPull
+        val rightDialHorizontalInset = sidePadding + ((joystickSize - dialWidth) / 2f) + centerPull
+        val dialBottomPadding = controlsBottomPadding + joystickSize + joystickBottomLift + dialJoystickClearance
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .padding(bottom = (if (compact) 112.dp else 142.dp) + bottomInset),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
+                .padding(bottom = dialBottomPadding)
         ) {
-            Column(
-                modifier = Modifier.padding(start = sideInset + leftInset),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                EdgeTickDial(
-                    label = "1deg",
-                    onTicks = onAngleTicks,
-                    onInteractionChanged = onInteractionChanged,
-                    pxPerTick = pxPerTick,
-                    labelFontSize = bodyLabelFontSize,
-                    modifier = Modifier
-                        .width(stripWidth)
-                        .height(stripHeight)
-                )
-                Text(
-                    text = "Angle ±1°",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = captionFontSize),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Column(
-                modifier = Modifier.padding(end = sideInset),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                EdgeTickDial(
-                    label = "1in",
-                    onTicks = onLengthTicks,
-                    onInteractionChanged = onInteractionChanged,
-                    pxPerTick = pxPerTick,
-                    labelFontSize = bodyLabelFontSize,
-                    modifier = Modifier
-                        .width(stripWidth)
-                        .height(stripHeight)
-                )
-                Text(
-                    text = "Length ±1in",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = captionFontSize),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            EdgeTickDial(
+                caption = angleCaption,
+                label = angleLabel,
+                onTicks = onAngleTicks,
+                onInteractionChanged = onInteractionChanged,
+                pxPerTick = pxPerTick,
+                visualHeight = dialVisualHeight,
+                trackHeight = dialTrackHeight,
+                labelFontSize = labelFontSize,
+                captionFontSize = captionFontSize,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = dialHorizontalInset)
+                    .width(dialWidth)
+                    .height(dialTouchHeight),
+                boundsModifier = angleDialModifier
+            )
+            EdgeTickDial(
+                caption = lengthCaption,
+                label = lengthLabel,
+                onTicks = onLengthTicks,
+                onInteractionChanged = onInteractionChanged,
+                pxPerTick = pxPerTick,
+                visualHeight = dialVisualHeight,
+                trackHeight = dialTrackHeight,
+                labelFontSize = labelFontSize,
+                captionFontSize = captionFontSize,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = rightDialHorizontalInset)
+                    .width(dialWidth)
+                    .height(dialTouchHeight),
+                boundsModifier = lengthDialModifier
+            )
         }
     }
 }
@@ -453,18 +572,23 @@ internal fun DrawLineEdgeDialsOverlay(
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
 private fun EdgeTickDial(
+    caption: String,
     label: String,
     onTicks: (Int) -> Unit,
     onInteractionChanged: (Boolean) -> Unit,
     pxPerTick: Float,
+    visualHeight: Dp,
+    trackHeight: Dp,
     labelFontSize: TextUnit,
-    modifier: Modifier = Modifier
+    captionFontSize: TextUnit,
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
     var carryPx by remember { mutableFloatStateOf(0f) }
     var dialPhasePx by remember { mutableFloatStateOf(0f) }
     var lastDirection by remember { mutableIntStateOf(0) }
     var activePointerId by remember { mutableIntStateOf(MotionEvent.INVALID_POINTER_ID) }
-    var lastPointerY by remember { mutableFloatStateOf(0f) }
+    var lastPointerX by remember { mutableFloatStateOf(0f) }
     val animatedPhasePx by animateFloatAsState(
         targetValue = dialPhasePx,
         animationSpec = tween(durationMillis = 80, easing = LinearEasing),
@@ -487,171 +611,199 @@ private fun EdgeTickDial(
             }
         }
     }
-    val dialShellColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
-    val dialBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)
-    val dialTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    val dialShellColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f)
+    val dialBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.78f)
+    val dialTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
     val dialAxisColor = MaterialTheme.colorScheme.onSurface
     val dialMinorColor = MaterialTheme.colorScheme.onSurfaceVariant
     val dialMarkerColor = MaterialTheme.colorScheme.primary
     val dialLabelColor = MaterialTheme.colorScheme.onSurface
-    Surface(
-        modifier = modifier.pointerInteropFilter { event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN,
-                MotionEvent.ACTION_POINTER_DOWN -> {
-                    if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
-                        val index = event.actionIndex
-                        if (index >= 0 && index < event.pointerCount) {
-                            activePointerId = event.getPointerId(index)
-                            lastPointerY = event.getY(index)
-                            carryPx = 0f
-                            dialPhasePx = 0f
-                            lastDirection = 0
-                            onInteractionChanged(true)
-                        }
-                    }
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (activePointerId == MotionEvent.INVALID_POINTER_ID) return@pointerInteropFilter false
-                    val index = event.findPointerIndex(activePointerId)
-                    if (index < 0 || index >= event.pointerCount) {
-                        resetDial(emitInteractionEnd = true)
-                        return@pointerInteropFilter true
-                    }
-                    val currentY = event.getY(index)
-                    val deltaY = (currentY - lastPointerY).coerceIn(-20f, 20f)
-                    lastPointerY = currentY
-                    if (abs(deltaY) >= 0.04f) {
-                        val direction = when {
-                            deltaY < 0f -> 1
-                            deltaY > 0f -> -1
-                            else -> 0
-                        }
-                        if (direction != 0 && lastDirection != 0 && direction != lastDirection) {
-                            carryPx *= 0.25f
-                        }
-                        if (direction != 0) {
-                            lastDirection = direction
-                        }
-                        carryPx -= deltaY
-                        dialPhasePx = normalizeDialPhase(dialPhasePx - deltaY, pxPerTick)
-                        val steps = extractDialTickSteps(carryPx, pxPerTick)
-                        if (steps != 0) {
-                            onTicks(steps)
-                            carryPx -= steps * pxPerTick
-                            repeat(abs(steps).coerceIn(1, 2)) {
-                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    Box(
+        modifier = modifier
+            .sizeIn(minHeight = 44.dp)
+            .pointerInteropFilter { event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                            val index = event.actionIndex
+                            if (index >= 0 && index < event.pointerCount) {
+                                activePointerId = event.getPointerId(index)
+                                lastPointerX = event.getX(index)
+                                carryPx = 0f
+                                dialPhasePx = 0f
+                                lastDirection = 0
+                                onInteractionChanged(true)
                             }
                         }
+                        true
                     }
-                    true
+                    MotionEvent.ACTION_MOVE -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID) return@pointerInteropFilter false
+                        val index = event.findPointerIndex(activePointerId)
+                        if (index < 0 || index >= event.pointerCount) {
+                            resetDial(emitInteractionEnd = true)
+                            return@pointerInteropFilter true
+                        }
+                        val currentX = event.getX(index)
+                        val deltaX = (currentX - lastPointerX).coerceIn(-28f, 28f)
+                        lastPointerX = currentX
+                        if (abs(deltaX) >= 0.04f) {
+                            val direction = when {
+                                deltaX > 0f -> 1
+                                deltaX < 0f -> -1
+                                else -> 0
+                            }
+                            if (direction != 0 && lastDirection != 0 && direction != lastDirection) {
+                                carryPx *= 0.25f
+                            }
+                            if (direction != 0) {
+                                lastDirection = direction
+                            }
+                            carryPx += deltaX
+                            dialPhasePx = normalizeDialPhase(dialPhasePx + deltaX, pxPerTick)
+                            val steps = extractDialTickSteps(carryPx, pxPerTick)
+                            if (steps != 0) {
+                                onTicks(steps)
+                                carryPx -= steps * pxPerTick
+                                repeat(abs(steps).coerceIn(1, 2)) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                            }
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_POINTER_UP -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID) return@pointerInteropFilter false
+                        val index = event.actionIndex
+                        if (index < 0 || index >= event.pointerCount) {
+                            resetDial(emitInteractionEnd = true)
+                            return@pointerInteropFilter true
+                        }
+                        val pointerId = event.getPointerId(index)
+                        if (pointerId == activePointerId) {
+                            resetDial(emitInteractionEnd = true)
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
+                            resetDial(emitInteractionEnd = true)
+                        }
+                        true
+                    }
+                    else -> activePointerId != MotionEvent.INVALID_POINTER_ID
                 }
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_POINTER_UP -> {
-                    if (activePointerId == MotionEvent.INVALID_POINTER_ID) return@pointerInteropFilter false
-                    val index = event.actionIndex
-                    if (index < 0 || index >= event.pointerCount) {
-                        resetDial(emitInteractionEnd = true)
-                        return@pointerInteropFilter true
-                    }
-                    val pointerId = event.getPointerId(index)
-                    if (pointerId == activePointerId) {
-                        resetDial(emitInteractionEnd = true)
-                    }
-                    true
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
-                        resetDial(emitInteractionEnd = true)
-                    }
-                    true
-                }
-                else -> activePointerId != MotionEvent.INVALID_POINTER_ID
-            }
-        },
-        shape = RoundedCornerShape(12.dp),
-        color = dialShellColor,
-        border = BorderStroke(1.2.dp, dialBorderColor)
+            },
+        contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val centerX = size.width / 2f
-                val topInset = size.height * 0.04f
-                val bottomInset = size.height * 0.04f
-                val centerY = size.height / 2f
-                val lineTop = topInset
-                val lineBottom = size.height - bottomInset
-                val tickSpacing = pxPerTick.coerceAtLeast(1f)
-
-                drawRoundRect(
-                    color = dialTrackColor,
-                    topLeft = Offset(1f, lineTop),
-                    size = androidx.compose.ui.geometry.Size(size.width - 2f, lineBottom - lineTop),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(x = 6f, y = 6f)
-                )
-                drawLine(
-                    color = dialAxisColor,
-                    start = Offset(centerX, lineTop),
-                    end = Offset(centerX, lineBottom),
-                    strokeWidth = 1.9f
-                )
-                var y = centerY + animatedPhasePx
-                while (y >= lineTop - tickSpacing) {
-                    val stepIndex = ((centerY - y) / tickSpacing).roundToInt()
-                    val major = stepIndex % 5 == 0
-                    val halfLen = if (major) size.width * 0.42f else size.width * 0.28f
-                    drawLine(
-                        color = if (major) dialAxisColor else dialMinorColor,
-                        start = Offset(centerX - halfLen, y),
-                        end = Offset(centerX + halfLen, y),
-                        strokeWidth = if (major) 1.6f else 1.1f
-                    )
-                    y -= tickSpacing
-                }
-                y = centerY + animatedPhasePx + tickSpacing
-                while (y <= lineBottom + tickSpacing) {
-                    val stepIndex = ((centerY - y) / tickSpacing).roundToInt()
-                    val major = stepIndex % 5 == 0
-                    val halfLen = if (major) size.width * 0.42f else size.width * 0.28f
-                    drawLine(
-                        color = if (major) dialAxisColor else dialMinorColor,
-                        start = Offset(centerX - halfLen, y),
-                        end = Offset(centerX + halfLen, y),
-                        strokeWidth = if (major) 1.6f else 1.1f
-                    )
-                    y += tickSpacing
-                }
-                drawLine(
-                    color = dialMarkerColor,
-                    start = Offset(2f, centerY),
-                    end = Offset(size.width - 2f, centerY),
-                    strokeWidth = 2.1f
-                )
-                drawCircle(
-                    color = dialAxisColor,
-                    radius = 2.9f,
-                    center = Offset(centerX, centerY)
-                )
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                color = dialLabelColor,
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(visualHeight)
+                .then(boundsModifier),
+            shape = RoundedCornerShape(16.dp),
+            color = dialShellColor,
+            border = BorderStroke(1.dp, dialBorderColor)
+        ) {
+            Column(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 5.dp)
-            )
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = caption,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = captionFontSize),
+                        color = dialLabelColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
+                        color = dialMinorColor
+                    )
+                }
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(trackHeight)
+                ) {
+                    val centerX = size.width / 2f
+                    val centerY = size.height / 2f
+                    val leftInset = size.width * 0.035f
+                    val rightInset = size.width * 0.035f
+                    val lineLeft = leftInset
+                    val lineRight = size.width - rightInset
+                    val tickSpacing = pxPerTick.coerceAtLeast(1f)
+
+                    drawRoundRect(
+                        color = dialTrackColor,
+                        topLeft = Offset(lineLeft, 1f),
+                        size = androidx.compose.ui.geometry.Size(lineRight - lineLeft, size.height - 2f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(x = 6f, y = 6f)
+                    )
+                    drawLine(
+                        color = dialAxisColor,
+                        start = Offset(lineLeft, centerY),
+                        end = Offset(lineRight, centerY),
+                        strokeWidth = 1.9f
+                    )
+                    var x = centerX + animatedPhasePx
+                    while (x >= lineLeft - tickSpacing) {
+                        val stepIndex = ((centerX - x) / tickSpacing).roundToInt()
+                        val major = stepIndex % 5 == 0
+                        val halfLen = if (major) size.height * 0.42f else size.height * 0.28f
+                        drawLine(
+                            color = if (major) dialAxisColor else dialMinorColor,
+                            start = Offset(x, centerY - halfLen),
+                            end = Offset(x, centerY + halfLen),
+                            strokeWidth = if (major) 1.6f else 1.1f
+                        )
+                        x -= tickSpacing
+                    }
+                    x = centerX + animatedPhasePx + tickSpacing
+                    while (x <= lineRight + tickSpacing) {
+                        val stepIndex = ((centerX - x) / tickSpacing).roundToInt()
+                        val major = stepIndex % 5 == 0
+                        val halfLen = if (major) size.height * 0.42f else size.height * 0.28f
+                        drawLine(
+                            color = if (major) dialAxisColor else dialMinorColor,
+                            start = Offset(x, centerY - halfLen),
+                            end = Offset(x, centerY + halfLen),
+                            strokeWidth = if (major) 1.6f else 1.1f
+                        )
+                        x += tickSpacing
+                    }
+                    drawLine(
+                        color = dialMarkerColor,
+                        start = Offset(centerX, 2f),
+                        end = Offset(centerX, size.height - 2f),
+                        strokeWidth = 2.1f
+                    )
+                    drawCircle(
+                        color = dialAxisColor,
+                        radius = 2.9f,
+                        center = Offset(centerX, centerY)
+                    )
+                }
+            }
         }
     }
 }
 
 private fun extractDialTickSteps(accumulatedPx: Float, pxPerTick: Float): Int {
     val safeTickPx = pxPerTick.coerceAtLeast(1f)
-    val effectivePxPerTick = safeTickPx * 1.2f
+    val effectivePxPerTick = safeTickPx * 1.08f
     return when {
-        accumulatedPx >= effectivePxPerTick -> floor(accumulatedPx / effectivePxPerTick).toInt().coerceAtMost(4)
-        accumulatedPx <= -effectivePxPerTick -> -floor((-accumulatedPx) / effectivePxPerTick).toInt().coerceAtLeast(-4)
+        accumulatedPx >= effectivePxPerTick -> floor(accumulatedPx / effectivePxPerTick).toInt().coerceAtMost(5)
+        accumulatedPx <= -effectivePxPerTick -> -floor((-accumulatedPx) / effectivePxPerTick).toInt().coerceAtLeast(-5)
         else -> 0
     }
 }
@@ -664,228 +816,10 @@ private fun normalizeDialPhase(phasePx: Float, pxPerTick: Float): Float {
     return normalized
 }
 
-internal enum class TouchToolMode {
-    SELECT,
-    DRAW,
-    GRAB
-}
-
-@Composable
-internal fun TouchModeQuickToolsOverlay(
-    selectedMode: TouchToolMode,
-    onSelectMode: () -> Unit,
-    onDrawMode: () -> Unit,
-    onGrabMode: () -> Unit,
-    onCancel: () -> Unit,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    canZoomIn: Boolean,
-    canZoomOut: Boolean,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    controlStateLabel: String?,
-    belowHistoryContent: (@Composable () -> Unit)? = null,
-    leftToolsModifier: Modifier = Modifier,
-    centerControlsModifier: Modifier = Modifier,
-    rightToolsModifier: Modifier = Modifier,
-    modifier: Modifier = Modifier
-) {
-    BoxWithConstraints(modifier = modifier) {
-        val compact = maxWidth < 420.dp
-        val ultraCompact = maxWidth < 360.dp
-        val sidePadding = if (compact) 4.dp else 8.dp
-        val toolButtonSize = when {
-            ultraCompact -> 34.dp
-            compact -> 38.dp
-            else -> 42.dp
-        }
-        val toolIconSize = when {
-            ultraCompact -> 14.dp
-            compact -> 16.dp
-            else -> 18.dp
-        }
-        val labelFontSize = if (compact) 7.sp else 8.sp
-        val verticalSpacing = if (compact) 2.dp else 3.dp
-        val controlRowSpacing = if (compact) 5.dp else 6.dp
-        val zoomButtonSize = if (compact) 32.dp else 36.dp
-        val zoomIconSize = if (compact) 14.dp else 16.dp
-        val historyButtonSize = if (compact) 30.dp else 34.dp
-        val historyIconSize = if (compact) 13.dp else 15.dp
-        val centerColumnBottom = if (compact) 14.dp else 24.dp
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = sidePadding)
-        ) {
-            ControlClusterShell(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(bottom = 8.dp)
-                    .then(leftToolsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 8.dp else 10.dp
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    TouchToolButton(
-                        icon = Icons.Filled.AdsClick,
-                        label = "Select",
-                        selected = selectedMode == TouchToolMode.SELECT,
-                        onClick = onSelectMode,
-                        buttonSize = toolButtonSize,
-                        iconSize = toolIconSize,
-                        labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
-                    )
-                    TouchToolButton(
-                        icon = Icons.Filled.BorderColor,
-                        label = "Draw",
-                        selected = selectedMode == TouchToolMode.DRAW,
-                        onClick = onDrawMode,
-                        buttonSize = toolButtonSize,
-                        iconSize = toolIconSize,
-                        labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
-                    )
-                }
-            }
-            ControlClusterShell(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = centerColumnBottom)
-                    .then(centerControlsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 10.dp else 14.dp
-            ) {
-                CenteredOverlayControls(
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    canZoomIn = canZoomIn,
-                    canZoomOut = canZoomOut,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
-                    onZoomIn = onZoomIn,
-                    onZoomOut = onZoomOut,
-                    controlStateLabel = controlStateLabel,
-                    compact = compact,
-                    controlRowSpacing = controlRowSpacing,
-                    zoomButtonSize = zoomButtonSize,
-                    zoomIconSize = zoomIconSize,
-                    historyButtonSize = historyButtonSize,
-                    historyIconSize = historyIconSize,
-                    belowHistoryContent = belowHistoryContent
-                )
-            }
-            ControlClusterShell(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 8.dp)
-                    .then(rightToolsModifier),
-                compact = compact,
-                horizontalPadding = if (compact) 8.dp else 10.dp
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    TouchToolButton(
-                        icon = Icons.Filled.Workspaces,
-                        label = "Grab",
-                        selected = selectedMode == TouchToolMode.GRAB,
-                        onClick = onGrabMode,
-                        buttonSize = toolButtonSize,
-                        iconSize = toolIconSize,
-                        labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
-                    )
-                    TouchToolButton(
-                        icon = Icons.Filled.Close,
-                        label = "Cancel",
-                        selected = false,
-                        onClick = onCancel,
-                        buttonSize = toolButtonSize,
-                        iconSize = toolIconSize,
-                        labelFontSize = labelFontSize,
-                        verticalSpacing = verticalSpacing
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TouchToolButton(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    buttonSize: Dp = 46.dp,
-    iconSize: Dp = 19.dp,
-    labelFontSize: TextUnit = 9.sp,
-    verticalSpacing: Dp = 4.dp
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(verticalSpacing)
-    ) {
-        Surface(
-            onClick = onClick,
-            shape = CircleShape,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.98f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.88f)
-            },
-            border = BorderStroke(
-                width = if (selected) 1.3.dp else 1.dp,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                } else {
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.42f)
-                }
-            ),
-            shadowElevation = if (selected) 8.dp else 4.dp,
-            modifier = Modifier
-                .size(buttonSize)
-                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.size(iconSize)
-                )
-            }
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-            color = if (selected) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        )
-    }
-}
-
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
 internal fun JoystickPad(
-    insideLabel: String,
+    insideLabel: String?,
     vector: Offset,
     onVectorChange: (Offset) -> Unit,
     onTap: (() -> Unit)?,
@@ -896,7 +830,9 @@ internal fun JoystickPad(
     padSize: Dp = 126.dp,
     knobSize: Dp = 50.dp,
     labelFontSize: TextUnit = 8.sp,
-    modifier: Modifier = Modifier
+    showCenterLabel: Boolean = true,
+    modifier: Modifier = Modifier,
+    boundsModifier: Modifier = Modifier
 ) {
     val maxRadiusPx = with(LocalDensity.current) { (padSize * 0.317f).toPx() }
     val padSizePx = with(LocalDensity.current) { padSize.toPx() }
@@ -934,125 +870,125 @@ internal fun JoystickPad(
     DisposableEffect(onPressChange) {
         onDispose { resetPointerState() }
     }
-    val joystickAxisGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-    val joystickAxisLine = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-    val joystickLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.92f)
-    val joystickOuterRingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-    val joystickTapGuideColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    val joystickAxisGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    val joystickAxisLine = MaterialTheme.colorScheme.primary.copy(alpha = 0.44f)
+    val joystickLabelColor = MaterialTheme.colorScheme.onSurface
+    val joystickOuterRingColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+    val joystickTapGuideColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+    Box(
+        modifier = modifier
+            .size(padSize)
+            .pointerInteropFilter { event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
+                            return@pointerInteropFilter true
+                        }
+                        val index = event.actionIndex
+                        if (index < 0 || index >= event.pointerCount) {
+                            resetPointerState()
+                            return@pointerInteropFilter true
+                        }
+                        activePointerId = event.getPointerId(index)
+                        downTimeMs = event.eventTime
+                        downPosition = Offset(event.getX(index), event.getY(index))
+                        maxDisplacementFromDown = 0f
+                        downToCenter = hypot(
+                            (downPosition.x - center.x).toDouble(),
+                            (downPosition.y - center.y).toDouble()
+                        ).toFloat()
+                        tapCandidate = onTap != null &&
+                            (!centerTapRequired || downToCenter <= selectTapRadiusPx)
+                        onPressChange?.invoke(true)
+                        if (tapCandidate) {
+                            onVectorChange(Offset.Zero)
+                        } else {
+                            onVectorChange(toVector(downPosition))
+                        }
+                        true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                            return@pointerInteropFilter true
+                        }
+                        val index = event.findPointerIndex(activePointerId)
+                        if (index < 0 || index >= event.pointerCount) {
+                            resetPointerState()
+                            return@pointerInteropFilter true
+                        }
+                        val position = Offset(event.getX(index), event.getY(index))
+                        val displacementFromDown = position - downPosition
+                        val displacementMag = hypot(
+                            displacementFromDown.x.toDouble(),
+                            displacementFromDown.y.toDouble()
+                        ).toFloat()
+                        if (displacementMag > maxDisplacementFromDown) {
+                            maxDisplacementFromDown = displacementMag
+                        }
+                        if (tapCandidate && maxDisplacementFromDown < tapMoveThresholdPx) {
+                            onVectorChange(Offset.Zero)
+                        } else {
+                            tapCandidate = false
+                            onVectorChange(toVector(position))
+                        }
+                        true
+                    }
+
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_POINTER_UP -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
+                            resetPointerState()
+                            return@pointerInteropFilter true
+                        }
+                        val index = event.actionIndex
+                        if (index < 0 || index >= event.pointerCount) {
+                            resetPointerState()
+                            return@pointerInteropFilter true
+                        }
+                        val pointerId = event.getPointerId(index)
+                        if (pointerId != activePointerId) {
+                            return@pointerInteropFilter true
+                        }
+                        val upPosition = Offset(event.getX(index), event.getY(index))
+                        val upToCenter = hypot(
+                            (upPosition.x - center.x).toDouble(),
+                            (upPosition.y - center.y).toDouble()
+                        ).toFloat()
+                        val pressDurationMs = (event.eventTime - downTimeMs).coerceAtLeast(0L)
+                        val isTap = tapCandidate &&
+                            maxDisplacementFromDown < tapMoveThresholdPx &&
+                            onTap != null
+                        val lenientQuickTap = onTap != null &&
+                            pressDurationMs <= 420L &&
+                            maxDisplacementFromDown < (tapMoveThresholdPx * 2.8f) &&
+                            upToCenter <= (maxRadiusPx * 0.74f) &&
+                            (!centerTapRequired || downToCenter <= (selectTapRadiusPx * 1.35f))
+                        resetPointerState()
+                        if (isTap || lenientQuickTap) {
+                            onTap.invoke()
+                        }
+                        true
+                    }
+
+                    MotionEvent.ACTION_CANCEL -> {
+                        resetPointerState()
+                        true
+                    }
+
+                    else -> activePointerId != MotionEvent.INVALID_POINTER_ID
+                }
+            }
     ) {
         Surface(
             modifier = Modifier
-                .size(padSize)
-                .pointerInteropFilter { event ->
-                    when (event.actionMasked) {
-                        MotionEvent.ACTION_DOWN,
-                        MotionEvent.ACTION_POINTER_DOWN -> {
-                            if (activePointerId != MotionEvent.INVALID_POINTER_ID) {
-                                return@pointerInteropFilter true
-                            }
-                            val index = event.actionIndex
-                            if (index < 0 || index >= event.pointerCount) {
-                                resetPointerState()
-                                return@pointerInteropFilter true
-                            }
-                            activePointerId = event.getPointerId(index)
-                            downTimeMs = event.eventTime
-                            downPosition = Offset(event.getX(index), event.getY(index))
-                            maxDisplacementFromDown = 0f
-                            downToCenter = hypot(
-                                (downPosition.x - center.x).toDouble(),
-                                (downPosition.y - center.y).toDouble()
-                            ).toFloat()
-                            tapCandidate = onTap != null &&
-                                (!centerTapRequired || downToCenter <= selectTapRadiusPx)
-                            onPressChange?.invoke(true)
-                            if (tapCandidate) {
-                                onVectorChange(Offset.Zero)
-                            } else {
-                                onVectorChange(toVector(downPosition))
-                            }
-                            true
-                        }
-
-                        MotionEvent.ACTION_MOVE -> {
-                            if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
-                                return@pointerInteropFilter true
-                            }
-                            val index = event.findPointerIndex(activePointerId)
-                            if (index < 0 || index >= event.pointerCount) {
-                                resetPointerState()
-                                return@pointerInteropFilter true
-                            }
-                            val position = Offset(event.getX(index), event.getY(index))
-                            val displacementFromDown = position - downPosition
-                            val displacementMag = hypot(
-                                displacementFromDown.x.toDouble(),
-                                displacementFromDown.y.toDouble()
-                            ).toFloat()
-                            if (displacementMag > maxDisplacementFromDown) {
-                                maxDisplacementFromDown = displacementMag
-                            }
-                            if (tapCandidate && maxDisplacementFromDown < tapMoveThresholdPx) {
-                                onVectorChange(Offset.Zero)
-                            } else {
-                                tapCandidate = false
-                                onVectorChange(toVector(position))
-                            }
-                            true
-                        }
-
-                        MotionEvent.ACTION_UP,
-                        MotionEvent.ACTION_POINTER_UP -> {
-                            if (activePointerId == MotionEvent.INVALID_POINTER_ID) {
-                                resetPointerState()
-                                return@pointerInteropFilter true
-                            }
-                            val index = event.actionIndex
-                            if (index < 0 || index >= event.pointerCount) {
-                                resetPointerState()
-                                return@pointerInteropFilter true
-                            }
-                            val pointerId = event.getPointerId(index)
-                            if (pointerId != activePointerId) {
-                                return@pointerInteropFilter true
-                            }
-                            val upPosition = Offset(event.getX(index), event.getY(index))
-                            val upToCenter = hypot(
-                                (upPosition.x - center.x).toDouble(),
-                                (upPosition.y - center.y).toDouble()
-                            ).toFloat()
-                            val pressDurationMs = (event.eventTime - downTimeMs).coerceAtLeast(0L)
-                            val isTap = tapCandidate &&
-                                maxDisplacementFromDown < tapMoveThresholdPx &&
-                                onTap != null
-                            val lenientQuickTap = onTap != null &&
-                                pressDurationMs <= 420L &&
-                                maxDisplacementFromDown < (tapMoveThresholdPx * 2.8f) &&
-                                upToCenter <= (maxRadiusPx * 0.74f) &&
-                                (!centerTapRequired || downToCenter <= (selectTapRadiusPx * 1.35f))
-                            resetPointerState()
-                            if (isTap || lenientQuickTap) {
-                                onTap.invoke()
-                            }
-                            true
-                        }
-
-                        MotionEvent.ACTION_CANCEL -> {
-                            resetPointerState()
-                            true
-                        }
-
-                        else -> activePointerId != MotionEvent.INVALID_POINTER_ID
-                    }
-                },
+                .fillMaxSize()
+                .then(boundsModifier),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.34f),
-            border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.34f)),
-            shadowElevation = 8.dp
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+            border = BorderStroke(1.3.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.82f)),
+            shadowElevation = 10.dp
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -1099,25 +1035,28 @@ internal fun JoystickPad(
                             )
                         },
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.94f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)),
-                    shadowElevation = 8.dp
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.98f),
+                    border = BorderStroke(1.15.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.74f)),
+                    shadowElevation = 10.dp
                 ) {}
+                if (showCenterLabel && !insideLabel.isNullOrBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.74f)),
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.align(Alignment.Center)
+                    ) {
+                        Text(
+                            text = insideLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
+                            color = joystickLabelColor,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
-        }
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.26f)),
-            shadowElevation = 3.dp
-        ) {
-            Text(
-                text = insideLabel,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = labelFontSize),
-                color = joystickLabelColor,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-            )
         }
     }
 }

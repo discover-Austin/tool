@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -8,41 +9,77 @@ plugins {
     id("kotlin-kapt")
 }
 
+val signingLocalProperties = Properties()
+val signingLocalPropertiesFile = rootProject.file("local.properties")
+if (signingLocalPropertiesFile.exists()) {
+    signingLocalPropertiesFile.inputStream().use { input ->
+        signingLocalProperties.load(input)
+    }
+}
+
+fun signingValue(key: String): String? {
+    return System.getenv(key)
+        ?.takeIf { value -> value.isNotBlank() }
+        ?: signingLocalProperties.getProperty(key)
+            ?.takeIf { value -> value.isNotBlank() }
+}
+
+fun normalizedKeystorePath(): String? {
+    return signingValue("KEYSTORE_FILE")
+        ?.replace("\\\\:", ":")
+        ?.replace("\\\\", "\\")
+}
+
+fun validateReleaseSigningConfig() {
+    val requiredKeys = listOf(
+        "KEYSTORE_FILE",
+        "KEYSTORE_PASSWORD",
+        "KEY_ALIAS",
+        "KEY_PASSWORD"
+    )
+    val missingKeys = requiredKeys.filter { signingValue(it).isNullOrBlank() }
+    if (missingKeys.isNotEmpty()) {
+        throw GradleException(
+            "Release and sideload builds require signing values for: " +
+                missingKeys.joinToString(", ") +
+                ". Set them in environment variables or local.properties."
+        )
+    }
+
+    val keystorePath = normalizedKeystorePath()
+        ?: throw GradleException(
+            "KEYSTORE_FILE is required for release and sideload builds."
+        )
+    if (!file(keystorePath).exists()) {
+        throw GradleException(
+            "Release keystore not found at '$keystorePath'. " +
+                "Update KEYSTORE_FILE in local.properties or environment variables."
+        )
+    }
+}
+
 android {
     namespace = "com.tradesketch.estimator"
     compileSdk = 35
-    val localProperties = Properties()
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { input ->
-            localProperties.load(input)
-        }
-    }
-    fun signingValue(key: String): String? {
-        return System.getenv(key)
-            ?.takeIf { value -> value.isNotBlank() }
-            ?: localProperties.getProperty(key)
-                ?.takeIf { value -> value.isNotBlank() }
-    }
 
     defaultConfig {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.0.11"
+        versionCode = 24
+        versionName = "1.0.22"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+        ndk {
+            debugSymbolLevel = "SYMBOL_TABLE"
         }
     }
 
     signingConfigs {
         create("release") {
-            val keystoreFilePathRaw = signingValue("KEYSTORE_FILE")
-            val keystoreFilePath = keystoreFilePathRaw
-                ?.replace("\\\\:", ":")
-                ?.replace("\\\\", "\\")
+            val keystoreFilePath = normalizedKeystorePath()
             if (keystoreFilePath != null) {
                 storeFile = file(keystoreFilePath)
                 storePassword = signingValue("KEYSTORE_PASSWORD")
@@ -60,6 +97,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val releaseSigningConfig = signingConfigs.findByName("release")
+            if (releaseSigningConfig?.storeFile != null) {
+                signingConfig = releaseSigningConfig
+            }
+        }
+        create("sideload") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            resValue("string", "app_name", "TradeSketch Estimator Local")
             val releaseSigningConfig = signingConfigs.findByName("release")
             if (releaseSigningConfig?.storeFile != null) {
                 signingConfig = releaseSigningConfig
@@ -88,6 +135,16 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+gradle.taskGraph.whenReady {
+    val requiresSignedBuild = allTasks.any { task ->
+        val taskName = task.name.lowercase()
+        taskName.contains("release") || taskName.contains("sideload")
+    }
+    if (requiresSignedBuild) {
+        validateReleaseSigningConfig()
     }
 }
 
