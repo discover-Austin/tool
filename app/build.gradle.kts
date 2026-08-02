@@ -60,14 +60,14 @@ fun validateReleaseSigningConfig() {
 
 android {
     namespace = "com.tradesketch.estimator"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tradesketch.estimator"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 24
-        versionName = "1.0.22"
+        targetSdk = 36
+        versionCode = 25
+        versionName = "1.0.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -186,4 +186,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-
